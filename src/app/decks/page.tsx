@@ -125,10 +125,8 @@ export default function MyDecks() {
           </div>
           
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-indigo-500 hover:bg-indigo-600 text-white">
-                <Plus className="w-4 h-4 mr-2" /> New Deck
-              </Button>
+            <DialogTrigger render={<Button className="bg-indigo-500 hover:bg-indigo-600 text-white" />}>
+              <Plus className="w-4 h-4 mr-2" /> New Deck
             </DialogTrigger>
             <DialogContent className="bg-zinc-900 border-white/10 text-white">
               <DialogHeader>
@@ -183,10 +181,8 @@ export default function MyDecks() {
                   <CardContent className="relative z-10 h-full flex flex-col justify-end p-5">
                     <div className="flex justify-between items-start absolute top-4 right-4">
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-white/50 hover:text-white hover:bg-black/50 backdrop-blur-md" onClick={e => e.stopPropagation()}>
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
+                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-white/50 hover:text-white hover:bg-black/50 backdrop-blur-md" onClick={e => e.stopPropagation()} />}>
+                          <MoreVertical className="w-4 h-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-zinc-900 border-white/10 text-zinc-300">
                           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* TODO rename */ }}>
