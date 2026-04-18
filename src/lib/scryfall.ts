@@ -32,3 +32,14 @@ export async function getCard(id: string): Promise<ScryfallCard | null> {
     return null
   }
 }
+
+export async function getCardByName(name: string): Promise<ScryfallCard | null> {
+  try {
+    const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`)
+    if (!res.ok) return null
+    return res.json()
+  } catch (error) {
+    console.error("Scryfall getCardByName error:", error)
+    return null
+  }
+}
