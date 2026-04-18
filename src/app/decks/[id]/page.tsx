@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
 import { searchCards, getCard, ScryfallCard } from "@/lib/scryfall"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -40,9 +41,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [results, setResults] = useState<ScryfallCard[]>([])
   
   const [viewMode, setViewMode] = useState<'visual' | 'stack' | 'list'>('visual')
-  const [grouping, setGrouping] = useState<'none' | 'type' | 'mana'>('type')
+  const [grouping, setGrouping] = useState<'none' | 'type' | 'mana' | 'tag'>('type')
   const [sorting, setSorting] = useState<'name' | 'mana'>('name')
   const debouncedQuery = useDebounce(query, 500)
+  
+  const [tagDialogOpen, setTagDialogOpen] = useState(false)
+  const [customTagInput, setCustomTagInput] = useState("")
+  const [activeCardIdForTag, setActiveCardIdForTag] = useState<string | null>(null)
 
   useEffect(() => {
     fetchDeck()
@@ -107,6 +112,39 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     await supabase.from('deck_cards').delete().eq('id', id)
   }
 
+  const addTag = async (cardId: string, tag: string) => {
+    if (!tag.trim()) return
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    const currentTags = card.tags || []
+    if (currentTags.includes(tag)) return
+
+    const newTags = [...currentTags, tag]
+    setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: newTags } : c))
+    await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
+  }
+
+  const removeTag = async (cardId: string, tag: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    const currentTags = card.tags || []
+    const newTags = currentTags.filter(t => t !== tag)
+    
+    setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: newTags } : c))
+    await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
+  }
+
+  const handleCustomTagSubmit = () => {
+    if (activeCardIdForTag && customTagInput) {
+      addTag(activeCardIdForTag, customTagInput)
+    }
+    setTagDialogOpen(false)
+    setCustomTagInput("")
+    setActiveCardIdForTag(null)
+  }
+
+  const allUniqueTags = Array.from(new Set(cards.flatMap(c => c.tags || []))).sort()
+
   // --- Grouping and Sorting ---
   const getGroupedCards = () => {
     let sorted = [...cards].sort((a, b) => {
@@ -118,6 +156,22 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     if (grouping === 'none') return { 'All Cards': sorted }
 
     const groups: Record<string, DeckCard[]> = {}
+    
+    if (grouping === 'tag') {
+      sorted.forEach(c => {
+        if (!c.tags || c.tags.length === 0) {
+          if (!groups['Untagged']) groups['Untagged'] = []
+          groups['Untagged'].push(c)
+        } else {
+          c.tags.forEach(tag => {
+            if (!groups[tag]) groups[tag] = []
+            groups[tag].push(c)
+          })
+        }
+      })
+      return groups
+    }
+
     sorted.forEach(c => {
       let key = 'Other'
       if (grouping === 'type') {
@@ -158,6 +212,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               <SelectItem value="none">No Grouping</SelectItem>
               <SelectItem value="type">By Type</SelectItem>
               <SelectItem value="mana">By Mana Cost</SelectItem>
+              <SelectItem value="tag">By Tags</SelectItem>
             </SelectContent>
           </Select>
           <Tabs value={viewMode} onValueChange={(v: any) => setViewMode(v)} className="bg-zinc-900 rounded-md p-0.5 border border-white/10">
@@ -201,7 +256,17 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         <section className="flex-1 bg-black/20 overflow-y-auto p-6">
           <div className="max-w-6xl mx-auto space-y-8">
             {Object.entries(groupedCards).map(([groupName, groupCards]) => (
-              <div key={groupName}>
+              <div key={groupName}
+                onDragOver={(e) => {
+                  if (grouping === 'tag') e.preventDefault()
+                }}
+                onDrop={(e) => {
+                  if (grouping === 'tag' && groupName !== 'Untagged') {
+                    const cardId = e.dataTransfer.getData('cardId')
+                    addTag(cardId, groupName)
+                  }
+                }}
+              >
                 <h3 className="text-xl font-bold border-b border-white/10 pb-2 mb-4 text-zinc-300">
                   {groupName} <span className="text-sm font-normal text-zinc-500 ml-2">({groupCards.reduce((a,c)=>a+c.quantity, 0)})</span>
                 </h3>
@@ -211,10 +276,19 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                     {groupCards.map(c => (
                       <ContextMenu key={c.id}>
                         <ContextMenuTrigger>
-                          <div className="relative rounded-xl overflow-hidden border border-white/10 hover:border-indigo-500/50 cursor-pointer shadow-xl group aspect-[5/7]">
+                          <div 
+                            className="relative rounded-xl overflow-hidden border border-white/10 hover:border-indigo-500/50 cursor-pointer shadow-xl group aspect-[5/7]"
+                            draggable
+                            onDragStart={(e) => e.dataTransfer.setData('cardId', c.id)}
+                          >
                             <img src={c.image_url} className="w-full h-full object-cover" />
                             {c.quantity > 1 && (
                               <div className="absolute top-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-bold border border-white/10">x{c.quantity}</div>
+                            )}
+                            {c.tags && c.tags.length > 0 && (
+                              <div className="absolute bottom-1 right-1 flex flex-wrap justify-end gap-1 p-1 max-w-full">
+                                {c.tags.map(t => <Badge key={t} className="text-[10px] px-1.5 py-0 bg-black/80 text-white/90 border-white/20 truncate max-w-full">{t}</Badge>)}
+                              </div>
                             )}
                           </div>
                         </ContextMenuTrigger>
@@ -225,12 +299,20 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           <ContextMenuSub>
                             <ContextMenuSubTrigger>Tags</ContextMenuSubTrigger>
                             <ContextMenuSubContent className="bg-zinc-900 border-white/10 text-white">
-                              <ContextMenuItem>Combo Piece</ContextMenuItem>
-                              <ContextMenuItem>Removal</ContextMenuItem>
-                              <ContextMenuItem>Card Draw</ContextMenuItem>
+                              {allUniqueTags.map(tag => (
+                                <ContextMenuItem key={tag} onClick={() => addTag(c.id, tag)}>{tag}</ContextMenuItem>
+                              ))}
+                              {allUniqueTags.length > 0 && <ContextMenuSeparator className="bg-white/10" />}
+                              <ContextMenuItem onClick={() => { setActiveCardIdForTag(c.id); setTagDialogOpen(true) }}>Add Custom Tag...</ContextMenuItem>
                             </ContextMenuSubContent>
                           </ContextMenuSub>
                           <ContextMenuSeparator className="bg-white/10" />
+                          {grouping === 'tag' && groupName !== 'Untagged' && (
+                            <>
+                              <ContextMenuItem className="text-orange-400 focus:text-orange-300" onClick={() => removeTag(c.id, groupName)}>Remove from '{groupName}'</ContextMenuItem>
+                              <ContextMenuSeparator className="bg-white/10" />
+                            </>
+                          )}
                           <ContextMenuItem className="text-red-400 focus:text-red-300" onClick={() => deleteCard(c.id)}>Remove from Deck</ContextMenuItem>
                         </ContextMenuContent>
                       </ContextMenu>
@@ -241,7 +323,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                 {viewMode === 'stack' && (
                   <div className="flex flex-wrap gap-8">
                     {groupCards.map(c => (
-                      <div key={c.id} className="relative w-40 group cursor-pointer" style={{ height: 280 + (c.quantity-1)*30 }}>
+                      <div 
+                        key={c.id} 
+                        className="relative w-40 group cursor-pointer" 
+                        style={{ height: 280 + (c.quantity-1)*30 }}
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData('cardId', c.id)}
+                      >
                         {Array.from({length: c.quantity}).map((_, i) => (
                           <motion.img
                             key={i}
@@ -259,7 +347,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                 {viewMode === 'list' && (
                   <div className="bg-zinc-900/50 rounded-lg border border-white/10 overflow-hidden">
                     {groupCards.map(c => (
-                      <div key={c.id} className="flex items-center justify-between p-2 hover:bg-white/5 border-b border-white/5 last:border-0 group relative">
+                      <div 
+                        key={c.id} 
+                        className="flex items-center justify-between p-2 hover:bg-white/5 border-b border-white/5 last:border-0 group relative"
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData('cardId', c.id)}
+                      >
                         <div className="flex items-center gap-3">
                           <span className="text-zinc-500 w-4 text-right font-mono">{c.quantity}</span>
                           <span className="font-medium cursor-pointer hover:text-indigo-400">{c.name}</span>
@@ -279,6 +372,30 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           </div>
         </section>
       </main>
+
+      <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
+        <DialogContent className="bg-zinc-950 border border-white/10 text-zinc-100 sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add Custom Tag</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input 
+              value={customTagInput} 
+              onChange={e => setCustomTagInput(e.target.value)} 
+              placeholder="e.g. Win Condition"
+              className="bg-zinc-900 border-white/10 text-white placeholder:text-zinc-500"
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleCustomTagSubmit()
+              }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setTagDialogOpen(false)} className="hover:bg-white/5 hover:text-white">Cancel</Button>
+            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handleCustomTagSubmit}>Add Tag</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
