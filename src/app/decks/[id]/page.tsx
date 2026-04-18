@@ -1,0 +1,284 @@
+"use client"
+
+import { useState, useEffect, use } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Search, LayoutGrid, List, Layers as StackIcon, Settings, ChevronDown, Tag, Trash, Edit2, PlaySquare } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { supabase } from "@/lib/supabase/client"
+import { searchCards, getCard, ScryfallCard } from "@/lib/scryfall"
+import { useDebounce } from "@/hooks/use-debounce"
+import { toast } from "sonner"
+import { useRouter } from "next/navigation"
+
+interface DeckCard {
+  id: string
+  scryfall_id: string
+  name: string
+  quantity: number
+  zone: string
+  tags: string[]
+  // runtime populated
+  image_url?: string
+  type_line?: string
+  mana_cost?: string
+  cmc?: number
+}
+
+export default function DeckWorkspace({ params }: { params: Promise<{ id: string }> }) {
+  const { id: deckId } = use(params)
+  const router = useRouter()
+  
+  const [deck, setDeck] = useState<any>(null)
+  const [cards, setCards] = useState<DeckCard[]>([])
+  const [query, setQuery] = useState("")
+  const [results, setResults] = useState<ScryfallCard[]>([])
+  
+  const [viewMode, setViewMode] = useState<'visual' | 'stack' | 'list'>('visual')
+  const [grouping, setGrouping] = useState<'none' | 'type' | 'mana'>('type')
+  const [sorting, setSorting] = useState<'name' | 'mana'>('name')
+  const debouncedQuery = useDebounce(query, 500)
+
+  useEffect(() => {
+    fetchDeck()
+    const channel = supabase.channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deck_cards', filter: `deck_id=eq.${deckId}` }, fetchDeck)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [deckId])
+
+  useEffect(() => {
+    if (debouncedQuery.length > 2) {
+      searchCards(debouncedQuery).then(setResults)
+    } else {
+      setResults([])
+    }
+  }, [debouncedQuery])
+
+  const fetchDeck = async () => {
+    const [{ data: deckData }, { data: cardsData }] = await Promise.all([
+      supabase.from('decks').select('*').eq('id', deckId).single(),
+      supabase.from('deck_cards').select('*').eq('deck_id', deckId)
+    ])
+    
+    if (deckData) setDeck(deckData)
+    if (cardsData) {
+      // Hydrate from Scryfall
+      const hydrated = await Promise.all(cardsData.map(async (c) => {
+        const sf = await getCard(c.scryfall_id)
+        return {
+          ...c,
+          image_url: sf?.image_uris?.normal,
+          type_line: sf?.type_line || '',
+          mana_cost: sf?.mana_cost || '',
+          cmc: sf ? calculateCmc(sf.mana_cost) : 0
+        }
+      }))
+      setCards(hydrated)
+    }
+  }
+
+  const calculateCmc = (mana: string) => {
+    let cmc = 0
+    const matches = mana.match(/\{[^}]+\}/g)
+    if (!matches) return 0
+    for (const m of matches) {
+      const v = parseInt(m.replace(/[{}]/g, ''))
+      cmc += isNaN(v) ? 1 : v
+    }
+    return cmc
+  }
+
+  const addToDeck = async (card: ScryfallCard) => {
+    const existing = cards.find(c => c.scryfall_id === card.id)
+    if (existing) {
+      await supabase.from('deck_cards').update({ quantity: existing.quantity + 1 }).eq('id', existing.id)
+    } else {
+      await supabase.from('deck_cards').insert({ deck_id: deckId, scryfall_id: card.id, name: card.name, quantity: 1 })
+    }
+  }
+
+  const deleteCard = async (id: string) => {
+    await supabase.from('deck_cards').delete().eq('id', id)
+  }
+
+  // --- Grouping and Sorting ---
+  const getGroupedCards = () => {
+    let sorted = [...cards].sort((a, b) => {
+      if (sorting === 'name') return a.name.localeCompare(b.name)
+      if (sorting === 'mana') return (a.cmc || 0) - (b.cmc || 0)
+      return 0
+    })
+
+    if (grouping === 'none') return { 'All Cards': sorted }
+
+    const groups: Record<string, DeckCard[]> = {}
+    sorted.forEach(c => {
+      let key = 'Other'
+      if (grouping === 'type') {
+        if (c.type_line?.includes('Creature')) key = 'Creature'
+        else if (c.type_line?.includes('Instant')) key = 'Instant'
+        else if (c.type_line?.includes('Sorcery')) key = 'Sorcery'
+        else if (c.type_line?.includes('Artifact')) key = 'Artifact'
+        else if (c.type_line?.includes('Enchantment')) key = 'Enchantment'
+        else if (c.type_line?.includes('Planeswalker')) key = 'Planeswalker'
+        else if (c.type_line?.includes('Land')) key = 'Land'
+      } else if (grouping === 'mana') {
+        key = `Mana Value ${c.cmc || 0}`
+      }
+      if (!groups[key]) groups[key] = []
+      groups[key].push(c)
+    })
+    return groups
+  }
+
+  const groupedCards = getGroupedCards()
+
+  return (
+    <div className="h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans overflow-hidden">
+      <header className="border-b border-white/10 bg-zinc-950/80 backdrop-blur-md h-14 flex items-center justify-between px-4 shrink-0">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={() => router.push('/decks')} className="text-zinc-400">
+            &larr; Back
+          </Button>
+          <h1 className="font-bold text-lg">{deck?.name || 'Loading...'}</h1>
+          <Badge variant="outline" className="border-white/10 text-zinc-400">{cards.reduce((a,c)=>a+c.quantity, 0)} Cards</Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={grouping} onValueChange={(v: any) => setGrouping(v)}>
+            <SelectTrigger className="w-32 bg-zinc-900 border-white/10 h-8">
+              <SelectValue placeholder="Group by" />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-900 border-white/10 text-white">
+              <SelectItem value="none">No Grouping</SelectItem>
+              <SelectItem value="type">By Type</SelectItem>
+              <SelectItem value="mana">By Mana Cost</SelectItem>
+            </SelectContent>
+          </Select>
+          <Tabs value={viewMode} onValueChange={(v: any) => setViewMode(v)} className="bg-zinc-900 rounded-md p-0.5 border border-white/10">
+            <TabsList className="h-7 bg-transparent">
+              <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-zinc-800"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
+              <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-zinc-800"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
+              <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-zinc-800"><List className="w-3.5 h-3.5" /></TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </header>
+
+      <main className="flex-1 flex overflow-hidden">
+        {/* Search Sidebar */}
+        <aside className="w-80 border-r border-white/10 bg-zinc-900/30 flex flex-col shrink-0">
+          <div className="p-3 border-b border-white/10">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <Input 
+                placeholder="Search Scryfall..." 
+                className="pl-8 bg-black/40 border-white/10 text-zinc-200 h-9"
+                value={query} onChange={e => setQuery(e.target.value)}
+              />
+            </div>
+          </div>
+          <ScrollArea className="flex-1 p-3">
+            <div className="space-y-2">
+              {results.map((card) => (
+                <div key={card.id} onClick={() => addToDeck(card)} className="relative rounded-lg overflow-hidden cursor-pointer border border-white/5 hover:border-indigo-500/50 group">
+                  {card.image_uris && <img src={card.image_uris.normal} className="w-full object-cover" />}
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="bg-indigo-500 px-3 py-1 rounded-full text-xs font-bold shadow-lg">+ Add</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </aside>
+
+        {/* Workspace */}
+        <section className="flex-1 bg-black/20 overflow-y-auto p-6">
+          <div className="max-w-6xl mx-auto space-y-8">
+            {Object.entries(groupedCards).map(([groupName, groupCards]) => (
+              <div key={groupName}>
+                <h3 className="text-xl font-bold border-b border-white/10 pb-2 mb-4 text-zinc-300">
+                  {groupName} <span className="text-sm font-normal text-zinc-500 ml-2">({groupCards.reduce((a,c)=>a+c.quantity, 0)})</span>
+                </h3>
+                
+                {viewMode === 'visual' && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
+                    {groupCards.map(c => (
+                      <ContextMenu key={c.id}>
+                        <ContextMenuTrigger>
+                          <div className="relative rounded-xl overflow-hidden border border-white/10 hover:border-indigo-500/50 cursor-pointer shadow-xl group aspect-[5/7]">
+                            <img src={c.image_url} className="w-full h-full object-cover" />
+                            {c.quantity > 1 && (
+                              <div className="absolute top-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-bold border border-white/10">x{c.quantity}</div>
+                            )}
+                          </div>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="w-48 bg-zinc-900 border-white/10 text-white">
+                          <ContextMenuItem>Set as Commander</ContextMenuItem>
+                          <ContextMenuItem>Set as Cover Image</ContextMenuItem>
+                          <ContextMenuSeparator className="bg-white/10" />
+                          <ContextMenuSub>
+                            <ContextMenuSubTrigger>Tags</ContextMenuSubTrigger>
+                            <ContextMenuSubContent className="bg-zinc-900 border-white/10 text-white">
+                              <ContextMenuItem>Combo Piece</ContextMenuItem>
+                              <ContextMenuItem>Removal</ContextMenuItem>
+                              <ContextMenuItem>Card Draw</ContextMenuItem>
+                            </ContextMenuSubContent>
+                          </ContextMenuSub>
+                          <ContextMenuSeparator className="bg-white/10" />
+                          <ContextMenuItem className="text-red-400 focus:text-red-300" onClick={() => deleteCard(c.id)}>Remove from Deck</ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
+                    ))}
+                  </div>
+                )}
+
+                {viewMode === 'stack' && (
+                  <div className="flex flex-wrap gap-8">
+                    {groupCards.map(c => (
+                      <div key={c.id} className="relative w-40 group cursor-pointer" style={{ height: 280 + (c.quantity-1)*30 }}>
+                        {Array.from({length: c.quantity}).map((_, i) => (
+                          <motion.img
+                            key={i}
+                            src={c.image_url}
+                            className="absolute w-full rounded-xl border border-black shadow-2xl transition-transform duration-300"
+                            style={{ top: i * 30, zIndex: i }}
+                            whileHover={{ y: -20, scale: 1.05, zIndex: 100 }}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {viewMode === 'list' && (
+                  <div className="bg-zinc-900/50 rounded-lg border border-white/10 overflow-hidden">
+                    {groupCards.map(c => (
+                      <div key={c.id} className="flex items-center justify-between p-2 hover:bg-white/5 border-b border-white/5 last:border-0 group relative">
+                        <div className="flex items-center gap-3">
+                          <span className="text-zinc-500 w-4 text-right font-mono">{c.quantity}</span>
+                          <span className="font-medium cursor-pointer hover:text-indigo-400">{c.name}</span>
+                          <span className="text-xs text-zinc-500">{c.mana_cost}</span>
+                        </div>
+                        {/* Hover Image Popover */}
+                        <div className="hidden group-hover:block absolute left-1/3 top-0 -translate-y-1/2 z-50 pointer-events-none drop-shadow-2xl">
+                           <img src={c.image_url} className="w-48 rounded-xl border border-white/20" />
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => deleteCard(c.id)} className="h-6 w-6 p-0 text-red-400 opacity-0 group-hover:opacity-100"><Trash className="w-3 h-3" /></Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      </main>
+    </div>
+  )
+}

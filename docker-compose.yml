@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      # Sync source code for hot-reloading
+      - .:/app
+      # Prevent the host's node_modules from overriding the container's node_modules
+      - /app/node_modules
+      # Prevent the host's .next build folder from overriding the container's build folder
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_SUPABASE_URL=http://host.docker.internal:54321
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+    # Required for Windows/Mac to map host.docker.internal to host IP
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Ensure standard input/output is available if we attach to the container
+    stdin_open: true
+    tty: true

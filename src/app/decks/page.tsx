@@ -1,0 +1,225 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { motion } from "framer-motion"
+import { Layers, Plus, MoreVertical, Edit, Copy, Trash, LogOut } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { supabase } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { getCard } from "@/lib/scryfall"
+
+interface Deck {
+  id: string
+  name: string
+  format: string | null
+  cover_image_scryfall_id: string | null
+  cover_url?: string // Client-side augmented
+}
+
+export default function MyDecks() {
+  const [decks, setDecks] = useState<Deck[]>([])
+  const [loading, setLoading] = useState(true)
+  const [newDeckName, setNewDeckName] = useState("")
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    fetchDecks()
+  }, [])
+
+  const fetchDecks = async () => {
+    const { data: session } = await supabase.auth.getSession()
+    if (!session.session) {
+      router.push('/')
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('decks')
+      .select('*')
+      .order('created_at', { ascending: false })
+      
+    if (error) {
+      toast.error("Failed to load decks")
+      return
+    }
+
+    // Hydrate cover images from Scryfall
+    const populatedDecks = await Promise.all(data.map(async (deck) => {
+      let cover_url = undefined
+      if (deck.cover_image_scryfall_id) {
+        const card = await getCard(deck.cover_image_scryfall_id)
+        if (card?.image_uris) cover_url = card.image_uris.normal
+      }
+      return { ...deck, cover_url }
+    }))
+
+    setDecks(populatedDecks)
+    setLoading(false)
+  }
+
+  const handleCreateDeck = async () => {
+    if (!newDeckName) return
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from('decks')
+      .insert({ name: newDeckName, user_id: user.id })
+      .select()
+      .single()
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    toast.success("Deck created!")
+    setIsDialogOpen(false)
+    setNewDeckName("")
+    router.push(`/decks/${data.id}`)
+  }
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const { error } = await supabase.from('decks').delete().eq('id', id)
+    if (error) toast.error(error.message)
+    else {
+      toast.success("Deck deleted")
+      setDecks(decks.filter(d => d.id !== id))
+    }
+  }
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push('/')
+  }
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
+      <header className="border-b border-white/10 bg-zinc-950/50 backdrop-blur-xl sticky top-0 z-10">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+              <Layers className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-xl font-bold">My Decks</h1>
+          </div>
+          <Button variant="ghost" className="text-zinc-400 hover:text-white" onClick={handleSignOut}>
+            <LogOut className="w-4 h-4 mr-2" /> Sign Out
+          </Button>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-8 flex-1">
+        <div className="flex justify-between items-end mb-8">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight text-white">Your Arsenal</h2>
+            <p className="text-zinc-400 mt-1">Manage and build your magic decks.</p>
+          </div>
+          
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-indigo-500 hover:bg-indigo-600 text-white">
+                <Plus className="w-4 h-4 mr-2" /> New Deck
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-zinc-900 border-white/10 text-white">
+              <DialogHeader>
+                <DialogTitle>Create New Deck</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Deck Name</Label>
+                  <Input 
+                    id="name" 
+                    value={newDeckName}
+                    onChange={(e) => setNewDeckName(e.target.value)}
+                    className="bg-black/50 border-white/10" 
+                    placeholder="e.g. Modern Tron"
+                  />
+                </div>
+                <Button onClick={handleCreateDeck} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white">
+                  Create
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-64 rounded-xl bg-zinc-900/50 animate-pulse border border-white/5" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {decks.map(deck => (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                key={deck.id}
+                onClick={() => router.push(`/decks/${deck.id}`)}
+                className="group cursor-pointer relative"
+              >
+                <Card className="h-64 overflow-hidden bg-zinc-900 border-white/10 hover:border-indigo-500/50 transition-all duration-300">
+                  <div className="absolute inset-0 z-0">
+                    {deck.cover_url ? (
+                      <>
+                        <img src={deck.cover_url} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent" />
+                      </>
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900 opacity-50" />
+                    )}
+                  </div>
+                  <CardContent className="relative z-10 h-full flex flex-col justify-end p-5">
+                    <div className="flex justify-between items-start absolute top-4 right-4">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-white/50 hover:text-white hover:bg-black/50 backdrop-blur-md" onClick={e => e.stopPropagation()}>
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-zinc-900 border-white/10 text-zinc-300">
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* TODO rename */ }}>
+                            <Edit className="w-4 h-4 mr-2" /> Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* TODO duplicate */ }}>
+                            <Copy className="w-4 h-4 mr-2" /> Duplicate
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-red-400 focus:text-red-300 focus:bg-red-950/50" onClick={(e) => handleDelete(deck.id, e)}>
+                            <Trash className="w-4 h-4 mr-2" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-1 group-hover:text-indigo-400 transition-colors">{deck.name}</h3>
+                      <p className="text-sm text-zinc-400">{deck.format || 'No Format Specified'}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+            {decks.length === 0 && (
+              <div className="col-span-full py-20 text-center border-2 border-dashed border-white/10 rounded-2xl">
+                <p className="text-zinc-500 mb-4">You don't have any decks yet.</p>
+                <Button variant="outline" className="border-white/10 text-zinc-300" onClick={() => setIsDialogOpen(true)}>
+                  Create your first deck
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
