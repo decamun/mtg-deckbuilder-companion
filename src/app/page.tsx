@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { Layers, Mail, Lock, LogIn, Component } from "lucide-react"
+import { Layers, Mail, Lock, Component, ArrowLeft } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +10,10 @@ import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
+type Mode = 'auth' | 'forgot'
+
 export default function Splash() {
+  const [mode, setMode] = useState<Mode>('auth')
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -26,13 +29,29 @@ export default function Splash() {
       } else {
         const { error } = await supabase.auth.signUp({ email, password })
         if (error) throw error
-        alert("Account created! Open Mailpit at http://localhost:54324 to confirm your email before signing in.")
-        toast.success("Account created! Open Mailpit at http://localhost:54324 to confirm your email before signing in.", {
-          duration: 10000
-        })
+        toast.success("Account created! Check your email to confirm your account.", { duration: 8000 })
       }
     } catch (error: any) {
-      alert(`Error: ${error.message}`)
+      toast.error(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast.error("Please enter your email address")
+      return
+    }
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      })
+      if (error) throw error
+      toast.success("Password reset email sent! Check your inbox.", { duration: 8000 })
+      setMode('auth')
+    } catch (error: any) {
       toast.error(error.message)
     } finally {
       setLoading(false)
@@ -70,67 +89,116 @@ export default function Splash() {
         className="w-full max-w-md"
       >
         <Card className="bg-card/50 border-border backdrop-blur-xl shadow-2xl shadow-black/50">
-          <CardHeader>
-            <CardTitle className="text-foreground">Welcome back</CardTitle>
-            <CardDescription className="text-muted-foreground">Sign in to your account to continue.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2 relative">
-              <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-              <Input 
-                type="email" 
-                placeholder="Email address" 
-                className="pl-9 bg-background/50 border-border text-foreground"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2 relative">
-              <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-              <Input 
-                type="password" 
-                placeholder="Password" 
-                className="pl-9 bg-background/50 border-border text-foreground"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <Button 
-                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground" 
-                onClick={() => handleAuth('login')}
-                disabled={loading}
-              >
-                {loading ? 'Processing...' : 'Sign In'}
-              </Button>
-              <Button 
-                variant="outline" 
-                className="flex-1 border-border hover:bg-accent hover:text-accent-foreground text-foreground"
-                onClick={() => handleAuth('signup')}
-                disabled={loading}
-              >
-                Sign Up
-              </Button>
-            </div>
-            
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border"></div>
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
-              </div>
-            </div>
+          {mode === 'auth' ? (
+            <>
+              <CardHeader>
+                <CardTitle className="text-foreground">Welcome back</CardTitle>
+                <CardDescription className="text-muted-foreground">Sign in to your account to continue.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="email"
+                    placeholder="Email address"
+                    className="pl-9 bg-background/50 border-border text-foreground"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="password"
+                    placeholder="Password"
+                    className="pl-9 bg-background/50 border-border text-foreground"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setMode('forgot')}
+                    className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <Button
+                    className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                    onClick={() => handleAuth('login')}
+                    disabled={loading}
+                  >
+                    {loading ? 'Processing...' : 'Sign In'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 border-border hover:bg-accent hover:text-accent-foreground text-foreground"
+                    onClick={() => handleAuth('signup')}
+                    disabled={loading}
+                  >
+                    Sign Up
+                  </Button>
+                </div>
 
-            <Button 
-              variant="outline" 
-              className="w-full border-border hover:bg-accent hover:text-accent-foreground text-foreground"
-              onClick={handleOAuth}
-            >
-              <Component className="w-4 h-4 mr-2" />
-              Google
-            </Button>
-          </CardContent>
+                <div className="relative my-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-border"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="w-full border-border hover:bg-accent hover:text-accent-foreground text-foreground"
+                  onClick={handleOAuth}
+                >
+                  <Component className="w-4 h-4 mr-2" />
+                  Google
+                </Button>
+              </CardContent>
+            </>
+          ) : (
+            <>
+              <CardHeader>
+                <CardTitle className="text-foreground">Forgot Password</CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Enter your email and we&apos;ll send you a reset link.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="email"
+                    placeholder="Email address"
+                    className="pl-9 bg-background/50 border-border text-foreground"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                <Button
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={handleForgotPassword}
+                  disabled={loading}
+                >
+                  {loading ? 'Sending...' : 'Send Reset Email'}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setMode('auth')}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors w-full justify-center pt-1"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to sign in
+                </button>
+              </CardContent>
+            </>
+          )}
         </Card>
       </motion.div>
     </div>
