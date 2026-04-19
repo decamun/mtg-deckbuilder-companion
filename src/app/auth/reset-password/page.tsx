@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
 
+const MIN_PASSWORD_LENGTH = 6
+
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -20,8 +22,8 @@ export default function ResetPasswordPage() {
       return
     }
 
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters.")
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      toast.error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
       return
     }
 
@@ -31,16 +33,18 @@ export default function ResetPasswordPage() {
     }
 
     setLoading(true)
-    const { error } = await supabase.auth.updateUser({ password })
-    setLoading(false)
+    try {
+      const { error } = await supabase.auth.updateUser({ password })
+      if (error) throw error
 
-    if (error) {
-      toast.error(error.message)
-      return
+      toast.success("Password updated. Please sign in.")
+      router.push("/")
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "An unexpected error occurred"
+      toast.error(message)
+    } finally {
+      setLoading(false)
     }
-
-    toast.success("Password updated. Please sign in.")
-    router.push("/")
   }
 
   return (

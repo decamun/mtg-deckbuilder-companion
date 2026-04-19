@@ -10,11 +10,19 @@ export async function GET(request: NextRequest) {
   const tokenHash = requestUrl.searchParams.get("token_hash")
   const type = requestUrl.searchParams.get("type")
   const nextParam = requestUrl.searchParams.get("next")
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return NextResponse.redirect(
+      new URL("/?error=missing_supabase_configuration", requestUrl.origin)
+    )
+  }
 
   const cookieStore = await cookies()
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder",
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -29,15 +37,23 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  if (code) {
-    await supabase.auth.exchangeCodeForSession(code)
-  } else if (tokenHash && type) {
-    await supabase.auth.verifyOtp({
-      token_hash: tokenHash,
-      type: type as EmailOtpType,
-    })
+  try {
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code)
+      if (error) throw error
+    } else if (tokenHash && type) {
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: type as EmailOtpType,
+      })
+      if (error) throw error
+    }
+  } catch (error) {
+    console.error("Auth callback error:", error)
+    return NextResponse.redirect(new URL("/?error=auth_callback_failed", requestUrl.origin))
   }
 
-  const safePath = nextParam?.startsWith("/") ? nextParam : "/decks"
-  return NextResponse.redirect(new URL(safePath, requestUrl.origin))
+  const allowedRedirectPaths = new Set(["/", "/decks", "/auth/reset-password"])
+  const redirectPath = nextParam && allowedRedirectPaths.has(nextParam) ? nextParam : "/decks"
+  return NextResponse.redirect(new URL(redirectPath, requestUrl.origin))
 }

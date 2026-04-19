@@ -10,6 +10,8 @@ import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
+const AUTH_CALLBACK_PATH = "/auth/callback"
+
 export default function Splash() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -28,7 +30,7 @@ export default function Splash() {
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            emailRedirectTo: `${window.location.origin}${AUTH_CALLBACK_PATH}`,
           },
         })
         if (error) throw error
@@ -53,7 +55,7 @@ export default function Splash() {
     setLoading(true)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+        redirectTo: `${window.location.origin}${AUTH_CALLBACK_PATH}?next=/auth/reset-password`,
       })
       if (error) throw error
 
