@@ -70,8 +70,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }, [debouncedQuery])
 
   const fetchDeck = async () => {
-    const { data: session } = await supabase.auth.getSession()
-    const authenticatedUserId = session.session?.user.id
+    const { data: { session } } = await supabase.auth.getSession()
+    const authenticatedUserId = session?.user.id
     if (!authenticatedUserId) {
       router.push('/')
       return
@@ -90,14 +90,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       return
     }
     
-    if (!deckData) {
-      router.push('/decks')
-      return
-    }
-    
     setDeck(deckData)
-    setCommanderIds(deckData.commander_scryfall_ids || [])
-    setCoverImageId(deckData.cover_image_scryfall_id || null)
+    setCommanderIds(deckData?.commander_scryfall_ids || [])
+    setCoverImageId(deckData?.cover_image_scryfall_id || null)
 
     const { data: cardsData, error: cardsError } = await supabase
       .from('deck_cards')
