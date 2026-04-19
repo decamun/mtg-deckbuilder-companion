@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { getCard, getCardByName } from "@/lib/scryfall"
+import { getCard, getCardsCollection } from "@/lib/scryfall"
 
 interface Deck {
   id: string
@@ -108,11 +108,16 @@ export default function MyDecks() {
 
     if (decklistText.trim()) {
       const parsedCards = parseDecklist(decklistText)
+      const uniqueNames = Array.from(new Set(parsedCards.map(p => p.name)))
+      const scryfallCards = await getCardsCollection(uniqueNames)
+      
       let addedCount = 0
+      const inserts = []
+
       for (const parsed of parsedCards) {
-        const scryfallCard = await getCardByName(parsed.name)
+        const scryfallCard = scryfallCards.find(c => c.name.toLowerCase() === parsed.name.toLowerCase())
         if (scryfallCard) {
-          await supabase.from('deck_cards').insert({
+          inserts.push({
             deck_id: data.id,
             scryfall_id: scryfallCard.id,
             name: scryfallCard.name,
@@ -122,8 +127,15 @@ export default function MyDecks() {
         } else {
           toast.error(`Could not find card: ${parsed.name}`)
         }
-        await new Promise(r => setTimeout(r, 50)) // rate limit protection
       }
+      
+      if (inserts.length > 0) {
+        const { error: insertError } = await supabase.from('deck_cards').insert(inserts)
+        if (insertError) {
+          toast.error(`Error saving cards: ${insertError.message}`)
+        }
+      }
+      
       toast.success(`Deck created with ${addedCount} unique cards!`)
     } else {
       toast.success("Deck created!")
