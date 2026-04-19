@@ -10,7 +10,7 @@
     "agent:up": "docker-compose -f docker-compose.agent.yml up -d",
     "agent:down": "docker-compose -f docker-compose.agent.yml down",
     "agent:port": "docker-compose -f docker-compose.agent.yml port web 3000",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
