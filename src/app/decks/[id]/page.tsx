@@ -194,32 +194,32 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const groupedCards = getGroupedCards()
 
   return (
-    <div className="h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans overflow-hidden">
-      <header className="border-b border-white/10 bg-zinc-950/80 backdrop-blur-md h-14 flex items-center justify-between px-4 shrink-0">
+    <div className="h-screen bg-background text-foreground flex flex-col font-sans overflow-hidden">
+      <header className="border-b border-border bg-background/80 backdrop-blur-md h-14 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.push('/decks')} className="text-zinc-400">
+          <Button variant="ghost" size="sm" onClick={() => router.push('/decks')} className="text-muted-foreground hover:text-foreground">
             &larr; Back
           </Button>
           <h1 className="font-bold text-lg">{deck?.name || 'Loading...'}</h1>
-          <Badge variant="outline" className="border-white/10 text-zinc-400">{cards.reduce((a,c)=>a+c.quantity, 0)} Cards</Badge>
+          <Badge variant="outline" className="border-border text-muted-foreground">{cards.reduce((a,c)=>a+c.quantity, 0)} Cards</Badge>
         </div>
         <div className="flex items-center gap-2">
           <Select value={grouping} onValueChange={(v: any) => setGrouping(v)}>
-            <SelectTrigger className="w-32 bg-zinc-900 border-white/10 h-8">
+            <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
               <SelectValue placeholder="Group by" />
             </SelectTrigger>
-            <SelectContent className="bg-zinc-900 border-white/10 text-white">
+            <SelectContent className="bg-card border-border text-foreground">
               <SelectItem value="none">No Grouping</SelectItem>
               <SelectItem value="type">By Type</SelectItem>
               <SelectItem value="mana">By Mana Cost</SelectItem>
               <SelectItem value="tag">By Tags</SelectItem>
             </SelectContent>
           </Select>
-          <Tabs value={viewMode} onValueChange={(v: any) => setViewMode(v)} className="bg-zinc-900 rounded-md p-0.5 border border-white/10">
+          <Tabs value={viewMode} onValueChange={(v: any) => setViewMode(v)} className="bg-card rounded-md p-0.5 border border-border">
             <TabsList className="h-7 bg-transparent">
-              <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-zinc-800"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
-              <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-zinc-800"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
-              <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-zinc-800"><List className="w-3.5 h-3.5" /></TabsTrigger>
+              <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
+              <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
+              <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -227,13 +227,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
       <main className="flex-1 flex overflow-hidden">
         {/* Search Sidebar */}
-        <aside className="w-80 border-r border-white/10 bg-zinc-900/30 flex flex-col shrink-0">
-          <div className="p-3 border-b border-white/10">
+        <aside className="w-80 border-r border-border bg-card/30 flex flex-col shrink-0">
+          <div className="p-3 border-b border-border">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
                 placeholder="Search Scryfall..." 
-                className="pl-8 bg-black/40 border-white/10 text-zinc-200 h-9"
+                className="pl-8 bg-background/50 border-border text-foreground h-9"
                 value={query} onChange={e => setQuery(e.target.value)}
               />
             </div>
@@ -241,10 +241,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           <ScrollArea className="flex-1 p-3">
             <div className="space-y-2">
               {results.map((card) => (
-                <div key={card.id} onClick={() => addToDeck(card)} className="relative rounded-lg overflow-hidden cursor-pointer border border-white/5 hover:border-indigo-500/50 group">
+                <div key={card.id} onClick={() => addToDeck(card)} className="relative rounded-lg overflow-hidden cursor-pointer border border-border/50 hover:border-primary/50 group">
                   {card.image_uris && <img src={card.image_uris.normal} className="w-full object-cover" />}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <span className="bg-indigo-500 px-3 py-1 rounded-full text-xs font-bold shadow-lg">+ Add</span>
+                  <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="bg-primary px-3 py-1 rounded-full text-xs font-bold shadow-lg text-primary-foreground">+ Add</span>
                   </div>
                 </div>
               ))}
@@ -253,7 +253,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         </aside>
 
         {/* Workspace */}
-        <section className="flex-1 bg-black/20 overflow-y-auto p-6">
+        <section className="flex-1 bg-background/20 overflow-y-auto p-6">
           <div className="max-w-6xl mx-auto space-y-8">
             {Object.entries(groupedCards).map(([groupName, groupCards]) => (
               <div key={groupName}
@@ -267,8 +267,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   }
                 }}
               >
-                <h3 className="text-xl font-bold border-b border-white/10 pb-2 mb-4 text-zinc-300">
-                  {groupName} <span className="text-sm font-normal text-zinc-500 ml-2">({groupCards.reduce((a,c)=>a+c.quantity, 0)})</span>
+                <h3 className="text-xl font-bold border-b border-border pb-2 mb-4 text-foreground">
+                  {groupName} <span className="text-sm font-normal text-muted-foreground ml-2">({groupCards.reduce((a,c)=>a+c.quantity, 0)})</span>
                 </h3>
                 
                 {viewMode === 'visual' && (
@@ -277,43 +277,43 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       <ContextMenu key={c.id}>
                         <ContextMenuTrigger>
                           <div 
-                            className="relative rounded-xl overflow-hidden border border-white/10 hover:border-indigo-500/50 cursor-pointer shadow-xl group aspect-[5/7]"
+                            className="relative rounded-xl overflow-hidden border border-border hover:border-primary/50 cursor-pointer shadow-xl group aspect-[5/7]"
                             draggable
                             onDragStart={(e) => e.dataTransfer.setData('cardId', c.id)}
                           >
                             <img src={c.image_url} className="w-full h-full object-cover" />
                             {c.quantity > 1 && (
-                              <div className="absolute top-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-bold border border-white/10">x{c.quantity}</div>
+                              <div className="absolute top-2 right-2 bg-background/80 text-foreground px-2 py-0.5 rounded text-xs font-bold border border-border">x{c.quantity}</div>
                             )}
                             {c.tags && c.tags.length > 0 && (
                               <div className="absolute bottom-1 right-1 flex flex-wrap justify-end gap-1 p-1 max-w-full">
-                                {c.tags.map(t => <Badge key={t} className="text-[10px] px-1.5 py-0 bg-black/80 text-white/90 border-white/20 truncate max-w-full">{t}</Badge>)}
+                                {c.tags.map(t => <Badge key={t} className="text-[10px] px-1.5 py-0 bg-background/80 text-foreground border-border truncate max-w-full">{t}</Badge>)}
                               </div>
                             )}
                           </div>
                         </ContextMenuTrigger>
-                        <ContextMenuContent className="w-48 bg-zinc-900 border-white/10 text-white">
+                        <ContextMenuContent className="w-48 bg-card border-border text-foreground">
                           <ContextMenuItem>Set as Commander</ContextMenuItem>
                           <ContextMenuItem>Set as Cover Image</ContextMenuItem>
-                          <ContextMenuSeparator className="bg-white/10" />
+                          <ContextMenuSeparator className="bg-border" />
                           <ContextMenuSub>
                             <ContextMenuSubTrigger>Tags</ContextMenuSubTrigger>
-                            <ContextMenuSubContent className="bg-zinc-900 border-white/10 text-white">
+                            <ContextMenuSubContent className="bg-card border-border text-foreground">
                               {allUniqueTags.map(tag => (
                                 <ContextMenuItem key={tag} onClick={() => addTag(c.id, tag)}>{tag}</ContextMenuItem>
                               ))}
-                              {allUniqueTags.length > 0 && <ContextMenuSeparator className="bg-white/10" />}
+                              {allUniqueTags.length > 0 && <ContextMenuSeparator className="bg-border" />}
                               <ContextMenuItem onClick={() => { setActiveCardIdForTag(c.id); setTagDialogOpen(true) }}>Add Custom Tag...</ContextMenuItem>
                             </ContextMenuSubContent>
                           </ContextMenuSub>
-                          <ContextMenuSeparator className="bg-white/10" />
+                          <ContextMenuSeparator className="bg-border" />
                           {grouping === 'tag' && groupName !== 'Untagged' && (
                             <>
-                              <ContextMenuItem className="text-orange-400 focus:text-orange-300" onClick={() => removeTag(c.id, groupName)}>Remove from '{groupName}'</ContextMenuItem>
-                              <ContextMenuSeparator className="bg-white/10" />
+                              <ContextMenuItem className="text-orange-400 focus:text-orange-300 focus:bg-orange-400/10" onClick={() => removeTag(c.id, groupName)}>Remove from '{groupName}'</ContextMenuItem>
+                              <ContextMenuSeparator className="bg-border" />
                             </>
                           )}
-                          <ContextMenuItem className="text-red-400 focus:text-red-300" onClick={() => deleteCard(c.id)}>Remove from Deck</ContextMenuItem>
+                          <ContextMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10" onClick={() => deleteCard(c.id)}>Remove from Deck</ContextMenuItem>
                         </ContextMenuContent>
                       </ContextMenu>
                     ))}
@@ -345,24 +345,24 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                 )}
 
                 {viewMode === 'list' && (
-                  <div className="bg-zinc-900/50 rounded-lg border border-white/10 overflow-hidden">
+                  <div className="bg-card/50 rounded-lg border border-border overflow-hidden">
                     {groupCards.map(c => (
                       <div 
                         key={c.id} 
-                        className="flex items-center justify-between p-2 hover:bg-white/5 border-b border-white/5 last:border-0 group relative"
+                        className="flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 group relative"
                         draggable
                         onDragStart={(e) => e.dataTransfer.setData('cardId', c.id)}
                       >
                         <div className="flex items-center gap-3">
-                          <span className="text-zinc-500 w-4 text-right font-mono">{c.quantity}</span>
-                          <span className="font-medium cursor-pointer hover:text-indigo-400">{c.name}</span>
-                          <span className="text-xs text-zinc-500">{c.mana_cost}</span>
+                          <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
+                          <span className="font-medium cursor-pointer hover:text-primary transition-colors">{c.name}</span>
+                          <span className="text-xs text-muted-foreground">{c.mana_cost}</span>
                         </div>
                         {/* Hover Image Popover */}
                         <div className="hidden group-hover:block absolute left-1/3 top-0 -translate-y-1/2 z-50 pointer-events-none drop-shadow-2xl">
-                           <img src={c.image_url} className="w-48 rounded-xl border border-white/20" />
+                           <img src={c.image_url} className="w-48 rounded-xl border border-border/50" />
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => deleteCard(c.id)} className="h-6 w-6 p-0 text-red-400 opacity-0 group-hover:opacity-100"><Trash className="w-3 h-3" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => deleteCard(c.id)} className="h-6 w-6 p-0 text-destructive hover:bg-destructive/20 opacity-0 group-hover:opacity-100"><Trash className="w-3 h-3" /></Button>
                       </div>
                     ))}
                   </div>
@@ -374,7 +374,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       </main>
 
       <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
-        <DialogContent className="bg-zinc-950 border border-white/10 text-zinc-100 sm:max-w-[425px]">
+        <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Add Custom Tag</DialogTitle>
           </DialogHeader>
@@ -383,7 +383,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               value={customTagInput} 
               onChange={e => setCustomTagInput(e.target.value)} 
               placeholder="e.g. Win Condition"
-              className="bg-zinc-900 border-white/10 text-white placeholder:text-zinc-500"
+              className="bg-background border-border text-foreground placeholder:text-muted-foreground"
               onKeyDown={e => {
                 if (e.key === 'Enter') handleCustomTagSubmit()
               }}
@@ -391,8 +391,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setTagDialogOpen(false)} className="hover:bg-white/5 hover:text-white">Cancel</Button>
-            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handleCustomTagSubmit}>Add Tag</Button>
+            <Button variant="ghost" onClick={() => setTagDialogOpen(false)} className="hover:bg-accent hover:text-accent-foreground">Cancel</Button>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleCustomTagSubmit}>Add Tag</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

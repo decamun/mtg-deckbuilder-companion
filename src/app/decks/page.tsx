@@ -152,16 +152,16 @@ export default function MyDecks() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
-      <header className="border-b border-white/10 bg-zinc-950/50 backdrop-blur-xl sticky top-0 z-10">
+    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+      <header className="border-b border-border bg-background/50 backdrop-blur-xl sticky top-0 z-10">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-theme-gradient flex items-center justify-center">
               <Layers className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-xl font-bold">My Decks</h1>
           </div>
-          <Button variant="ghost" className="text-zinc-400 hover:text-white" onClick={handleSignOut}>
+          <Button variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={handleSignOut}>
             <LogOut className="w-4 h-4 mr-2" /> Sign Out
           </Button>
         </div>
@@ -170,15 +170,15 @@ export default function MyDecks() {
       <main className="container mx-auto px-4 py-8 flex-1">
         <div className="flex justify-between items-end mb-8">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight text-white">Your Arsenal</h2>
-            <p className="text-zinc-400 mt-1">Manage and build your magic decks.</p>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground">Your Arsenal</h2>
+            <p className="text-muted-foreground mt-1">Manage and build your magic decks.</p>
           </div>
           
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger render={<Button className="bg-indigo-500 hover:bg-indigo-600 text-white" />}>
+            <DialogTrigger render={<Button className="bg-primary hover:bg-primary/90 text-primary-foreground" />}>
               <Plus className="w-4 h-4 mr-2" /> New Deck
             </DialogTrigger>
-            <DialogContent className="bg-zinc-900 border-white/10 text-white">
+            <DialogContent className="bg-card border-border text-foreground">
               <DialogHeader>
                 <DialogTitle>Create New Deck</DialogTitle>
               </DialogHeader>
@@ -189,7 +189,7 @@ export default function MyDecks() {
                     id="name" 
                     value={newDeckName}
                     onChange={(e) => setNewDeckName(e.target.value)}
-                    className="bg-black/50 border-white/10" 
+                    className="bg-background/50 border-border" 
                     placeholder="e.g. Modern Tron"
                   />
                 </div>
@@ -199,11 +199,11 @@ export default function MyDecks() {
                     id="decklist" 
                     value={decklistText}
                     onChange={(e) => setDecklistText(e.target.value)}
-                    className="bg-black/50 border-white/10 min-h-[150px]" 
+                    className="bg-background/50 border-border min-h-[150px]" 
                     placeholder={"4 Lightning Bolt\n4 Goblin Guide"}
                   />
                 </div>
-                <Button onClick={handleCreateDeck} disabled={isCreating} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white">
+                <Button onClick={handleCreateDeck} disabled={isCreating} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   {isCreating ? 'Creating...' : 'Create'}
                 </Button>
               </div>
@@ -214,7 +214,7 @@ export default function MyDecks() {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-64 rounded-xl bg-zinc-900/50 animate-pulse border border-white/5" />
+              <div key={i} className="h-64 rounded-xl bg-card/50 animate-pulse border border-border/50" />
             ))}
           </div>
         ) : (
@@ -227,24 +227,24 @@ export default function MyDecks() {
                 onClick={() => router.push(`/decks/${deck.id}`)}
                 className="group cursor-pointer relative"
               >
-                <Card className="h-64 overflow-hidden bg-zinc-900 border-white/10 hover:border-indigo-500/50 transition-all duration-300">
+                <Card className="h-64 overflow-hidden bg-card border-border hover:border-primary/50 transition-all duration-300">
                   <div className="absolute inset-0 z-0">
                     {deck.cover_url ? (
                       <>
                         <img src={deck.cover_url} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
                       </>
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900 opacity-50" />
+                      <div className="w-full h-full bg-gradient-to-br from-muted to-card opacity-50" />
                     )}
                   </div>
                   <CardContent className="relative z-10 h-full flex flex-col justify-end p-5">
                     <div className="flex justify-between items-start absolute top-4 right-4">
                       <DropdownMenu>
-                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-white/50 hover:text-white hover:bg-black/50 backdrop-blur-md" onClick={e => e.stopPropagation()} />}>
+                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-foreground/50 hover:text-foreground hover:bg-background/50 backdrop-blur-md" onClick={e => e.stopPropagation()} />}>
                           <MoreVertical className="w-4 h-4" />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-zinc-900 border-white/10 text-zinc-300">
+                        <DropdownMenuContent align="end" className="bg-card border-border text-foreground">
                           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* TODO rename */ }}>
                             <Edit className="w-4 h-4 mr-2" /> Rename
                           </DropdownMenuItem>
@@ -258,17 +258,17 @@ export default function MyDecks() {
                       </DropdownMenu>
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-white mb-1 group-hover:text-indigo-400 transition-colors">{deck.name}</h3>
-                      <p className="text-sm text-zinc-400">{deck.format || 'No Format Specified'}</p>
+                      <h3 className="text-xl font-bold text-foreground mb-1 group-hover:text-primary transition-colors">{deck.name}</h3>
+                      <p className="text-sm text-muted-foreground">{deck.format || 'No Format Specified'}</p>
                     </div>
                   </CardContent>
                 </Card>
               </motion.div>
             ))}
             {decks.length === 0 && (
-              <div className="col-span-full py-20 text-center border-2 border-dashed border-white/10 rounded-2xl">
-                <p className="text-zinc-500 mb-4">You don't have any decks yet.</p>
-                <Button variant="outline" className="border-white/10 text-zinc-300" onClick={() => setIsDialogOpen(true)}>
+              <div className="col-span-full py-20 text-center border-2 border-dashed border-border rounded-2xl">
+                <p className="text-muted-foreground mb-4">You don't have any decks yet.</p>
+                <Button variant="outline" className="border-border text-foreground hover:bg-accent hover:text-accent-foreground" onClick={() => setIsDialogOpen(true)}>
                   Create your first deck
                 </Button>
               </div>

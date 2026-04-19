@@ -7,6 +7,9 @@
     "dev:all": "npx supabase start && docker-compose up -d",
     "stop:all": "docker-compose down && npx supabase stop",
     "restart:all": "npm run stop:all && npm run dev:all",
+    "agent:up": "docker-compose -f docker-compose.agent.yml up -d",
+    "agent:down": "docker-compose -f docker-compose.agent.yml down",
+    "agent:port": "docker-compose -f docker-compose.agent.yml port web 3000",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

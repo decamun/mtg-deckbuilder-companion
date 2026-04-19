@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    # Using a single string like "3000" (instead of "3000:3000") tells Docker 
+    # to map port 3000 to a random available port on the host.
+    ports:
+      - "3000"
+    environment:
+      - NODE_ENV=development
+      # Connects to the Supabase instance running from the main directory
+      - NEXT_PUBLIC_SUPABASE_URL=http://host.docker.internal:54321
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next

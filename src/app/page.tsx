@@ -48,19 +48,19 @@ export default function Splash() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4 selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 selection:bg-primary/30">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="mb-8 text-center"
       >
-        <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-2xl shadow-indigo-500/30 mb-6">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-theme-gradient flex items-center justify-center shadow-2xl shadow-primary/30 mb-6">
           <Layers className="w-8 h-8 text-white" />
         </div>
-        <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-zinc-100 to-zinc-400 tracking-tight">
+        <h1 className="text-4xl font-extrabold text-theme-gradient tracking-tight">
           Nexus Deckbuilder
         </h1>
-        <p className="text-zinc-400 mt-2 text-lg">Next-gen MTG companion powered by AI.</p>
+        <p className="text-muted-foreground mt-2 text-lg">Next-gen MTG companion powered by AI.</p>
       </motion.div>
 
       <motion.div
@@ -69,35 +69,35 @@ export default function Splash() {
         transition={{ delay: 0.1 }}
         className="w-full max-w-md"
       >
-        <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-xl shadow-2xl shadow-black/50">
+        <Card className="bg-card/50 border-border backdrop-blur-xl shadow-2xl shadow-black/50">
           <CardHeader>
-            <CardTitle className="text-zinc-100">Welcome back</CardTitle>
-            <CardDescription className="text-zinc-400">Sign in to your account to continue.</CardDescription>
+            <CardTitle className="text-foreground">Welcome back</CardTitle>
+            <CardDescription className="text-muted-foreground">Sign in to your account to continue.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2 relative">
-              <Mail className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
+              <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
               <Input 
                 type="email" 
                 placeholder="Email address" 
-                className="pl-9 bg-black/40 border-white/10 text-zinc-200"
+                className="pl-9 bg-background/50 border-border text-foreground"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div className="space-y-2 relative">
-              <Lock className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
+              <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
               <Input 
                 type="password" 
                 placeholder="Password" 
-                className="pl-9 bg-black/40 border-white/10 text-zinc-200"
+                className="pl-9 bg-background/50 border-border text-foreground"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
             <div className="flex gap-3 pt-2">
               <Button 
-                className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white" 
+                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground" 
                 onClick={() => handleAuth('login')}
                 disabled={loading}
               >
@@ -105,7 +105,7 @@ export default function Splash() {
               </Button>
               <Button 
                 variant="outline" 
-                className="flex-1 border-white/10 hover:bg-white/5 text-zinc-300"
+                className="flex-1 border-border hover:bg-accent hover:text-accent-foreground text-foreground"
                 onClick={() => handleAuth('signup')}
                 disabled={loading}
               >
@@ -115,16 +115,16 @@ export default function Splash() {
             
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/5"></div>
+                <div className="w-full border-t border-border"></div>
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-zinc-900 px-2 text-zinc-500">Or continue with</span>
+                <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
               </div>
             </div>
 
             <Button 
               variant="outline" 
-              className="w-full border-white/10 hover:bg-white/5 text-zinc-300"
+              className="w-full border-border hover:bg-accent hover:text-accent-foreground text-foreground"
               onClick={handleOAuth}
             >
               <Component className="w-4 h-4 mr-2" />
