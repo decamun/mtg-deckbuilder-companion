@@ -54,10 +54,10 @@ export default function Splash() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-8 text-center"
       >
-        <div className="w-16 h-16 mx-auto rounded-2xl bg-theme-gradient flex items-center justify-center shadow-2xl shadow-primary/30 mb-6">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-accent flex items-center justify-center shadow-2xl shadow-primary/30 mb-6">
           <Layers className="w-8 h-8 text-white" />
         </div>
-        <h1 className="text-4xl font-extrabold text-theme-gradient tracking-tight">
+        <h1 className="text-4xl font-extrabold text-foreground tracking-tight">
           Nexus Deckbuilder
         </h1>
         <p className="text-muted-foreground mt-2 text-lg">Next-gen MTG companion powered by AI.</p>

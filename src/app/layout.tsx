@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Armata, Atomic_Age } from "next/font/google";
+import { Armata, Audiowide } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -9,8 +9,8 @@ const armata = Armata({
   weight: "400",
 });
 
-const atomicAge = Atomic_Age({
-  variable: "--font-atomic-age",
+const audiowide = Audiowide({
+  variable: "--font-audiowide",
   subsets: ["latin"],
   weight: "400",
 });
@@ -28,7 +28,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${armata.variable} ${atomicAge.variable} h-full antialiased dark`}
+      className={`${armata.variable} ${audiowide.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col">
         {children}
