@@ -70,16 +70,40 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }, [debouncedQuery])
 
   const fetchDeck = async () => {
-    const [{ data: deckData }, { data: cardsData }] = await Promise.all([
-      supabase.from('decks').select('*').eq('id', deckId).single(),
-      supabase.from('deck_cards').select('*').eq('deck_id', deckId)
-    ])
-    
-    if (deckData) {
-      setDeck(deckData)
-      setCommanderIds(deckData.commander_scryfall_ids || [])
-      setCoverImageId(deckData.cover_image_scryfall_id || null)
+    const { data: { session } } = await supabase.auth.getSession()
+    const authenticatedUserId = session?.user.id
+    if (!authenticatedUserId) {
+      router.push('/')
+      return
     }
+
+    const { data: deckData, error: deckError } = await supabase
+      .from('decks')
+      .select('*')
+      .eq('id', deckId)
+      .eq('user_id', authenticatedUserId)
+      .single()
+
+    if (deckError) {
+      toast.error('Failed to load deck')
+      router.push('/decks')
+      return
+    }
+    
+    setDeck(deckData)
+    setCommanderIds(deckData.commander_scryfall_ids || [])
+    setCoverImageId(deckData.cover_image_scryfall_id || null)
+
+    const { data: cardsData, error: cardsError } = await supabase
+      .from('deck_cards')
+      .select('*')
+      .eq('deck_id', deckData.id)
+
+    if (cardsError) {
+      toast.error('Failed to load cards')
+      return
+    }
+
     if (cardsData) {
       // Hydrate from Scryfall
       const hydrated = await Promise.all(cardsData.map(async (c) => {
