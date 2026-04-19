@@ -70,16 +70,34 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }, [debouncedQuery])
 
   const fetchDeck = async () => {
-    const [{ data: deckData }, { data: cardsData }] = await Promise.all([
-      supabase.from('decks').select('*').eq('id', deckId).single(),
-      supabase.from('deck_cards').select('*').eq('deck_id', deckId)
-    ])
+    const { data: session } = await supabase.auth.getSession()
+    const userId = session.session?.user.id
+    if (!userId) {
+      router.push('/')
+      return
+    }
+
+    const { data: deckData } = await supabase
+      .from('decks')
+      .select('*')
+      .eq('id', deckId)
+      .eq('user_id', userId)
+      .single()
     
     if (deckData) {
       setDeck(deckData)
       setCommanderIds(deckData.commander_scryfall_ids || [])
       setCoverImageId(deckData.cover_image_scryfall_id || null)
+    } else {
+      router.push('/decks')
+      return
     }
+
+    const { data: cardsData } = await supabase
+      .from('deck_cards')
+      .select('*')
+      .eq('deck_id', deckId)
+
     if (cardsData) {
       // Hydrate from Scryfall
       const hydrated = await Promise.all(cardsData.map(async (c) => {
