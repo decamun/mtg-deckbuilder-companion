@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { getCard, getCardByName } from "@/lib/scryfall"
+import { getCard, getCardsCollection } from "@/lib/scryfall"
 
 interface Deck {
   id: string
@@ -47,7 +47,7 @@ export default function MyDecks() {
       .from('decks')
       .select('*')
       .order('created_at', { ascending: false })
-      
+
     if (error) {
       toast.error("Failed to load decks")
       return
@@ -108,11 +108,16 @@ export default function MyDecks() {
 
     if (decklistText.trim()) {
       const parsedCards = parseDecklist(decklistText)
+      const uniqueNames = Array.from(new Set(parsedCards.map(p => p.name)))
+      const scryfallCards = await getCardsCollection(uniqueNames)
+
       let addedCount = 0
+      const inserts = []
+
       for (const parsed of parsedCards) {
-        const scryfallCard = await getCardByName(parsed.name)
+        const scryfallCard = scryfallCards.find(c => c.name.toLowerCase() === parsed.name.toLowerCase())
         if (scryfallCard) {
-          await supabase.from('deck_cards').insert({
+          inserts.push({
             deck_id: data.id,
             scryfall_id: scryfallCard.id,
             name: scryfallCard.name,
@@ -122,8 +127,15 @@ export default function MyDecks() {
         } else {
           toast.error(`Could not find card: ${parsed.name}`)
         }
-        await new Promise(r => setTimeout(r, 50)) // rate limit protection
       }
+
+      if (inserts.length > 0) {
+        const { error: insertError } = await supabase.from('deck_cards').insert(inserts)
+        if (insertError) {
+          toast.error(`Error saving cards: ${insertError.message}`)
+        }
+      }
+
       toast.success(`Deck created with ${addedCount} unique cards!`)
     } else {
       toast.success("Deck created!")
@@ -173,7 +185,7 @@ export default function MyDecks() {
             <h2 className="text-3xl font-bold tracking-tight text-foreground">Your Arsenal</h2>
             <p className="text-muted-foreground mt-1">Manage and build your magic decks.</p>
           </div>
-          
+
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger render={<Button className="bg-primary hover:bg-primary/90 text-primary-foreground" />}>
               <Plus className="w-4 h-4 mr-2" /> New Deck
@@ -185,25 +197,25 @@ export default function MyDecks() {
               <div className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Deck Name</Label>
-                  <Input 
-                    id="name" 
+                  <Input
+                    id="name"
                     value={newDeckName}
                     onChange={(e) => setNewDeckName(e.target.value)}
-                    className="bg-background/50 border-border" 
+                    className="bg-background/50 border-border"
                     placeholder="e.g. Modern Tron"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="decklist">Decklist (Optional)</Label>
-                  <Textarea 
-                    id="decklist" 
+                  <Textarea
+                    id="decklist"
                     value={decklistText}
                     onChange={(e) => setDecklistText(e.target.value)}
-                    className="bg-background/50 border-border min-h-[150px]" 
+                    className="bg-black/50 border-white/10 min-h-[150px]"
                     placeholder={"4 Lightning Bolt\n4 Goblin Guide"}
                   />
                 </div>
-                <Button onClick={handleCreateDeck} disabled={isCreating} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button onClick={handleCreateDeck} disabled={isCreating} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white">
                   {isCreating ? 'Creating...' : 'Create'}
                 </Button>
               </div>
