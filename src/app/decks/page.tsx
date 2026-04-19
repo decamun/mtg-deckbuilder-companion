@@ -8,11 +8,12 @@ import { Card, CardContent } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { getCard } from "@/lib/scryfall"
+import { getCard, getCardByName } from "@/lib/scryfall"
 
 interface Deck {
   id: string
@@ -26,6 +27,8 @@ export default function MyDecks() {
   const [decks, setDecks] = useState<Deck[]>([])
   const [loading, setLoading] = useState(true)
   const [newDeckName, setNewDeckName] = useState("")
+  const [decklistText, setDecklistText] = useState("")
+  const [isCreating, setIsCreating] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const router = useRouter()
 
@@ -64,10 +67,32 @@ export default function MyDecks() {
     setLoading(false)
   }
 
+  function parseDecklist(text: string) {
+    const lines = text.split('\n')
+    const cards: { quantity: number, name: string }[] = []
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('//')) continue
+      const match = trimmed.match(/^(\d+)[xX]?\s+(.+)$/)
+      if (match) {
+        const quantity = parseInt(match[1])
+        const name = match[2].replace(/(?: \([^)]+\)| \[[^\]]+\])(?: \d+[a-zA-Z]?)?$/, '').trim()
+        cards.push({ quantity, name })
+      } else {
+        cards.push({ quantity: 1, name: trimmed.replace(/(?: \([^)]+\)| \[[^\]]+\])(?: \d+[a-zA-Z]?)?$/, '').trim() })
+      }
+    }
+    return cards
+  }
+
   const handleCreateDeck = async () => {
     if (!newDeckName) return
+    setIsCreating(true)
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) {
+      setIsCreating(false)
+      return
+    }
 
     const { data, error } = await supabase
       .from('decks')
@@ -77,12 +102,37 @@ export default function MyDecks() {
 
     if (error) {
       toast.error(error.message)
+      setIsCreating(false)
       return
     }
 
-    toast.success("Deck created!")
+    if (decklistText.trim()) {
+      const parsedCards = parseDecklist(decklistText)
+      let addedCount = 0
+      for (const parsed of parsedCards) {
+        const scryfallCard = await getCardByName(parsed.name)
+        if (scryfallCard) {
+          await supabase.from('deck_cards').insert({
+            deck_id: data.id,
+            scryfall_id: scryfallCard.id,
+            name: scryfallCard.name,
+            quantity: parsed.quantity
+          })
+          addedCount++
+        } else {
+          toast.error(`Could not find card: ${parsed.name}`)
+        }
+        await new Promise(r => setTimeout(r, 50)) // rate limit protection
+      }
+      toast.success(`Deck created with ${addedCount} unique cards!`)
+    } else {
+      toast.success("Deck created!")
+    }
+
+    setIsCreating(false)
     setIsDialogOpen(false)
     setNewDeckName("")
+    setDecklistText("")
     router.push(`/decks/${data.id}`)
   }
 
@@ -143,8 +193,18 @@ export default function MyDecks() {
                     placeholder="e.g. Modern Tron"
                   />
                 </div>
-                <Button onClick={handleCreateDeck} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white">
-                  Create
+                <div className="space-y-2">
+                  <Label htmlFor="decklist">Decklist (Optional)</Label>
+                  <Textarea 
+                    id="decklist" 
+                    value={decklistText}
+                    onChange={(e) => setDecklistText(e.target.value)}
+                    className="bg-black/50 border-white/10 min-h-[150px]" 
+                    placeholder={"4 Lightning Bolt\n4 Goblin Guide"}
+                  />
+                </div>
+                <Button onClick={handleCreateDeck} disabled={isCreating} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white">
+                  {isCreating ? 'Creating...' : 'Create'}
                 </Button>
               </div>
             </DialogContent>
