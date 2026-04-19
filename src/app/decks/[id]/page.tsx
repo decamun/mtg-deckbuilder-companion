@@ -97,7 +97,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const { data: cardsData, error: cardsError } = await supabase
       .from('deck_cards')
       .select('*')
-      .eq('deck_id', deckId)
+      .eq('deck_id', deckData.id)
 
     if (cardsError) {
       toast.error('Failed to load cards')
