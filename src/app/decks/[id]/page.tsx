@@ -77,12 +77,18 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       return
     }
 
-    const { data: deckData } = await supabase
+    const { data: deckData, error: deckError } = await supabase
       .from('decks')
       .select('*')
       .eq('id', deckId)
       .eq('user_id', userId)
       .single()
+
+    if (deckError) {
+      toast.error('Failed to load deck')
+      router.push('/decks')
+      return
+    }
     
     if (deckData) {
       setDeck(deckData)
@@ -93,10 +99,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       return
     }
 
-    const { data: cardsData } = await supabase
+    const { data: cardsData, error: cardsError } = await supabase
       .from('deck_cards')
       .select('*')
       .eq('deck_id', deckId)
+
+    if (cardsError) {
+      toast.error('Failed to load cards')
+      return
+    }
 
     if (cardsData) {
       // Hydrate from Scryfall
