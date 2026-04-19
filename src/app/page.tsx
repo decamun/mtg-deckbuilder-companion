@@ -24,16 +24,43 @@ export default function Splash() {
         if (error) throw error
         router.push('/decks')
       } else {
-        const { error } = await supabase.auth.signUp({ email, password })
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          },
+        })
         if (error) throw error
-        alert("Account created! Open Mailpit at http://localhost:54324 to confirm your email before signing in.")
-        toast.success("Account created! Open Mailpit at http://localhost:54324 to confirm your email before signing in.", {
+        toast.success("Account created! Check your email to confirm your account.", {
           duration: 10000
         })
       }
-    } catch (error: any) {
-      alert(`Error: ${error.message}`)
-      toast.error(error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "An unexpected error occurred"
+      toast.error(message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast.error("Enter your email first.")
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+      })
+      if (error) throw error
+
+      toast.success("Password reset email sent. Check your inbox.")
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "An unexpected error occurred"
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -94,6 +121,16 @@ export default function Splash() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+            </div>
+            <div className="flex justify-end">
+              <Button
+                variant="link"
+                className="px-0 h-auto text-muted-foreground hover:text-foreground"
+                onClick={handleForgotPassword}
+                disabled={loading}
+              >
+                Forgot password?
+              </Button>
             </div>
             <div className="flex gap-3 pt-2">
               <Button 
