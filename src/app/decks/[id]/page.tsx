@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Search, LayoutGrid, List, Layers as StackIcon, Settings, ChevronDown, Tag, Trash, Edit2, PlaySquare } from "lucide-react"
+import { Search, LayoutGrid, List, Layers as StackIcon, Trash, Crown, Image as ImageIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -45,6 +45,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [sorting, setSorting] = useState<'name' | 'mana'>('name')
   const debouncedQuery = useDebounce(query, 500)
   
+  // Commander & cover image state
+  const [commanderIds, setCommanderIds] = useState<string[]>([])
+  const [coverImageId, setCoverImageId] = useState<string | null>(null)
+
   const [tagDialogOpen, setTagDialogOpen] = useState(false)
   const [customTagInput, setCustomTagInput] = useState("")
   const [activeCardIdForTag, setActiveCardIdForTag] = useState<string | null>(null)
@@ -71,7 +75,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       supabase.from('deck_cards').select('*').eq('deck_id', deckId)
     ])
     
-    if (deckData) setDeck(deckData)
+    if (deckData) {
+      setDeck(deckData)
+      setCommanderIds(deckData.commander_scryfall_ids || [])
+      setCoverImageId(deckData.cover_image_scryfall_id || null)
+    }
     if (cardsData) {
       // Hydrate from Scryfall
       const hydrated = await Promise.all(cardsData.map(async (c) => {
@@ -110,6 +118,35 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const deleteCard = async (id: string) => {
     await supabase.from('deck_cards').delete().eq('id', id)
+  }
+
+  const setAsCommander = async (scryfallId: string) => {
+    let newIds: string[]
+    if (commanderIds.includes(scryfallId)) {
+      // Toggle off
+      newIds = commanderIds.filter(id => id !== scryfallId)
+    } else if (commanderIds.length >= 2) {
+      toast.error('A deck can have at most 2 commanders. Remove one first.')
+      return
+    } else {
+      newIds = [...commanderIds, scryfallId]
+    }
+    setCommanderIds(newIds)
+    await supabase.from('decks').update({ commander_scryfall_ids: newIds }).eq('id', deckId)
+    toast.success(newIds.includes(scryfallId) ? 'Set as commander!' : 'Removed as commander')
+  }
+
+  const setAsCoverImage = async (scryfallId: string) => {
+    if (coverImageId === scryfallId) {
+      // Toggle off
+      setCoverImageId(null)
+      await supabase.from('decks').update({ cover_image_scryfall_id: null }).eq('id', deckId)
+      toast.success('Cover image removed')
+    } else {
+      setCoverImageId(scryfallId)
+      await supabase.from('decks').update({ cover_image_scryfall_id: scryfallId }).eq('id', deckId)
+      toast.success('Set as cover image!')
+    }
   }
 
   const addTag = async (cardId: string, tag: string) => {
@@ -277,13 +314,29 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       <ContextMenu key={c.id}>
                         <ContextMenuTrigger>
                           <div 
-                            className="relative rounded-xl overflow-hidden border border-border hover:border-primary/50 cursor-pointer shadow-xl group aspect-[5/7]"
+                            className={`relative rounded-xl overflow-hidden border cursor-pointer shadow-xl group aspect-[5/7] transition-all ${
+                              commanderIds.includes(c.scryfall_id)
+                                ? 'border-yellow-400/80 ring-2 ring-yellow-400/40 hover:border-yellow-300'
+                                : coverImageId === c.scryfall_id
+                                  ? 'border-blue-400/80 ring-2 ring-blue-400/40 hover:border-blue-300'
+                                  : 'border-border hover:border-primary/50'
+                            }`}
                             draggable
                             onDragStart={(e) => e.dataTransfer.setData('cardId', c.id)}
                           >
                             <img src={c.image_url} className="w-full h-full object-cover" />
                             {c.quantity > 1 && (
                               <div className="absolute top-2 right-2 bg-background/80 text-foreground px-2 py-0.5 rounded text-xs font-bold border border-border">x{c.quantity}</div>
+                            )}
+                            {commanderIds.includes(c.scryfall_id) && (
+                              <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg">
+                                <Crown className="w-2.5 h-2.5" /> CMD
+                              </div>
+                            )}
+                            {coverImageId === c.scryfall_id && (
+                              <div className="absolute top-2 left-2 bg-blue-400/90 text-blue-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg" style={{top: commanderIds.includes(c.scryfall_id) ? '1.75rem' : ''}}>
+                                <ImageIcon className="w-2.5 h-2.5" /> Cover
+                              </div>
                             )}
                             {c.tags && c.tags.length > 0 && (
                               <div className="absolute bottom-1 right-1 flex flex-wrap justify-end gap-1 p-1 max-w-full">
@@ -293,8 +346,20 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           </div>
                         </ContextMenuTrigger>
                         <ContextMenuContent className="w-48 bg-card border-border text-foreground">
-                          <ContextMenuItem>Set as Commander</ContextMenuItem>
-                          <ContextMenuItem>Set as Cover Image</ContextMenuItem>
+                          <ContextMenuItem
+                            onClick={() => setAsCommander(c.scryfall_id)}
+                            className={commanderIds.includes(c.scryfall_id) ? 'text-yellow-400 focus:text-yellow-300 focus:bg-yellow-400/10' : ''}
+                          >
+                            <Crown className="w-3.5 h-3.5 mr-2" />
+                            {commanderIds.includes(c.scryfall_id) ? 'Remove as Commander' : 'Set as Commander'}
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onClick={() => setAsCoverImage(c.scryfall_id)}
+                            className={coverImageId === c.scryfall_id ? 'text-blue-400 focus:text-blue-300 focus:bg-blue-400/10' : ''}
+                          >
+                            <ImageIcon className="w-3.5 h-3.5 mr-2" />
+                            {coverImageId === c.scryfall_id ? 'Remove Cover Image' : 'Set as Cover Image'}
+                          </ContextMenuItem>
                           <ContextMenuSeparator className="bg-border" />
                           <ContextMenuSub>
                             <ContextMenuSubTrigger>Tags</ContextMenuSubTrigger>
