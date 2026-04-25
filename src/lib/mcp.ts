@@ -4,7 +4,7 @@ import { supabase } from "./supabase/client";
 
 export function createMcpServer() {
   const mcpServer = new McpServer({
-    name: "Nexus-MTG-Agent",
+    name: "idlebrew-MTG-Agent",
     version: "1.0.0"
   });
 

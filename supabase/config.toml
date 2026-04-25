@@ -242,11 +242,11 @@ otp_expiry = 3600
 # content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.recovery]
-subject = "Reset your Nexus Deckbuilder password"
+subject = "Reset your idlebrew password"
 content_path = "./supabase/templates/reset_password.html"
 
 [auth.email.template.confirmation]
-subject = "Confirm your Nexus Deckbuilder account"
+subject = "Confirm your idlebrew account"
 content_path = "./supabase/templates/confirmation.html"
 
 # Uncomment to customize notification email template

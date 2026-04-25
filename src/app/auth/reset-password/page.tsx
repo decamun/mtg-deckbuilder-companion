@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Layers, Lock } from "lucide-react"
+import { Lock } from "lucide-react"
+import { IdlebrewLogo } from "@/components/IdlebrewLogo"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -77,13 +78,13 @@ export default function ResetPassword() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-8 text-center"
       >
-        <div className="w-16 h-16 mx-auto rounded-2xl bg-accent flex items-center justify-center shadow-2xl shadow-primary/30 mb-6">
-          <Layers className="w-8 h-8 text-white" />
+        <div className="flex items-center justify-center gap-3 mb-2">
+          <IdlebrewLogo className="h-10 w-auto text-foreground" />
+          <h1 className="text-4xl font-extrabold text-foreground tracking-tight">
+            idlebrew
+          </h1>
         </div>
-        <h1 className="text-4xl font-extrabold text-foreground tracking-tight">
-          Nexus Deckbuilder
-        </h1>
-        <p className="text-muted-foreground mt-2 text-lg">Next-gen MTG companion powered by AI.</p>
+        <p className="text-muted-foreground mt-2 text-lg">AI-powered deck brewing for Magic: The Gathering.</p>
       </motion.div>
 
       <motion.div
