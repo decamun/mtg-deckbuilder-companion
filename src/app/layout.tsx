@@ -16,8 +16,8 @@ const audiowide = Audiowide({
 });
 
 export const metadata: Metadata = {
-  title: "Nexus Deckbuilder",
-  description: "Next-gen MTG companion powered by AI",
+  title: "idlebrew",
+  description: "AI-powered deck brewing for Magic: The Gathering",
 };
 
 export default function RootLayout({
