@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { IdlebrewLogo } from "@/components/IdlebrewLogo"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -8,15 +7,7 @@ export const metadata: Metadata = {
 
 export default function DataDeletion() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-6 py-4">
-        <Link href="/" className="flex items-center gap-3 w-fit">
-          <IdlebrewLogo className="h-7 w-auto text-foreground" />
-          <span className="text-xl font-extrabold tracking-tight">idlebrew</span>
-        </Link>
-      </header>
-
-      <main className="max-w-2xl mx-auto px-6 py-12 space-y-8">
+    <main className="max-w-2xl mx-auto px-6 py-12 space-y-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Data Deletion</h1>
           <p className="text-muted-foreground text-sm">Last updated: April 26, 2026</p>
@@ -80,7 +71,6 @@ export default function DataDeletion() {
             .
           </p>
         </section>
-      </main>
-    </div>
+    </main>
   )
 }
