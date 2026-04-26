@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { Layers, Plus, MoreVertical, Edit, Copy, Trash, LogOut } from "lucide-react"
+import { Plus, MoreVertical, Edit, Copy, Trash } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -39,7 +39,7 @@ export default function MyDecks() {
   const fetchDecks = async () => {
     const { data: session } = await supabase.auth.getSession()
     if (!session.session) {
-      router.push('/')
+      router.push('/login')
       return
     }
 
@@ -159,33 +159,11 @@ export default function MyDecks() {
     }
   }
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push('/')
-  }
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
-      <header className="border-b border-border bg-secondary/80 backdrop-blur-xl sticky top-0 z-10">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-              <Layers className="w-5 h-5 text-white" />
-            </div>
-            <h1 className="text-xl font-bold">My Decks</h1>
-          </div>
-          <Button variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={handleSignOut}>
-            <LogOut className="w-4 h-4 mr-2" /> Sign Out
-          </Button>
-        </div>
-      </header>
-
       <main className="container mx-auto px-4 py-8 flex-1">
         <div className="flex justify-between items-end mb-8">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">Your Arsenal</h2>
-            <p className="text-muted-foreground mt-1">Manage and build your magic decks.</p>
-          </div>
+          <div />
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger render={<Button className="bg-primary hover:bg-primary/90 text-primary-foreground" />}>

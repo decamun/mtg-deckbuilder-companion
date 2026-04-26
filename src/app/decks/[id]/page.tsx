@@ -255,7 +255,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const groupedCards = getGroupedCards()
 
   return (
-    <div className="h-screen bg-background text-foreground flex flex-col font-sans overflow-hidden">
+    <div className="flex flex-col overflow-hidden bg-background font-sans text-foreground" style={{ height: 'calc(100dvh - 3.5rem)' }}>
       <header className="border-b border-border bg-secondary/80 backdrop-blur-md h-14 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => router.push('/decks')} className="text-muted-foreground hover:text-foreground">
