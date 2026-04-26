@@ -189,7 +189,7 @@ export default function MyDecks() {
                 </div>
                 <div className="space-y-2">
                   <Label>Format</Label>
-                  <Select value={newDeckFormat} onValueChange={setNewDeckFormat}>
+                  <Select value={newDeckFormat} onValueChange={(v) => v && setNewDeckFormat(v)}>
                     <SelectTrigger className="bg-background/50 border-border text-foreground">
                       <SelectValue />
                     </SelectTrigger>
