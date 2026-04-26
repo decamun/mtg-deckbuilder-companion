@@ -79,6 +79,24 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     return () => { supabase.removeChannel(channel) }
   }, [deckId])
 
+  // Window-level dragend listener: per-element handlers can be lost when an
+  // optimistic re-render unmounts the drag source mid-drop, leaving isDragging stuck.
+  useEffect(() => {
+    const clear = () => {
+      isDragging.current = false
+      if (pendingFetch.current) {
+        pendingFetch.current = false
+        fetchDeck()
+      }
+    }
+    window.addEventListener('dragend', clear)
+    window.addEventListener('drop', clear)
+    return () => {
+      window.removeEventListener('dragend', clear)
+      window.removeEventListener('drop', clear)
+    }
+  }, [])
+
   useEffect(() => {
     if (debouncedQuery.length > 1) {
       searchCards(debouncedQuery).then(setResults)
@@ -444,7 +462,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       {/* Workspace */}
       <div className="flex-1 overflow-y-auto bg-background/20">
         <div className="p-6 max-w-6xl mx-auto space-y-8">
-          {Object.entries(groupedCards).map(([groupName, groupCards]) => (
+          {Object.entries(groupedCards)
+            .sort(([a], [b]) => {
+              if (a === 'Untagged') return 1
+              if (b === 'Untagged') return -1
+              return 0
+            })
+            .map(([groupName, groupCards]) => (
             <div
               key={groupName}
               onDragOver={(e) => { if (grouping === 'tag') e.preventDefault() }}
@@ -469,7 +493,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                     <ContextMenu key={c.id}>
                       <ContextMenuTrigger>
                         <div
-                          className={`relative rounded-xl overflow-hidden border cursor-pointer shadow-xl group aspect-[5/7] transition-all ${
+                          className={`relative rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing shadow-xl group aspect-[5/7] transition-all ${
                             commanderIds.includes(c.scryfall_id)
                               ? 'border-yellow-400/80 ring-2 ring-yellow-400/40 hover:border-yellow-300'
                               : coverImageId === c.scryfall_id
@@ -478,7 +502,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           }`}
                           draggable
                           onDragStart={(e) => { isDragging.current = true; e.dataTransfer.setData('cardId', c.id) }}
-                          onDragEnd={() => { isDragging.current = false; if (pendingFetch.current) { pendingFetch.current = false; fetchDeck() } }}
                         >
                           <img src={c.image_url} className="w-full h-full object-cover" />
                           {commanderIds.includes(c.scryfall_id) && (
@@ -609,7 +632,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                             return (
                               <motion.div
                                 key={card.id}
-                                className="absolute w-full cursor-pointer group"
+                                className="absolute w-full cursor-grab active:cursor-grabbing group"
+                                draggable
+                                onDragStart={(e: React.DragEvent) => { isDragging.current = true; e.dataTransfer.setData('cardId', card.id) }}
                                 style={{
                                   top: basePositions[itemIdx],
                                   // Higher index = more in front; card 0 is rearmost
@@ -652,14 +677,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
               {/* ── LIST VIEW ── */}
               {viewMode === 'list' && (
-                <div className="bg-card/50 rounded-lg border border-border overflow-hidden">
+                <div className="bg-card/50 rounded-lg border border-border">
                   {groupCards.map(c => (
                     <div
                       key={c.id}
-                      className="flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 group relative"
+                      className="flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing"
                       draggable
                       onDragStart={(e) => { isDragging.current = true; e.dataTransfer.setData('cardId', c.id) }}
-                      onDragEnd={() => { isDragging.current = false; if (pendingFetch.current) { pendingFetch.current = false; fetchDeck() } }}
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
