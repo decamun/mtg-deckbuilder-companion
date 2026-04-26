@@ -1,5 +1,6 @@
 import Link from "next/link"
 import type { Metadata } from "next"
+import { BackButton } from "@/components/BackButton"
 
 export const metadata: Metadata = {
   title: "Data Deletion — idlebrew",
@@ -9,7 +10,8 @@ export default function DataDeletion() {
   return (
     <main className="max-w-2xl mx-auto px-6 py-12 space-y-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Data Deletion</h1>
+          <BackButton />
+          <h1 className="text-3xl font-bold mb-2 mt-4">Data Deletion</h1>
           <p className="text-muted-foreground text-sm">Last updated: April 26, 2026</p>
         </div>
 
