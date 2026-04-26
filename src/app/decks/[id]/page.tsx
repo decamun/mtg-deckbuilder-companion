@@ -634,7 +634,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 key={card.id}
                                 className="absolute w-full cursor-grab active:cursor-grabbing group"
                                 draggable
-                                onDragStart={(e: React.DragEvent) => { isDragging.current = true; e.dataTransfer.setData('cardId', card.id) }}
+                                onDragStartCapture={(e) => { isDragging.current = true; e.dataTransfer.setData('cardId', card.id) }}
                                 style={{
                                   top: basePositions[itemIdx],
                                   // Higher index = more in front; card 0 is rearmost
