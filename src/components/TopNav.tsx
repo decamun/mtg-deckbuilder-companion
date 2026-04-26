@@ -64,7 +64,7 @@ export function TopNav() {
           {visibleLinks.map(({ href, label }) => {
             const isActive =
               pathname === href ||
-              (href !== "/" && pathname.startsWith(href + "/"))
+              (href !== "/" && (pathname?.startsWith(href + "/") ?? false))
             return (
               <Link
                 key={href}
