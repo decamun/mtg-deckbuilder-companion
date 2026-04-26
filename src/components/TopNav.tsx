@@ -16,6 +16,11 @@ import { Button } from "@/components/ui/button"
 import { User, LogOut, ChevronDown, Settings } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 
+const NAV_LINKS = [
+  { href: "/brew", label: "Brew", requiresAuth: false },
+  { href: "/decks", label: "Your Decks", requiresAuth: true },
+]
+
 export function TopNav() {
   const pathname = usePathname()
   const router = useRouter()
@@ -38,17 +43,10 @@ export function TopNav() {
     router.push("/brew")
   }
 
-  const navLinks = [
-    { href: "/brew", label: "Brew", alwaysShow: true },
-    { href: "/decks", label: "Your Decks", alwaysShow: false },
-  ]
-
-  const visibleLinks = navLinks.filter((l) => l.alwaysShow || user)
-
   return (
     <header className="sticky top-0 z-50 shrink-0 border-b border-border bg-background/80 backdrop-blur-xl">
-      <div className="container mx-auto flex h-14 items-center justify-between px-4">
-        {/* Logo & name */}
+      <div className="container mx-auto flex h-14 items-center gap-6 px-4">
+        {/* Logo & name — always anchored left */}
         <Link
           href={user ? "/decks" : "/brew"}
           className="flex shrink-0 items-center gap-2.5"
@@ -59,9 +57,11 @@ export function TopNav() {
           </span>
         </Link>
 
-        {/* Center nav links */}
+        {/* Nav links — flow left after logo; auth links are invisible (not removed)
+            so the layout never shifts */}
         <nav className="flex items-center gap-1">
-          {visibleLinks.map(({ href, label }) => {
+          {NAV_LINKS.map(({ href, label, requiresAuth }) => {
+            const hidden = requiresAuth && !user
             const isActive =
               pathname === href ||
               (href !== "/" && (pathname?.startsWith(href + "/") ?? false))
@@ -69,7 +69,11 @@ export function TopNav() {
               <Link
                 key={href}
                 href={href}
+                aria-hidden={hidden}
+                tabIndex={hidden ? -1 : undefined}
                 className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                  hidden ? "invisible pointer-events-none" : ""
+                } ${
                   isActive
                     ? "border border-primary/20 bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -81,7 +85,10 @@ export function TopNav() {
           })}
         </nav>
 
-        {/* Right: user dropdown */}
+        {/* Spacer pushes dropdown to the far right */}
+        <div className="flex-1" />
+
+        {/* User dropdown — always anchored right */}
         <DropdownMenu>
           <DropdownMenuTrigger
             render={

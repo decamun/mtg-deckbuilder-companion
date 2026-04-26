@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -27,6 +28,7 @@ export default function MyDecks() {
   const [decks, setDecks] = useState<Deck[]>([])
   const [loading, setLoading] = useState(true)
   const [newDeckName, setNewDeckName] = useState("")
+  const [newDeckFormat, setNewDeckFormat] = useState("edh")
   const [decklistText, setDecklistText] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -97,7 +99,7 @@ export default function MyDecks() {
 
     const { data, error } = await supabase
       .from('decks')
-      .insert({ name: newDeckName, user_id: user.id })
+      .insert({ name: newDeckName, user_id: user.id, format: newDeckFormat })
       .select()
       .single()
 
@@ -145,6 +147,7 @@ export default function MyDecks() {
     setIsCreating(false)
     setIsDialogOpen(false)
     setNewDeckName("")
+    setNewDeckFormat("edh")
     setDecklistText("")
     router.push(`/decks/${data.id}`)
   }
@@ -183,6 +186,24 @@ export default function MyDecks() {
                     className="bg-background/50 border-border"
                     placeholder="e.g. Modern Tron"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>Format</Label>
+                  <Select value={newDeckFormat} onValueChange={setNewDeckFormat}>
+                    <SelectTrigger className="bg-background/50 border-border text-foreground">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border text-foreground">
+                      <SelectItem value="edh">EDH / Commander</SelectItem>
+                      <SelectItem value="standard">Standard</SelectItem>
+                      <SelectItem value="modern">Modern</SelectItem>
+                      <SelectItem value="pioneer">Pioneer</SelectItem>
+                      <SelectItem value="legacy">Legacy</SelectItem>
+                      <SelectItem value="vintage">Vintage</SelectItem>
+                      <SelectItem value="pauper">Pauper</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="decklist">Decklist (Optional)</Label>

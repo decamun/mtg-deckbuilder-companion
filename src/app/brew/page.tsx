@@ -23,10 +23,7 @@ async function fetchEDHRECCards(
 ): Promise<{ name: string; quantity: number }[]> {
   try {
     const slug = toEDHRECSlug(commanderName)
-    const res = await fetch(
-      `https://json.edhrec.com/average-decks/${slug}.json`,
-      { signal: AbortSignal.timeout(6000) }
-    )
+    const res = await fetch(`/api/edhrec/${encodeURIComponent(slug)}`)
     if (!res.ok) return []
     const data = await res.json()
     const decklistText = data.decklist ?? data.deck?.decklist
@@ -103,6 +100,7 @@ export default function BrewPage() {
           .insert({
             name: `${card.name} Commander Deck`,
             user_id: user.id,
+            format: "edh",
             commander_scryfall_ids: [card.id],
             cover_image_scryfall_id: card.id,
           })
