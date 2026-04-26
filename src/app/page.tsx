@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { motion } from "framer-motion"
 import { Mail, Lock, ArrowLeft } from "lucide-react"
 import { IdlebrewLogo } from "@/components/IdlebrewLogo"
@@ -219,6 +220,12 @@ export default function Splash() {
           )}
         </Card>
       </motion.div>
+
+      <p className="mt-6 text-xs text-muted-foreground">
+        <Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
+        {" · "}
+        <Link href="/data-deletion" className="hover:text-primary transition-colors">Data Deletion</Link>
+      </p>
     </div>
   )
 }
