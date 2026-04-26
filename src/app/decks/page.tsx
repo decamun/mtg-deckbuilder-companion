@@ -162,8 +162,7 @@ export default function MyDecks() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
-      <main className="container mx-auto px-4 py-8 flex-1">
+    <main className="container mx-auto px-4 py-8 flex-1">
         <div className="flex justify-between items-end mb-8">
           <div />
 
@@ -286,7 +285,6 @@ export default function MyDecks() {
             )}
           </div>
         )}
-      </main>
-    </div>
+    </main>
   )
 }

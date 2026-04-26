@@ -35,6 +35,13 @@ export default function RootLayout({
         <TopNav />
         {children}
         <Toaster theme="dark" />
+        <footer className="mt-auto border-t border-border py-4 px-6">
+          <nav className="flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
+            <a href="/terms" className="hover:text-foreground transition-colors">Terms of Service</a>
+            <a href="/data-deletion" className="hover:text-foreground transition-colors">Data Deletion</a>
+          </nav>
+        </footer>
       </body>
     </html>
   );
