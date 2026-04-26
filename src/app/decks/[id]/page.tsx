@@ -62,8 +62,18 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
+
+  // Drag coordination. HTML5 drag is hostile to DOM mutations mid-drag —
+  // re-renders that unmount the source element before dragend deadlock the
+  // browser's drag state. So we defer all state changes triggered during
+  // drag (drops, real-time refreshes) until dragend fires.
   const isDragging = useRef(false)
+  const pendingDrop = useRef<{ cardId: string; tag: string } | null>(null)
   const pendingFetch = useRef(false)
+  const dragCallbacksRef = useRef<{
+    addTag: (cardId: string, tag: string) => Promise<void>
+    fetchDeck: () => Promise<void>
+  }>(null!)
 
   useEffect(() => {
     fetchDeck()
@@ -79,22 +89,20 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     return () => { supabase.removeChannel(channel) }
   }, [deckId])
 
-  // Window-level dragend listener: per-element handlers can be lost when an
-  // optimistic re-render unmounts the drag source mid-drop, leaving isDragging stuck.
   useEffect(() => {
-    const clear = () => {
+    const onDragEnd = () => {
       isDragging.current = false
+      const { addTag, fetchDeck } = dragCallbacksRef.current
+      const drop = pendingDrop.current
+      pendingDrop.current = null
+      if (drop) addTag(drop.cardId, drop.tag)
       if (pendingFetch.current) {
         pendingFetch.current = false
         fetchDeck()
       }
     }
-    window.addEventListener('dragend', clear)
-    window.addEventListener('drop', clear)
-    return () => {
-      window.removeEventListener('dragend', clear)
-      window.removeEventListener('drop', clear)
-    }
+    window.addEventListener('dragend', onDragEnd)
+    return () => window.removeEventListener('dragend', onDragEnd)
   }, [])
 
   useEffect(() => {
@@ -271,6 +279,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     setCustomTagInput("")
     setActiveCardIdForTag(null)
   }
+
+  // Keep latest addTag/fetchDeck reachable from the stable window dragend listener
+  dragCallbacksRef.current = { addTag, fetchDeck }
 
   const allUniqueTags = Array.from(new Set(cards.flatMap(c => c.tags || []))).sort()
 
@@ -474,8 +485,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               onDragOver={(e) => { if (grouping === 'tag') e.preventDefault() }}
               onDrop={(e) => {
                 if (grouping === 'tag' && groupName !== 'Untagged') {
-                  const cardId = e.dataTransfer.getData('cardId')
-                  addTag(cardId, groupName)
+                  pendingDrop.current = { cardId: e.dataTransfer.getData('cardId'), tag: groupName }
                 }
               }}
             >
