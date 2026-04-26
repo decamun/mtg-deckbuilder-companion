@@ -28,7 +28,8 @@ async function fetchEDHRECCards(
     const res = await fetch(`/api/edhrec/${encodeURIComponent(slug)}`)
     if (!res.ok) return []
     const data = await res.json()
-    const decklistText = data.decklist ?? data.deck?.decklist
+    if (data._raw) console.debug("[edhrec] unknown response shape:", data._raw)
+    const decklistText: unknown = data.decklist
     if (!decklistText || typeof decklistText !== "string") return []
     return decklistText
       .split("\n")
@@ -150,9 +151,9 @@ export default function BrewPage() {
             })
             if (inserts.length > 0) {
               await supabase.from("deck_cards").insert(inserts)
-              toast.success(
-                `Loaded EDHREC average deck (${inserts.length} cards)`
-              )
+              toast.success(`Loaded ${inserts.length} cards from EDHREC`)
+            } else {
+              toast.info("Deck created — EDHREC data unavailable, add cards manually")
             }
           }
         }
