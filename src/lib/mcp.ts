@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { supabase } from "./supabase/client";
+import type { ScryfallCard } from "./scryfall";
 
 export function createMcpServer() {
   const mcpServer = new McpServer({
@@ -15,11 +16,13 @@ export function createMcpServer() {
       try {
         const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}`);
         const data = await res.json();
-        const cards = data.data?.slice(0, 5).map((c: any) => `${c.name} - ${c.mana_cost} - ${c.type_line}`) || [];
+        const cards = (data.data as ScryfallCard[] | undefined)
+          ?.slice(0, 5)
+          .map((c) => `${c.name} - ${c.mana_cost} - ${c.type_line}`) || [];
         return {
           content: [{ type: "text", text: `Top 5 results for "${query}":\n${cards.join('\n')}` }]
         };
-      } catch (e) {
+      } catch {
         return { content: [{ type: "text", text: "Error searching Scryfall." }] };
       }
     }

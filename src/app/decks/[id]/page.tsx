@@ -13,22 +13,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
 import { searchCards, getCardsByIds, ScryfallCard } from "@/lib/scryfall"
+import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/types"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-
-interface DeckCard {
-  id: string
-  scryfall_id: string
-  name: string
-  quantity: number
-  zone: string
-  tags: string[]
-  image_url?: string
-  type_line?: string
-  mana_cost?: string
-  cmc?: number
-}
 
 // Stack card width is w-44 (176px); height ≈ 176 * 1.4 = 246px
 const STACK_PEEK = 32
@@ -40,16 +28,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const { id: deckId } = use(params)
   const router = useRouter()
 
-  const [deck, setDeck] = useState<any>(null)
+  const [deck, setDeck] = useState<Deck | null>(null)
   const [cards, setCards] = useState<DeckCard[]>([])
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<ScryfallCard[]>([])
   const [searchFocused, setSearchFocused] = useState(false)
   const [selectedResultIdx, setSelectedResultIdx] = useState(0)
 
-  const [viewMode, setViewMode] = useState<'visual' | 'stack' | 'list'>('visual')
-  const [grouping, setGrouping] = useState<'none' | 'type' | 'mana' | 'tag'>('type')
-  const [sorting, setSorting] = useState<'name' | 'mana'>('name')
+  const [viewMode, setViewMode] = useState<ViewMode>('visual')
+  const [grouping, setGrouping] = useState<GroupingMode>('type')
+  const [sorting, setSorting] = useState<SortingMode>('name')
   const debouncedQuery = useDebounce(query, 300)
 
   const [commanderIds, setCommanderIds] = useState<string[]>([])
@@ -172,7 +160,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           image_url: sf?.image_uris?.normal,
           type_line: sf?.type_line || '',
           mana_cost: sf?.mana_cost || '',
-          cmc: sf ? calculateCmc(sf.mana_cost) : 0
+          cmc: sf ? sf.cmc ?? calculateCmc(sf.mana_cost) : 0
         }
       })
       setCards(hydrated)
@@ -449,7 +437,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
         {/* Right: group + view controls */}
         <div className="flex items-center gap-2 shrink-0">
-          <Select value={grouping} onValueChange={(v: any) => setGrouping(v)}>
+          <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
             <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
               <SelectValue placeholder="Group by" />
             </SelectTrigger>
@@ -460,7 +448,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               <SelectItem value="tag">By Tags</SelectItem>
             </SelectContent>
           </Select>
-          <Tabs value={viewMode} onValueChange={(v: any) => setViewMode(v)} className="bg-card rounded-md p-0.5 border border-border">
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
             <TabsList className="h-7 bg-transparent">
               <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
               <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>

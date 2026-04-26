@@ -15,14 +15,7 @@ import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { getCardsByIds, getCardsCollection } from "@/lib/scryfall"
-
-interface Deck {
-  id: string
-  name: string
-  format: string | null
-  cover_image_scryfall_id: string | null
-  cover_url?: string // Client-side augmented
-}
+import type { Deck } from "@/lib/types"
 
 export default function MyDecks() {
   const [decks, setDecks] = useState<Deck[]>([])
@@ -114,7 +107,7 @@ export default function MyDecks() {
       const scryfallCards = await getCardsCollection(uniqueNames)
 
       let addedCount = 0
-      const inserts = []
+      const inserts: Array<{ deck_id: string; scryfall_id: string; name: string; quantity: number }> = []
 
       for (const parsed of parsedCards) {
         const scryfallCard = scryfallCards.find(c => c.name.toLowerCase() === parsed.name.toLowerCase())
@@ -209,11 +202,11 @@ export default function MyDecks() {
                     id="decklist"
                     value={decklistText}
                     onChange={(e) => setDecklistText(e.target.value)}
-                    className="bg-black/50 border-white/10 min-h-[150px]"
+                    className="bg-background/50 border-border min-h-[150px]"
                     placeholder={"4 Lightning Bolt\n4 Goblin Guide"}
                   />
                 </div>
-                <Button onClick={handleCreateDeck} disabled={isCreating} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white">
+                <Button onClick={handleCreateDeck} disabled={isCreating} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   {isCreating ? 'Creating...' : 'Create'}
                 </Button>
               </div>
