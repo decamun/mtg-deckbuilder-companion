@@ -30,10 +30,11 @@ interface DeckCard {
   cmc?: number
 }
 
-const STACK_PEEK = 22
-const STACK_EXTRA_PEEK = 10
-const STACK_CARD_HEIGHT = 157
-const STACK_HOVER_SHIFT = 30
+// Stack card width is w-44 (176px); height ≈ 176 * 1.4 = 246px
+const STACK_PEEK = 32
+const STACK_EXTRA_PEEK = 14
+const STACK_CARD_HEIGHT = 246
+const STACK_HOVER_SHIFT = 44
 
 export default function DeckWorkspace({ params }: { params: Promise<{ id: string }> }) {
   const { id: deckId } = use(params)
@@ -354,44 +355,25 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   return (
     <div className="flex flex-col overflow-hidden bg-background font-sans text-foreground" style={{ height: 'calc(100dvh - 3.5rem)' }}>
 
-      {/* Toolbar */}
-      <header className="border-b border-border bg-secondary/80 backdrop-blur-md h-14 flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.push('/decks')} className="text-muted-foreground hover:text-foreground">
-            &larr; Back
-          </Button>
-          <h1 className="font-bold text-lg">{deck?.name || 'Loading...'}</h1>
-          <Badge variant="outline" className="border-border text-muted-foreground">{cards.reduce((a, c) => a + c.quantity, 0)} Cards</Badge>
+      {/* Combined toolbar: title | search | controls */}
+      <header className="border-b border-border bg-secondary/80 backdrop-blur-md h-14 flex items-center gap-3 px-4 shrink-0 relative z-40">
+        {/* Left: back + deck title */}
+        <Button variant="ghost" size="sm" onClick={() => router.push('/decks')} className="text-muted-foreground hover:text-foreground shrink-0">
+          &larr; Back
+        </Button>
+        <div className="flex items-center gap-2 shrink-0 border-r border-border pr-3">
+          <h1 className="font-bold text-base whitespace-nowrap">{deck?.name || 'Loading...'}</h1>
+          <Badge variant="outline" className="border-border text-muted-foreground shrink-0">
+            {cards.reduce((a, c) => a + c.quantity, 0)}
+          </Badge>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={grouping} onValueChange={(v: any) => setGrouping(v)}>
-            <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
-              <SelectValue placeholder="Group by" />
-            </SelectTrigger>
-            <SelectContent className="bg-card border-border text-foreground">
-              <SelectItem value="none">No Grouping</SelectItem>
-              <SelectItem value="type">By Type</SelectItem>
-              <SelectItem value="mana">By Mana Cost</SelectItem>
-              <SelectItem value="tag">By Tags</SelectItem>
-            </SelectContent>
-          </Select>
-          <Tabs value={viewMode} onValueChange={(v: any) => setViewMode(v)} className="bg-card rounded-md p-0.5 border border-border">
-            <TabsList className="h-7 bg-transparent">
-              <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
-              <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
-              <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-      </header>
 
-      {/* Add-a-card search bar */}
-      <div ref={searchContainerRef} className="border-b border-border bg-card/20 px-4 py-2 shrink-0 relative z-40">
-        <div className="relative max-w-2xl mx-auto">
+        {/* Center: add-a-card search */}
+        <div ref={searchContainerRef} className="flex-1 relative min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Add a card..."
-            className="pl-9 pr-4 bg-background/60 border-border text-foreground h-10"
+            className="pl-9 pr-4 bg-background/60 border-border text-foreground h-9 w-full"
             value={query}
             onChange={e => { setQuery(e.target.value); setSearchFocused(true) }}
             onFocus={() => setSearchFocused(true)}
@@ -427,7 +409,29 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             </div>
           )}
         </div>
-      </div>
+
+        {/* Right: group + view controls */}
+        <div className="flex items-center gap-2 shrink-0">
+          <Select value={grouping} onValueChange={(v: any) => setGrouping(v)}>
+            <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
+              <SelectValue placeholder="Group by" />
+            </SelectTrigger>
+            <SelectContent className="bg-card border-border text-foreground">
+              <SelectItem value="none">No Grouping</SelectItem>
+              <SelectItem value="type">By Type</SelectItem>
+              <SelectItem value="mana">By Mana Cost</SelectItem>
+              <SelectItem value="tag">By Tags</SelectItem>
+            </SelectContent>
+          </Select>
+          <Tabs value={viewMode} onValueChange={(v: any) => setViewMode(v)} className="bg-card rounded-md p-0.5 border border-border">
+            <TabsList className="h-7 bg-transparent">
+              <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
+              <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
+              <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </header>
 
       {/* Workspace */}
       <div className="flex-1 overflow-y-auto bg-background/20">
@@ -545,17 +549,17 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
               {/* ── STACK VIEW ── */}
               {viewMode === 'stack' && (() => {
-                // Distribute cards into up to 4 columns
-                const numCols = Math.min(4, Math.max(1, Math.ceil(groupCards.length / 6)))
+                // Up to 3 columns; card 0 is rearmost (top of fan), last card is frontmost
+                const numCols = Math.min(3, Math.max(1, Math.ceil(groupCards.length / 5)))
                 const colSize = Math.ceil(groupCards.length / numCols)
                 const columns = Array.from({ length: numCols }, (_, ci) =>
                   groupCards.slice(ci * colSize, (ci + 1) * colSize)
                 )
 
                 return (
-                  <div className="flex gap-6 flex-wrap">
+                  <div className="flex gap-8 flex-wrap">
                     {columns.map((colCards, colIdx) => {
-                      // Compute static base top positions for each card in this column
+                      // Compute static base top positions; card 0 at top (rearmost)
                       const basePositions: number[] = []
                       let accY = 0
                       colCards.forEach(card => {
@@ -565,7 +569,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       const colHeight = accY + STACK_CARD_HEIGHT + STACK_HOVER_SHIFT
 
                       return (
-                        <div key={colIdx} className="relative shrink-0 w-28" style={{ height: colHeight }}>
+                        <div key={colIdx} className="relative shrink-0 w-44" style={{ height: colHeight }}>
                           {colCards.map((card, itemIdx) => {
                             const isHovered = !!hoveredStack
                               && hoveredStack.groupName === groupName
@@ -582,10 +586,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 className="absolute w-full cursor-pointer group"
                                 style={{
                                   top: basePositions[itemIdx],
-                                  zIndex: isHovered ? colCards.length + 10 : colCards.length - itemIdx,
+                                  // Higher index = more in front; card 0 is rearmost
+                                  zIndex: isHovered ? colCards.length + 10 : itemIdx + 1,
                                 }}
                                 animate={{
-                                  y: isHovered ? -10 : isBelow ? STACK_HOVER_SHIFT : 0,
+                                  y: isHovered ? -12 : isBelow ? STACK_HOVER_SHIFT : 0,
                                   scale: isHovered ? 1.05 : 1,
                                 }}
                                 transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.4 }}
@@ -598,17 +603,17 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                   draggable={false}
                                 />
                                 {card.quantity > 1 && (
-                                  <div className="absolute top-1.5 right-1.5 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
+                                  <div className="absolute top-2 right-2 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
                                     {card.quantity}x
                                   </div>
                                 )}
                                 {commanderIds.includes(card.scryfall_id) && (
-                                  <div className="absolute top-1.5 left-1.5 bg-yellow-400/90 text-yellow-900 px-1 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-0.5 shadow">
-                                    <Crown className="w-2 h-2" /> CMD
+                                  <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-0.5 shadow">
+                                    <Crown className="w-2.5 h-2.5" /> CMD
                                   </div>
                                 )}
                                 {/* Three-dot menu shows on card hover */}
-                                <div className="absolute bottom-2 right-1.5 z-10">
+                                <div className="absolute bottom-3 right-2 z-10">
                                   {renderThreeDotMenu(card, groupName, 'end')}
                                 </div>
                               </motion.div>
