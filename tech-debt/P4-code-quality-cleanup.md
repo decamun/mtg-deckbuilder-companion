@@ -1,173 +1,110 @@
 # P4 · Code Quality Cleanup
 
-## Background
+**Status:** ⚠️ Partial — about half the original list shipped; new items have surfaced.
 
-Several small but non-trivial quality issues that each take under 15 minutes individually but are grouped here into a single agent task:
+## Resolution Summary
 
-1. **Stack view lacks a context menu** — no way to interact with cards in that view.
-2. **Unused icon imports** — `PlaySquare`, `Settings`, `ChevronDown`, `Edit2`, `Tag` imported but never used.
-3. **Hardcoded Tailwind colors** bypass the design token system (`bg-indigo-500`, `bg-black/50`, `border-white/10`).
-4. **`<Component>` icon** used as Google logo placeholder.
-5. **`docker-compose.yml` `version:` field** triggers a warning on every command.
-6. **`'use client'` missing from `supabase/client.ts`** — no explicit boundary marker.
+| Original phase | Status | Notes |
+|---|---|---|
+| Phase 1 — Stack-view interactivity | ✅ Mostly done | Stack view now has a 3-dot dropdown menu (`renderThreeDotMenu` at `decks/[id]/page.tsx:377`). It still lacks a right-click `<ContextMenu>` like the visual view — see "Remaining 1" below. |
+| Phase 2 — Unused icon imports | ✅ Done | Current imports at `decks/[id]/page.tsx:5` are all in use; the listed unused icons are gone. |
+| Phase 3 — Hardcoded Tailwind colors | ❌ Pending | Both call-outs are still present in `decks/page.tsx`. |
+| Phase 4 — Google logo SVG | ✅ Done | The original `src/app/page.tsx` was rewritten (now redirects to `/brew`). The login form moved to `src/app/login/page.tsx:163-184` and uses a proper inline Google SVG and a Facebook SVG. |
+| Phase 5 — `docker-compose.yml` `version:` field | ❌ Pending | `version: '3.8'` still present at `docker-compose.yml:1`. |
+| Phase 6 — `'use client'` on Supabase browser client | ❌ Pending | `src/lib/supabase/client.ts` is missing the directive. The file now also exports a `createClient()` factory and a default `supabase` singleton, so the directive prevents accidental server import of the singleton. |
 
----
+## Remaining Work
 
-## Phase 1 — Add Context Menu to Stack View
-
-**File:** `src/app/decks/[id]/page.tsx`
-
-The stack view (lines 323–344) renders cards without any interactive context menu, unlike the visual view.
-
-Wrap each stack card `<div>` with the same `<ContextMenu>` / `<ContextMenuTrigger>` / `<ContextMenuContent>` pattern already used in the visual view. The context menu content can be identical — extract it into a local component or a render function to avoid duplication:
-
-1. Extract the context menu content into a helper render function above the return statement:
-   ```tsx
-   const renderCardContextMenu = (c: DeckCard, groupName: string, children: React.ReactNode) => (
-     <ContextMenu key={c.id}>
-       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-       <ContextMenuContent className="w-48 bg-card border-border text-foreground">
-         <ContextMenuItem onClick={() => setCoverImage(c.scryfall_id)}>Set as Cover Image</ContextMenuItem>
-         <ContextMenuItem disabled className="opacity-40">Set as Commander</ContextMenuItem>
-         <ContextMenuSeparator className="bg-border" />
-         <ContextMenuSub>
-           <ContextMenuSubTrigger>Tags</ContextMenuSubTrigger>
-           <ContextMenuSubContent className="bg-card border-border text-foreground">
-             {allUniqueTags.map(tag => (
-               <ContextMenuItem key={tag} onClick={() => addTag(c.id, tag)}>{tag}</ContextMenuItem>
-             ))}
-             {allUniqueTags.length > 0 && <ContextMenuSeparator className="bg-border" />}
-             <ContextMenuItem onClick={() => { setActiveCardIdForTag(c.id); setTagDialogOpen(true) }}>
-               Add Custom Tag...
-             </ContextMenuItem>
-           </ContextMenuSubContent>
-         </ContextMenuSub>
-         <ContextMenuSeparator className="bg-border" />
-         {grouping === 'tag' && groupName !== 'Untagged' && (
-           <>
-             <ContextMenuItem className="text-orange-400" onClick={() => removeTag(c.id, groupName)}>
-               Remove from '{groupName}'
-             </ContextMenuItem>
-             <ContextMenuSeparator className="bg-border" />
-           </>
-         )}
-         <ContextMenuItem className="text-destructive" onClick={() => deleteCard(c.id)}>
-           Remove from Deck
-         </ContextMenuItem>
-       </ContextMenuContent>
-     </ContextMenu>
-   )
-   ```
-
-2. Refactor the visual view to call `renderCardContextMenu(c, groupName, <div ...>)`.
-3. Wrap each stack card the same way: `renderCardContextMenu(c, groupName, <div className="relative w-40 ...">)`.
-
----
-
-## Phase 2 — Remove Unused Icon Imports
+### 1. Right-click context menu for stack view
 
 **File:** `src/app/decks/[id]/page.tsx`
 
-Line 5 currently imports: `Search, LayoutGrid, List, Layers as StackIcon, Settings, ChevronDown, Tag, Trash, Edit2, PlaySquare`
+The visual view (lines 503–588) wraps each card in a `<ContextMenu>` so right-click pops up the same menu as the 3-dot dropdown. The stack view (lines 593–686) and list view (lines 689–711) only show the 3-dot dropdown — no right-click parity.
 
-Remove the unused ones: `Settings`, `ChevronDown`, `Tag`, `Edit2`, `PlaySquare`
+The dropdown content is already factored into `renderDropdownItems(c, groupName)` at line 336. Wrap the `<motion.div>` for stack cards (around line 643) and the row `<div>` for list cards (around line 692) in a `<ContextMenu>` whose `<ContextMenuContent>` reuses those items. Mirror the visual-view structure but render `ContextMenuItem` instead of `DropdownMenuItem`. (Or refactor `renderDropdownItems` into a shared menu-content helper that takes the item component as a generic — possibly worth a small follow-up if duplication grows.)
 
-```ts
-import { Search, LayoutGrid, List, Layers as StackIcon, Trash } from "lucide-react"
-```
-
----
-
-## Phase 3 — Fix Hardcoded Colors
+### 2. Hardcoded Tailwind colors
 
 **File:** `src/app/decks/page.tsx`
 
-Two elements hardcode Tailwind colors that bypass the design token system:
+Two literals still bypass the design tokens:
 
-1. Create deck button (line 218):
+1. Create button at line 216:
    ```tsx
-   // Before:
    className="w-full bg-indigo-500 hover:bg-indigo-600 text-white"
-   // After:
-   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+   // → className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
    ```
-
-2. Decklist textarea (line 214):
+2. Decklist textarea at line 212:
    ```tsx
-   // Before:
    className="bg-black/50 border-white/10 min-h-[150px]"
-   // After:
-   className="bg-background/50 border-border min-h-[150px]"
+   // → className="bg-background/50 border-border min-h-[150px]"
    ```
 
----
+The `<DialogTrigger>` at line 170 already uses tokens (`bg-primary`) — it's only these two leaf elements.
 
-## Phase 4 — Fix Google OAuth Icon
+### 3. Drop `version:` from `docker-compose.yml`
 
-**File:** `src/app/page.tsx`
+**File:** `docker-compose.yml`
 
-The `<Component>` icon from `lucide-react` is used as a placeholder for the Google logo. Replace with a proper inline SVG:
+Delete line 1 (`version: '3.8'`). The Compose spec ignores it and it surfaces a deprecation warning on every command. The agent compose file (`docker-compose.agent.yml`) should be checked too — if it has the same line, drop it.
 
-1. Remove `Component` from the lucide import.
-2. Replace `<Component className="w-4 h-4 mr-2" />` with:
-   ```tsx
-   <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" aria-hidden="true">
-     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-   </svg>
-   ```
-
----
-
-## Phase 5 — Fix `docker-compose.yml` Version Field
-
-**File:** `docker-compose.yml` (project root)
-
-Remove the obsolete top-level `version:` attribute that triggers a warning on every `docker-compose` command:
-
-```yaml
-# Remove this line:
-version: '3.8'
-```
-
-The Compose spec no longer requires or uses this field.
-
----
-
-## Phase 6 — Add `'use client'` to Supabase Client Module
+### 4. `'use client'` on the Supabase browser client
 
 **File:** `src/lib/supabase/client.ts`
-
-Add `'use client'` as the first line to make the browser boundary explicit and prevent accidental server-side imports:
 
 ```ts
 'use client'
 
 import { createBrowserClient } from '@supabase/ssr'
-// ... rest unchanged
+// … rest unchanged
 ```
 
----
+Why this matters now: the file exports both a factory (`createClient()`) and a top-level singleton (`supabase`). Without `'use client'`, importing `supabase` from a Server Component would silently instantiate a browser client on the server. The directive turns that into a build-time error.
 
-## Phase 7 — Smoke Test
+While in this file, audit whether the `|| 'https://placeholder.supabase.co'` / `|| 'placeholder'` fallbacks (lines 5–6) still earn their keep. They mask missing env vars rather than failing fast at startup.
 
-1. `docker-compose up` — verify **no** `version` attribute warning in output.
-2. Open `/decks/[id]` in the browser.
-3. Switch to **Stack** view and right-click a card — verify the context menu appears with all expected items.
-4. Open browser console — verify no TypeScript errors about unused variables (linting).
-5. Open the **New Deck** dialog — verify the Create button uses the primary theme color (carrot orange), not indigo.
-6. On the splash page, verify the Google button shows the proper Google logo SVG.
+## New Cleanup Items (added since the original plan)
 
----
+These weren't in the original doc but came up while auditing:
 
-## Files Changed
+### 5. `getSession()` vs `getUser()` for auth-gated reads
+
+`getSession()` reads the local cookie without re-validating with Supabase. It's appropriate for cosmetic UI (e.g. `TopNav.tsx:30`) but **not** for redirect decisions. The middleware plan in `P2-auth-middleware.md` is the principled fix, but until it lands, swap these two sites to `getUser()`:
+
+- `src/app/decks/page.tsx:42`
+- `src/app/decks/[id]/page.tsx:131`
+
+### 6. Duplicated context-menu content in `decks/[id]/page.tsx`
+
+The visual view inlines the full menu in `<ContextMenuContent>` (lines 549–585) **and** also gets the same menu through `renderThreeDotMenu` → `renderDropdownItems` (lines 336–374). Two near-identical lists drift apart easily. Extract a single `cardMenuItems(c, groupName, ItemComponent)` helper used by both menus.
+
+### 7. `createDeck` in `src/app/brew/page.tsx` is doing too much
+
+`createDeck` (lines 89–225) inserts a deck, inserts the commander, fetches Sol Ring, fetches EDHREC, picks land budget, splits into lands/spells, and inserts everything. It's ~135 lines and untestable. Extract:
+
+- `buildBasicLandPlan(colorIdentity, edhrecLandSlots)` → array of `{ name, count }`
+- `splitEdhrecCardsByType(cards: ScryfallCard[])` → `{ lands, spells }`
+- `assembleDeckRows(deckId, commander, edhrec, basics, solRing)` → row array
+
+Then `createDeck` becomes a sequence of pure builders followed by Supabase inserts.
+
+### 8. `commander_scryfall_id` (singular) is dead
+
+The original `decks` schema has both `commander_scryfall_id text` (singular, from `20240418000000_init.sql`) and the new `commander_scryfall_ids text[]` (plural, from `20240419000001_commander_array.sql`). The migration backfills plural from singular but never drops the singular column — and no application code reads it any more. Add a follow-up migration that `ALTER TABLE … DROP COLUMN commander_scryfall_id` once we're confident no reader remains.
+
+### 9. Schema mismatch in `Deck` interface
+
+`src/app/decks/page.tsx:19` declares `Deck` with `cover_image_scryfall_id` but not `commander_scryfall_ids`, even though the `/decks` page now renders decks that have commanders. The shared types module proposed in `P2-eliminate-any-types.md` will fix this — flagging here for visibility.
+
+## Files Touched (remaining work only)
 
 | File | Action |
 |---|---|
-| `src/app/decks/[id]/page.tsx` | Extract context menu render fn; apply to stack view; remove unused imports |
-| `src/app/decks/page.tsx` | Fix hardcoded `bg-indigo-500` and `bg-black/50` colors |
-| `src/app/page.tsx` | Replace `<Component>` with Google SVG; remove `Component` import |
-| `docker-compose.yml` | Remove `version:` field |
-| `src/lib/supabase/client.ts` | Add `'use client'` directive |
+| `src/app/decks/[id]/page.tsx` | Add `<ContextMenu>` wrapping for stack and list views; deduplicate menu content |
+| `src/app/decks/page.tsx` | Replace hardcoded indigo/black/white classes with design tokens |
+| `docker-compose.yml` | Remove `version:` |
+| `docker-compose.agent.yml` | Remove `version:` if present |
+| `src/lib/supabase/client.ts` | Add `'use client'`; reconsider placeholder fallbacks |
+| `src/app/decks/page.tsx`, `src/app/decks/[id]/page.tsx` | Swap `getSession()` for `getUser()` in auth-gated reads |
+| `src/app/brew/page.tsx` | Extract pure builders out of `createDeck` |
+| `supabase/migrations/<new>.sql` | Drop unused `commander_scryfall_id` (singular) column |
