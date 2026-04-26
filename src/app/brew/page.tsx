@@ -147,7 +147,7 @@ export default function BrewPage() {
           G: "Forest",
         }
         const LAND_COUNT = 37
-        const colorIdentity: string[] = (card as any).color_identity ?? []
+        const colorIdentity: string[] = card.color_identity ?? []
         const basicLandNames = colorIdentity.length > 0
           ? [...new Set(colorIdentity.filter((c) => COLOR_TO_LAND[c]).map((c) => COLOR_TO_LAND[c]))]
           : ["Wastes"]
@@ -216,8 +216,9 @@ export default function BrewPage() {
         }
 
         router.push(`/decks/${deck.id}`)
-      } catch (err: any) {
-        toast.error(err.message || "Failed to create deck")
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to create deck"
+        toast.error(message)
         setCreating(false)
       }
     },

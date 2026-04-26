@@ -56,8 +56,9 @@ export default function ResetPassword() {
       if (error) throw error
       toast.success("Password updated successfully!")
       router.push('/decks')
-    } catch (error: any) {
-      toast.error(error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "An unexpected error occurred"
+      toast.error(message)
     } finally {
       setLoading(false)
     }
