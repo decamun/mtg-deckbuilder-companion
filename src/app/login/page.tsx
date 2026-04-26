@@ -34,7 +34,7 @@ export default function LoginPage() {
           password,
         })
         if (error) throw error
-        router.push("/decks")
+        router.push("/brew")
       } else {
         const { error } = await supabase.auth.signUp({ email, password })
         if (error) throw error

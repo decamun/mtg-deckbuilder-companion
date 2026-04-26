@@ -9,6 +9,8 @@ import { searchCards, getCardsCollection, ScryfallCard } from "@/lib/scryfall"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 
+const PENDING_COMMANDER_KEY = "idlebrew:pendingCommander"
+
 function toEDHRECSlug(name: string): string {
   return name
     .toLowerCase()
@@ -52,6 +54,8 @@ export default function BrewPage() {
   const debouncedQuery = useDebounce(query, 350)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  // Prevent double-firing the pending-commander effect
+  const pendingHandled = useRef(false)
 
   useEffect(() => {
     if (!debouncedQuery.trim()) {
@@ -86,7 +90,10 @@ export default function BrewPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser()
+
       if (!user) {
+        // Save selection so we can resume after login
+        sessionStorage.setItem(PENDING_COMMANDER_KEY, JSON.stringify(card))
         router.push("/login")
         return
       }
@@ -143,7 +150,9 @@ export default function BrewPage() {
             })
             if (inserts.length > 0) {
               await supabase.from("deck_cards").insert(inserts)
-              toast.success(`Loaded EDHREC average deck (${inserts.length} cards)`)
+              toast.success(
+                `Loaded EDHREC average deck (${inserts.length} cards)`
+              )
             }
           }
         }
@@ -156,6 +165,24 @@ export default function BrewPage() {
     },
     [router]
   )
+
+  // After returning from login, auto-resume a pending commander selection
+  useEffect(() => {
+    if (pendingHandled.current) return
+    pendingHandled.current = true
+
+    const raw = sessionStorage.getItem(PENDING_COMMANDER_KEY)
+    if (!raw) return
+    sessionStorage.removeItem(PENDING_COMMANDER_KEY)
+
+    try {
+      const card = JSON.parse(raw) as ScryfallCard
+      setQuery(card.name)
+      createDeck(card)
+    } catch {
+      // malformed storage entry — ignore
+    }
+  }, [createDeck])
 
   const handleSelect = useCallback(
     async (card: ScryfallCard) => {
