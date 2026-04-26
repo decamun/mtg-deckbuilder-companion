@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Search, Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsCollection, ScryfallCard } from "@/lib/scryfall"
+import { searchCards, getCardsCollection, getCardByName, ScryfallCard } from "@/lib/scryfall"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 
@@ -125,30 +125,70 @@ export default function BrewPage() {
           quantity: 1,
         })
 
-        // Try to populate from EDHREC average deck
+        // Insert Sol Ring
+        let solRingInserted = false
+        const solRing = await getCardByName("Sol Ring")
+        if (solRing) {
+          await supabase.from("deck_cards").insert({
+            deck_id: deck.id,
+            scryfall_id: solRing.id,
+            name: solRing.name,
+            quantity: 1,
+          })
+          solRingInserted = true
+        }
+
+        // Insert 37 basic lands based on commander color identity
+        const COLOR_TO_LAND: Record<string, string> = {
+          W: "Plains",
+          U: "Island",
+          B: "Swamp",
+          R: "Mountain",
+          G: "Forest",
+        }
+        const LAND_COUNT = 37
+        const colorIdentity: string[] = (card as any).color_identity ?? []
+        const rawLandNames = colorIdentity
+          .filter((c) => COLOR_TO_LAND[c])
+          .map((c) => COLOR_TO_LAND[c])
+        const uniqueLandNames = rawLandNames.length > 0 ? [...new Set(rawLandNames)] : ["Wastes"]
+        const perLand = Math.floor(LAND_COUNT / uniqueLandNames.length)
+        const remainder = LAND_COUNT % uniqueLandNames.length
+        const landQuantities = uniqueLandNames.map((name, i) => ({
+          name,
+          quantity: perLand + (i < remainder ? 1 : 0),
+        }))
+        const landScryfallCards = await getCardsCollection(uniqueLandNames)
+        const landInserts = landQuantities.flatMap(({ name, quantity }) => {
+          const sc = landScryfallCards.find((c) => c.name.toLowerCase() === name.toLowerCase())
+          if (!sc) return []
+          return [{ deck_id: deck.id, scryfall_id: sc.id, name: sc.name, quantity }]
+        })
+        if (landInserts.length > 0) {
+          await supabase.from("deck_cards").insert(landInserts)
+        }
+
+        // Populate EDHREC non-land spells to fill remaining slots up to 100
+        const edhrecSlots = 100 - 1 - (solRingInserted ? 1 : 0) - LAND_COUNT
         const edhrecCards = await fetchEDHRECCards(card.name)
         if (edhrecCards.length > 0) {
-          const nonCommanderCards = edhrecCards.filter(
-            (c) => c.name.toLowerCase() !== card.name.toLowerCase()
+          const filtered = edhrecCards.filter(
+            (c) =>
+              c.name.toLowerCase() !== card.name.toLowerCase() &&
+              c.name.toLowerCase() !== "sol ring"
           )
-          if (nonCommanderCards.length > 0) {
-            const scryfallCards = await getCardsCollection(
-              nonCommanderCards.map((c) => c.name)
-            )
-            const inserts = nonCommanderCards.flatMap((ec) => {
-              const sc = scryfallCards.find(
-                (s) => s.name.toLowerCase() === ec.name.toLowerCase()
-              )
-              if (!sc) return []
-              return [
-                {
-                  deck_id: deck.id,
-                  scryfall_id: sc.id,
-                  name: sc.name,
-                  quantity: ec.quantity,
-                },
-              ]
-            })
+          if (filtered.length > 0) {
+            const scryfallCards = await getCardsCollection(filtered.map((c) => c.name))
+            const inserts = filtered
+              .flatMap((ec) => {
+                const sc = scryfallCards.find(
+                  (s) => s.name.toLowerCase() === ec.name.toLowerCase()
+                )
+                if (!sc) return []
+                if (sc.type_line?.toLowerCase().includes("land")) return []
+                return [{ deck_id: deck.id, scryfall_id: sc.id, name: sc.name, quantity: ec.quantity }]
+              })
+              .slice(0, edhrecSlots)
             if (inserts.length > 0) {
               await supabase.from("deck_cards").insert(inserts)
               toast.success(`Loaded ${inserts.length} cards from EDHREC`)

@@ -48,7 +48,7 @@ export function TopNav() {
       <div className="container mx-auto flex h-14 items-center gap-6 px-4">
         {/* Logo & name — always anchored left */}
         <Link
-          href={user ? "/decks" : "/brew"}
+          href="/brew"
           className="flex shrink-0 items-center gap-2.5"
         >
           <IdlebrewLogo className="h-7 w-auto text-foreground" />
