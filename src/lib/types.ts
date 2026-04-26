@@ -26,6 +26,7 @@ export interface DeckCard {
   type_line?: string
   mana_cost?: string
   cmc?: number
+  colors?: string[]
 }
 
 export type ViewMode = 'visual' | 'stack' | 'list'
