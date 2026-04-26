@@ -275,6 +275,10 @@ function StatsLine({
     const totalCmc = nonLands.reduce((s, c) => s + (c.cmc || 0) * c.quantity, 0)
     const avgCmc = totalNonLandQty > 0 ? totalCmc / totalNonLandQty : 0
 
+    const totalAllQty = cards.reduce((s, c) => s + c.quantity, 0)
+    const totalAllCmc = cards.reduce((s, c) => s + (c.cmc || 0) * c.quantity, 0)
+    const avgCmcAll = totalAllQty > 0 ? totalAllCmc / totalAllQty : 0
+
     const typeCounts: Record<CardType, number> = {
       Creature: 0, Planeswalker: 0, Battle: 0, Instant: 0,
       Sorcery: 0, Artifact: 0, Enchantment: 0, Land: 0,
@@ -295,11 +299,12 @@ function StatsLine({
       return { name: cmd.name, cmc, probability: p }
     })
 
-    return { avgCmc, typeCounts, onCurve }
+    return { avgCmc, avgCmcAll, typeCounts, onCurve }
   }, [cards, commanders])
 
   return (
     <div className="rounded-lg border border-border bg-card/60 p-4 flex flex-wrap items-stretch gap-x-6 gap-y-3">
+      <Stat label="Avg. CMC" value={stats.avgCmcAll.toFixed(2)} hint="all" />
       <Stat label="Avg. CMC" value={stats.avgCmc.toFixed(2)} hint="non-land" />
       {(Object.keys(stats.typeCounts) as CardType[])
         .filter(t => stats.typeCounts[t] > 0)
