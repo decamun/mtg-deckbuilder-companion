@@ -353,7 +353,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   )
 
   return (
-    <div className="flex flex-col overflow-hidden bg-background font-sans text-foreground" style={{ height: 'calc(100dvh - 3.5rem)' }}>
+    <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
 
       {/* Combined toolbar: title | search | controls */}
       <header className="border-b border-border bg-secondary/80 backdrop-blur-md h-14 flex items-center gap-3 px-4 shrink-0 relative z-40">
@@ -569,7 +569,24 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       const colHeight = accY + STACK_CARD_HEIGHT + STACK_HOVER_SHIFT
 
                       return (
-                        <div key={colIdx} className="relative shrink-0 w-44" style={{ height: colHeight }}>
+                        <div
+                          key={colIdx}
+                          className="relative shrink-0 w-44"
+                          style={{ height: colHeight }}
+                          onMouseMove={(e) => {
+                            // Determine active card from mouse Y within the column,
+                            // bypassing z-index blocking on individual card elements.
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            const mouseY = e.clientY - rect.top
+                            let activeIdx = 0
+                            for (let i = 1; i < colCards.length; i++) {
+                              if (mouseY >= basePositions[i]) activeIdx = i
+                              else break
+                            }
+                            setHoveredStack({ groupName, colIdx, itemIdx: activeIdx })
+                          }}
+                          onMouseLeave={() => setHoveredStack(null)}
+                        >
                           {colCards.map((card, itemIdx) => {
                             const isHovered = !!hoveredStack
                               && hoveredStack.groupName === groupName
@@ -594,8 +611,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                   scale: isHovered ? 1.05 : 1,
                                 }}
                                 transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.4 }}
-                                onMouseEnter={() => setHoveredStack({ groupName, colIdx, itemIdx })}
-                                onMouseLeave={() => setHoveredStack(null)}
                               >
                                 <img
                                   src={card.image_url}
