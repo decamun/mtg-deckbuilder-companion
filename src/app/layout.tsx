@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Armata, Audiowide } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { TopNav } from "@/components/TopNav";
 
 const armata = Armata({
   variable: "--font-armata",
@@ -31,6 +32,7 @@ export default function RootLayout({
       className={`${armata.variable} ${audiowide.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col">
+        <TopNav />
         {children}
         <Toaster theme="dark" />
       </body>

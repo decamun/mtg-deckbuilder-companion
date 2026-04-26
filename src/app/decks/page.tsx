@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { Layers, Plus, MoreVertical, Edit, Copy, Trash, LogOut } from "lucide-react"
+import { Plus, MoreVertical, Edit, Copy, Trash } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -10,10 +10,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { getCard, getCardsCollection } from "@/lib/scryfall"
+import { getCardsByIds, getCardsCollection } from "@/lib/scryfall"
 
 interface Deck {
   id: string
@@ -27,6 +28,7 @@ export default function MyDecks() {
   const [decks, setDecks] = useState<Deck[]>([])
   const [loading, setLoading] = useState(true)
   const [newDeckName, setNewDeckName] = useState("")
+  const [newDeckFormat, setNewDeckFormat] = useState("edh")
   const [decklistText, setDecklistText] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -39,7 +41,7 @@ export default function MyDecks() {
   const fetchDecks = async () => {
     const { data: session } = await supabase.auth.getSession()
     if (!session.session) {
-      router.push('/')
+      router.push('/login')
       return
     }
 
@@ -54,14 +56,13 @@ export default function MyDecks() {
       return
     }
 
-    // Hydrate cover images from Scryfall
-    const populatedDecks = await Promise.all(data.map(async (deck) => {
-      let cover_url = undefined
-      if (deck.cover_image_scryfall_id) {
-        const card = await getCard(deck.cover_image_scryfall_id)
-        if (card?.image_uris) cover_url = card.image_uris.normal
-      }
-      return { ...deck, cover_url }
+    // Batch-fetch all cover images in one chunked request
+    const coverIds = data.map(d => d.cover_image_scryfall_id).filter(Boolean) as string[]
+    const coverCards = await getCardsByIds(coverIds)
+    const coverMap = new Map(coverCards.map(c => [c.id, c]))
+    const populatedDecks = data.map(deck => ({
+      ...deck,
+      cover_url: coverMap.get(deck.cover_image_scryfall_id!)?.image_uris?.normal,
     }))
 
     setDecks(populatedDecks)
@@ -97,7 +98,7 @@ export default function MyDecks() {
 
     const { data, error } = await supabase
       .from('decks')
-      .insert({ name: newDeckName, user_id: user.id })
+      .insert({ name: newDeckName, user_id: user.id, format: newDeckFormat })
       .select()
       .single()
 
@@ -145,6 +146,7 @@ export default function MyDecks() {
     setIsCreating(false)
     setIsDialogOpen(false)
     setNewDeckName("")
+    setNewDeckFormat("edh")
     setDecklistText("")
     router.push(`/decks/${data.id}`)
   }
@@ -159,33 +161,11 @@ export default function MyDecks() {
     }
   }
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push('/')
-  }
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
-      <header className="border-b border-border bg-secondary/80 backdrop-blur-xl sticky top-0 z-10">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-              <Layers className="w-5 h-5 text-white" />
-            </div>
-            <h1 className="text-xl font-bold">My Decks</h1>
-          </div>
-          <Button variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={handleSignOut}>
-            <LogOut className="w-4 h-4 mr-2" /> Sign Out
-          </Button>
-        </div>
-      </header>
-
       <main className="container mx-auto px-4 py-8 flex-1">
         <div className="flex justify-between items-end mb-8">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">Your Arsenal</h2>
-            <p className="text-muted-foreground mt-1">Manage and build your magic decks.</p>
-          </div>
+          <div />
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger render={<Button className="bg-primary hover:bg-primary/90 text-primary-foreground" />}>
@@ -205,6 +185,24 @@ export default function MyDecks() {
                     className="bg-background/50 border-border"
                     placeholder="e.g. Modern Tron"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>Format</Label>
+                  <Select value={newDeckFormat} onValueChange={(v) => v && setNewDeckFormat(v)}>
+                    <SelectTrigger className="bg-background/50 border-border text-foreground">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border text-foreground">
+                      <SelectItem value="edh">EDH / Commander</SelectItem>
+                      <SelectItem value="standard">Standard</SelectItem>
+                      <SelectItem value="modern">Modern</SelectItem>
+                      <SelectItem value="pioneer">Pioneer</SelectItem>
+                      <SelectItem value="legacy">Legacy</SelectItem>
+                      <SelectItem value="vintage">Vintage</SelectItem>
+                      <SelectItem value="pauper">Pauper</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="decklist">Decklist (Optional)</Label>

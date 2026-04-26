@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCard, ScryfallCard } from "@/lib/scryfall"
+import { searchCards, getCard, getCardsByIds, ScryfallCard } from "@/lib/scryfall"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -105,9 +105,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     }
 
     if (cardsData) {
-      // Hydrate from Scryfall
-      const hydrated = await Promise.all(cardsData.map(async (c) => {
-        const sf = await getCard(c.scryfall_id)
+      // Batch-fetch all Scryfall data in one (chunked) request instead of N parallel calls
+      const sfCards = await getCardsByIds(cardsData.map(c => c.scryfall_id))
+      const sfMap = new Map(sfCards.map(c => [c.id, c]))
+      const hydrated = cardsData.map(c => {
+        const sf = sfMap.get(c.scryfall_id)
         return {
           ...c,
           image_url: sf?.image_uris?.normal,
@@ -115,7 +117,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           mana_cost: sf?.mana_cost || '',
           cmc: sf ? calculateCmc(sf.mana_cost) : 0
         }
-      }))
+      })
       setCards(hydrated)
     }
   }
@@ -255,7 +257,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const groupedCards = getGroupedCards()
 
   return (
-    <div className="h-screen bg-background text-foreground flex flex-col font-sans overflow-hidden">
+    <div className="flex flex-col overflow-hidden bg-background font-sans text-foreground" style={{ height: 'calc(100dvh - 3.5rem)' }}>
       <header className="border-b border-border bg-secondary/80 backdrop-blur-md h-14 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => router.push('/decks')} className="text-muted-foreground hover:text-foreground">
