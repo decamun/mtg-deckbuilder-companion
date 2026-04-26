@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Search, Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsCollection, ScryfallCard } from "@/lib/scryfall"
+import { searchCards, getCardsCollection, getCardByName, ScryfallCard } from "@/lib/scryfall"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 
@@ -125,37 +125,94 @@ export default function BrewPage() {
           quantity: 1,
         })
 
-        // Try to populate from EDHREC average deck
-        const edhrecCards = await fetchEDHRECCards(card.name)
-        if (edhrecCards.length > 0) {
-          const nonCommanderCards = edhrecCards.filter(
-            (c) => c.name.toLowerCase() !== card.name.toLowerCase()
-          )
-          if (nonCommanderCards.length > 0) {
-            const scryfallCards = await getCardsCollection(
-              nonCommanderCards.map((c) => c.name)
-            )
-            const inserts = nonCommanderCards.flatMap((ec) => {
-              const sc = scryfallCards.find(
-                (s) => s.name.toLowerCase() === ec.name.toLowerCase()
-              )
-              if (!sc) return []
-              return [
-                {
-                  deck_id: deck.id,
-                  scryfall_id: sc.id,
-                  name: sc.name,
-                  quantity: ec.quantity,
-                },
-              ]
-            })
-            if (inserts.length > 0) {
-              await supabase.from("deck_cards").insert(inserts)
-              toast.success(`Loaded ${inserts.length} cards from EDHREC`)
+        // Insert Sol Ring
+        let solRingInserted = false
+        const solRing = await getCardByName("Sol Ring")
+        if (solRing) {
+          await supabase.from("deck_cards").insert({
+            deck_id: deck.id,
+            scryfall_id: solRing.id,
+            name: solRing.name,
+            quantity: 1,
+          })
+          solRingInserted = true
+        }
+
+        // Fetch and split EDHREC cards into lands and spells (exclude commander + Sol Ring)
+        const COLOR_TO_LAND: Record<string, string> = {
+          W: "Plains",
+          U: "Island",
+          B: "Swamp",
+          R: "Mountain",
+          G: "Forest",
+        }
+        const LAND_COUNT = 37
+        const colorIdentity: string[] = (card as any).color_identity ?? []
+        const basicLandNames = colorIdentity.length > 0
+          ? [...new Set(colorIdentity.filter((c) => COLOR_TO_LAND[c]).map((c) => COLOR_TO_LAND[c]))]
+          : ["Wastes"]
+
+        const edhrecRaw = await fetchEDHRECCards(card.name)
+        const edhrecFiltered = edhrecRaw.filter(
+          (c) =>
+            c.name.toLowerCase() !== card.name.toLowerCase() &&
+            c.name.toLowerCase() !== "sol ring"
+        )
+
+        type DeckRow = { deck_id: string; scryfall_id: string; name: string; quantity: number }
+        const edhrecLands: DeckRow[] = []
+        const edhrecSpells: DeckRow[] = []
+        if (edhrecFiltered.length > 0) {
+          const scryfallCards = await getCardsCollection(edhrecFiltered.map((c) => c.name))
+          for (const ec of edhrecFiltered) {
+            const sc = scryfallCards.find((s) => s.name.toLowerCase() === ec.name.toLowerCase())
+            if (!sc) continue
+            const row = { deck_id: deck.id, scryfall_id: sc.id, name: sc.name, quantity: ec.quantity }
+            if (sc.type_line?.toLowerCase().includes("land")) {
+              edhrecLands.push(row)
             } else {
-              toast.info("Deck created — EDHREC data unavailable, add cards manually")
+              edhrecSpells.push(row)
             }
           }
+        }
+
+        // Land budget: 4 of each basic type guaranteed, then fill from EDHREC,
+        // then backfill basics for any remaining slots.
+        const minBasicEach = 4
+        const minBasicsTotal = basicLandNames.length * minBasicEach
+        const edhrecLandSlots = Math.max(0, LAND_COUNT - minBasicsTotal)
+        const edhrecLandInserts = edhrecLands.slice(0, edhrecLandSlots)
+        const unfilledSlots = edhrecLandSlots - edhrecLandInserts.length
+
+        const basicCounts: Record<string, number> = Object.fromEntries(
+          basicLandNames.map((name) => [name, minBasicEach])
+        )
+        const extraPerBasic = Math.floor(unfilledSlots / basicLandNames.length)
+        const extraRemainder = unfilledSlots % basicLandNames.length
+        basicLandNames.forEach((name, i) => {
+          basicCounts[name] += extraPerBasic + (i < extraRemainder ? 1 : 0)
+        })
+
+        const basicScryfallCards = await getCardsCollection(basicLandNames)
+        const basicLandInserts = basicLandNames.flatMap((name) => {
+          const sc = basicScryfallCards.find((c) => c.name.toLowerCase() === name.toLowerCase())
+          if (!sc) return []
+          return [{ deck_id: deck.id, scryfall_id: sc.id, name: sc.name, quantity: basicCounts[name] }]
+        })
+
+        const allLandInserts = [...basicLandInserts, ...edhrecLandInserts]
+        if (allLandInserts.length > 0) {
+          await supabase.from("deck_cards").insert(allLandInserts)
+        }
+
+        // Non-land spell budget: remaining slots up to 100
+        const spellSlots = 100 - 1 - (solRingInserted ? 1 : 0) - LAND_COUNT
+        const spellInserts = edhrecSpells.slice(0, spellSlots)
+        if (spellInserts.length > 0) {
+          await supabase.from("deck_cards").insert(spellInserts)
+          toast.success(`Loaded ${edhrecLandInserts.length + spellInserts.length} cards from EDHREC`)
+        } else {
+          toast.info("Deck created — EDHREC data unavailable, add cards manually")
         }
 
         router.push(`/decks/${deck.id}`)
