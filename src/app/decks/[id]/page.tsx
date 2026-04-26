@@ -62,11 +62,19 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
+  const isDragging = useRef(false)
+  const pendingFetch = useRef(false)
 
   useEffect(() => {
     fetchDeck()
     const channel = supabase.channel('schema-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'deck_cards', filter: `deck_id=eq.${deckId}` }, fetchDeck)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deck_cards', filter: `deck_id=eq.${deckId}` }, () => {
+        if (isDragging.current) {
+          pendingFetch.current = true
+        } else {
+          fetchDeck()
+        }
+      })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [deckId])
@@ -469,7 +477,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 : 'border-border hover:border-primary/50'
                           }`}
                           draggable
-                          onDragStart={(e) => e.dataTransfer.setData('cardId', c.id)}
+                          onDragStart={(e) => { isDragging.current = true; e.dataTransfer.setData('cardId', c.id) }}
+                          onDragEnd={() => { isDragging.current = false; if (pendingFetch.current) { pendingFetch.current = false; fetchDeck() } }}
                         >
                           <img src={c.image_url} className="w-full h-full object-cover" />
                           {commanderIds.includes(c.scryfall_id) && (
@@ -649,7 +658,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       key={c.id}
                       className="flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 group relative"
                       draggable
-                      onDragStart={(e) => e.dataTransfer.setData('cardId', c.id)}
+                      onDragStart={(e) => { isDragging.current = true; e.dataTransfer.setData('cardId', c.id) }}
+                      onDragEnd={() => { isDragging.current = false; if (pendingFetch.current) { pendingFetch.current = false; fetchDeck() } }}
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
