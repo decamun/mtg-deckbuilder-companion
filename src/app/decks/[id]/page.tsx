@@ -12,10 +12,11 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsByIds, ScryfallCard } from "@/lib/scryfall"
+import { searchCards, getCardsByIds, getCard, ScryfallCard } from "@/lib/scryfall"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { DeckAnalytics } from "@/components/deck-analytics"
 
 interface DeckCard {
   id: string
@@ -28,6 +29,7 @@ interface DeckCard {
   type_line?: string
   mana_cost?: string
   cmc?: number
+  colors?: string[]
 }
 
 // Stack card width is w-44 (176px); height ≈ 176 * 1.4 = 246px
@@ -54,6 +56,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const [commanderIds, setCommanderIds] = useState<string[]>([])
   const [coverImageId, setCoverImageId] = useState<string | null>(null)
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null)
 
   const [tagDialogOpen, setTagDialogOpen] = useState(false)
   const [customTagInput, setCustomTagInput] = useState("")
@@ -172,10 +175,25 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           image_url: sf?.image_uris?.normal,
           type_line: sf?.type_line || '',
           mana_cost: sf?.mana_cost || '',
-          cmc: sf ? calculateCmc(sf.mana_cost) : 0
+          cmc: sf?.cmc ?? (sf ? calculateCmc(sf.mana_cost) : 0),
+          colors: sf?.colors ?? [],
         }
       })
       setCards(hydrated)
+
+      // Resolve cover image URL — prefer in-deck card, fall back to a separate fetch.
+      const coverId = deckData.cover_image_scryfall_id || null
+      if (coverId) {
+        const inDeck = sfMap.get(coverId)
+        if (inDeck?.image_uris?.normal) {
+          setCoverImageUrl(inDeck.image_uris.normal)
+        } else {
+          const fetched = await getCard(coverId)
+          setCoverImageUrl(fetched?.image_uris?.normal ?? null)
+        }
+      } else {
+        setCoverImageUrl(null)
+      }
     }
   }
 
@@ -392,15 +410,35 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   return (
     <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
 
-      {/* Combined toolbar: title | search | controls */}
-      <header className="border-b border-border bg-secondary/80 backdrop-blur-md h-14 flex items-center gap-3 px-4 shrink-0 relative z-40">
+      {/* Combined toolbar: title | search | controls — banner with cover image background */}
+      <header className="border-b border-border h-28 shrink-0 relative z-40">
+        {/* Background: cover image with gradient overlay (clipped to banner), or fallback */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {coverImageUrl ? (
+            <>
+              <img
+                src={coverImageUrl}
+                alt=""
+                aria-hidden
+                className="absolute inset-0 w-full h-full object-cover object-center"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-secondary/95 via-secondary/70 to-secondary/30" />
+              <div className="absolute inset-0 backdrop-blur-[2px]" />
+            </>
+          ) : (
+            <div className="absolute inset-0 bg-secondary/80 backdrop-blur-md" />
+          )}
+        </div>
+
+        {/* Foreground: toolbar pinned to bottom */}
+        <div className="absolute inset-x-0 bottom-0 h-14 flex items-center gap-3 px-4">
         {/* Left: back + deck title */}
         <Button variant="ghost" size="sm" onClick={() => router.push('/decks')} className="text-muted-foreground hover:text-foreground shrink-0">
           &larr; Back
         </Button>
         <div className="flex items-center gap-2 shrink-0 border-r border-border pr-3">
-          <h1 className="font-bold text-base whitespace-nowrap">{deck?.name || 'Loading...'}</h1>
-          <Badge variant="outline" className="border-border text-muted-foreground shrink-0">
+          <h1 className="font-bold text-base whitespace-nowrap drop-shadow-md">{deck?.name || 'Loading...'}</h1>
+          <Badge variant="outline" className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm">
             {cards.reduce((a, c) => a + c.quantity, 0)}
           </Badge>
         </div>
@@ -467,6 +505,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
             </TabsList>
           </Tabs>
+        </div>
         </div>
       </header>
 
@@ -711,6 +750,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               )}
             </div>
           ))}
+
+          {/* ── Analytics ── */}
+          <div className="border-t border-border pt-8 mt-4">
+            <DeckAnalytics
+              cards={cards.filter(c => !commanderIds.includes(c.scryfall_id))}
+              commanders={cards.filter(c => commanderIds.includes(c.scryfall_id))}
+            />
+          </div>
         </div>
       </div>
 
