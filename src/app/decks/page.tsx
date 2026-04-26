@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { getCard, getCardsCollection } from "@/lib/scryfall"
+import { getCardsByIds, getCardsCollection } from "@/lib/scryfall"
 
 interface Deck {
   id: string
@@ -56,14 +56,13 @@ export default function MyDecks() {
       return
     }
 
-    // Hydrate cover images from Scryfall
-    const populatedDecks = await Promise.all(data.map(async (deck) => {
-      let cover_url = undefined
-      if (deck.cover_image_scryfall_id) {
-        const card = await getCard(deck.cover_image_scryfall_id)
-        if (card?.image_uris) cover_url = card.image_uris.normal
-      }
-      return { ...deck, cover_url }
+    // Batch-fetch all cover images in one chunked request
+    const coverIds = data.map(d => d.cover_image_scryfall_id).filter(Boolean) as string[]
+    const coverCards = await getCardsByIds(coverIds)
+    const coverMap = new Map(coverCards.map(c => [c.id, c]))
+    const populatedDecks = data.map(deck => ({
+      ...deck,
+      cover_url: coverMap.get(deck.cover_image_scryfall_id!)?.image_uris?.normal,
     }))
 
     setDecks(populatedDecks)

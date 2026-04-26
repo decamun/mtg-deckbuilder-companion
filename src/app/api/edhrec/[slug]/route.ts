@@ -76,16 +76,22 @@ export async function GET(
 
     if (res.ok) {
       const data = await res.json()
-      // Extract cardviews from all cardlists and format as decklist
-      const cardlists: any[] =
-        data?.container?.json_dict?.cardlists ?? []
-      const lines: string[] = []
+      const cardlists: any[] = data?.container?.json_dict?.cardlists ?? []
+      // Deduplicate; keep highest inclusion % per card name; sort and cap at 99
+      const seen = new Map<string, number>()
       for (const list of cardlists) {
         for (const cv of list?.cardviews ?? []) {
-          const name = cv?.label ?? cv?.name
-          if (name) lines.push(`1 ${name}`)
+          const name: string | undefined = cv?.label ?? cv?.name
+          const inclusion: number = cv?.inclusion ?? cv?.num_decks ?? 0
+          if (name && (!seen.has(name) || seen.get(name)! < inclusion)) {
+            seen.set(name, inclusion)
+          }
         }
       }
+      const lines = Array.from(seen.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 99)
+        .map(([name]) => `1 ${name}`)
       if (lines.length > 0) return NextResponse.json({ decklist: lines.join("\n") })
     }
 
