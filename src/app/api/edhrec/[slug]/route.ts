@@ -52,13 +52,17 @@ export async function GET(
 
     if (res.ok) {
       const data = await res.json()
-      const normalised = normalise(data)
-      if (normalised) return NextResponse.json(normalised)
-      // Got 200 but unknown shape — return raw so client can log it
-      return NextResponse.json({ _raw: data })
+      // EDHREC returns 200 + { error: "not_found" } for unknown commanders
+      if (!data.error) {
+        const normalised = normalise(data)
+        if (normalised) return NextResponse.json(normalised)
+        console.warn("[edhrec] average-decks unknown shape for", slug, data)
+      } else {
+        console.warn(`[edhrec] average-decks error body for ${slug}:`, data.error)
+      }
+    } else {
+      console.warn(`[edhrec] average-decks returned ${res.status} for ${slug}`)
     }
-
-    console.warn(`[edhrec] average-decks returned ${res.status} for ${slug}`)
   } catch (e) {
     console.warn("[edhrec] average-decks fetch error:", e)
   }
