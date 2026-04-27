@@ -25,6 +25,8 @@ const STACK_EXTRA_PEEK = 14
 const STACK_CARD_HEIGHT = 246
 const STACK_HOVER_SHIFT = 44
 
+const DEFAULT_TAGS = ['card advantage', 'interaction', 'wincon', 'combo piece']
+
 export default function DeckWorkspace({ params }: { params: Promise<{ id: string }> }) {
   const { id: deckId } = use(params)
   const router = useRouter()
@@ -288,7 +290,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   // Keep latest addTag/fetchDeck reachable from the stable window dragend listener
   dragCallbacksRef.current = { addTag, fetchDeck }
 
-  const allUniqueTags = Array.from(new Set(cards.flatMap(c => c.tags || []))).sort()
+  const allUniqueTags = Array.from(new Set([...DEFAULT_TAGS, ...cards.flatMap(c => c.tags || [])])).sort()
 
   const getGroupedCards = () => {
     let sorted = [...cards].sort((a, b) => {
