@@ -20,13 +20,32 @@ import { LoginDialog } from "@/components/LoginDialog"
 const NAV_LINKS = [
   { href: "/brew", label: "Brew", requiresAuth: false },
   { href: "/decks", label: "Your Decks", requiresAuth: true },
+  { href: "/blog", label: "Blog", requiresAuth: false },
 ]
+
+// Paths that render the scroll shell — clicking their nav links scrolls
+// in-page rather than triggering a full navigation.
+const SHELL_PATHS = new Set(["/brew", "/decks", "/blog"])
 
 export function TopNav() {
   const pathname = usePathname()
   const router = useRouter()
   const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [activePath, setActivePath] = useState(pathname ?? "")
   const [loginOpen, setLoginOpen] = useState(false)
+
+  useEffect(() => {
+    setActivePath(pathname ?? "")
+  }, [pathname])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { path } = (e as CustomEvent<{ path: string }>).detail
+      setActivePath(path)
+    }
+    window.addEventListener("sectionchange", handler)
+    return () => window.removeEventListener("sectionchange", handler)
+  }, [])
 
   useEffect(() => {
     const handler = () => setLoginOpen(true)
@@ -52,6 +71,36 @@ export function TopNav() {
     router.push("/brew")
   }
 
+  // Scroll to a shell section accounting for the sticky navbar height.
+  // Brew is always at the very top (scrollTop 0); other sections use their
+  // document offset minus the 56px navbar so content isn't hidden behind it.
+  const scrollToSection = (id: string, behavior: ScrollBehavior = "smooth") => {
+    if (id === "brew") {
+      window.scrollTo({ top: 0, behavior })
+      return
+    }
+    const el = document.getElementById(id)
+    if (!el) return
+    const top = el.getBoundingClientRect().top + window.scrollY - 56
+    window.scrollTo({ top: Math.max(0, top), behavior })
+  }
+
+  // When already inside the scroll shell, intercept nav clicks and scroll
+  // in-page instead of navigating (which would cause a full re-render).
+  const handleNavClick = (e: React.MouseEvent, href: string) => {
+    if (SHELL_PATHS.has(activePath) && SHELL_PATHS.has(href)) {
+      e.preventDefault()
+      scrollToSection(href.slice(1))
+    }
+  }
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    if (SHELL_PATHS.has(activePath)) {
+      e.preventDefault()
+      scrollToSection("brew")
+    }
+  }
+
   return (
     <>
     <header className="sticky top-0 z-50 shrink-0 border-b border-border bg-background/80 backdrop-blur-xl">
@@ -59,6 +108,7 @@ export function TopNav() {
         {/* Logo & name — always anchored left */}
         <Link
           href="/brew"
+          onClick={handleLogoClick}
           className="flex shrink-0 items-center gap-2.5"
         >
           <IdlebrewLogo className="h-7 w-auto text-foreground" />
@@ -67,20 +117,20 @@ export function TopNav() {
           </span>
         </Link>
 
-        {/* Nav links — flow left after logo; auth links are invisible (not removed)
-            so the layout never shifts */}
+        {/* Nav links */}
         <nav className="flex items-center gap-1">
           {NAV_LINKS.map(({ href, label, requiresAuth }) => {
             const hidden = requiresAuth && !user
             const isActive =
-              pathname === href ||
-              (href !== "/" && (pathname?.startsWith(href + "/") ?? false))
+              activePath === href ||
+              (href !== "/" && activePath.startsWith(href + "/"))
             return (
               <Link
                 key={href}
                 href={href}
                 aria-hidden={hidden}
                 tabIndex={hidden ? -1 : undefined}
+                onClick={(e) => handleNavClick(e, href)}
                 className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
                   hidden ? "invisible pointer-events-none" : ""
                 } ${
