@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { TopNav } from "@/components/TopNav";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from '@vercel/analytics/next';
 
 const armata = Armata({
   variable: "--font-armata",
@@ -44,6 +45,7 @@ export default function RootLayout({
             <a href="/data-deletion" className="hover:text-foreground transition-colors">Data Deletion</a>
           </nav>
         </footer>
+        <Analytics />
       </body>
     </html>
   );
