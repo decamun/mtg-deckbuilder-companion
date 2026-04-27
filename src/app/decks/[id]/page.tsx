@@ -12,7 +12,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsByIds, getOldestPrintingsByOracleIds, getCard, getPrintingsByOracleId, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
+import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/types"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
@@ -114,6 +114,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   // updates that originate inside fetchDeck until dragend fires:
   //   - pendingFetch: a new fetchDeck() was requested while dragging
   //   - pendingSetCards: fetchDeck completed but setCards was suppressed
+  const fetchGenRef = useRef(0)
   const isDragging = useRef(false)
   const pendingDrop = useRef<{ cardId: string; tag: string } | null>(null)
   const pendingFetch = useRef(false)
@@ -191,6 +192,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }, [])
 
   const fetchDeck = async () => {
+    const gen = ++fetchGenRef.current
+
     const { data: { session } } = await supabase.auth.getSession()
     const viewerId = session?.user.id ?? null
 
@@ -201,10 +204,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       .maybeSingle()
 
     if (deckError || !deckData) {
-      // RLS hides private decks from non-owners — render the access-denied page.
       setAccessDenied(true)
       return
     }
+    if (gen !== fetchGenRef.current) return
     setAccessDenied(false)
 
     const owner = !!viewerId && deckData.user_id === viewerId
@@ -230,88 +233,44 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       if (deckData.cover_image_scryfall_id) idsToFetch.add(deckData.cover_image_scryfall_id)
 
       const sfCards = await getCardsByIds(Array.from(idsToFetch))
+      if (gen !== fetchGenRef.current) return
       const sfMap = new Map(sfCards.map(c => [c.id, c]))
 
-      // Build the hydrated DeckCard array for a given oracle-resolution map.
-      // Called twice: phase 1 with an empty map (fast, shows stored art
-      // immediately), phase 2 with the full oracle map (updates to oldest print).
-      const buildHydrated = (defaultByOracle: Map<string, ScryfallCard>): DeckCard[] =>
-        cardsData.map(c => {
-          const baseSf = sfMap.get(c.scryfall_id)
-          const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
-          let effectiveId = c.printing_scryfall_id || c.scryfall_id
-          if (!c.printing_scryfall_id && oracleId && defaultByOracle.has(oracleId)) {
-            effectiveId = defaultByOracle.get(oracleId)!.id
-          }
-          const effSf = sfMap.get(effectiveId) ?? baseSf
-          const finish = (c.finish ?? 'nonfoil') as 'nonfoil' | 'foil' | 'etched'
-          return {
-            ...c,
-            oracle_id: oracleId,
-            finish,
-            printing_scryfall_id: c.printing_scryfall_id ?? null,
-            image_url: effSf?.image_uris?.normal,
-            type_line: effSf?.type_line || '',
-            mana_cost: effSf?.mana_cost || '',
-            cmc: effSf?.cmc ?? (effSf ? calculateCmc(effSf.mana_cost) : 0),
-            colors: effSf?.colors ?? [],
-            set_code: effSf?.set,
-            collector_number: effSf?.collector_number,
-            available_finishes: effSf?.finishes,
-            price_usd: pickPrice(effSf?.prices, finish),
-            effective_printing_id: effectiveId,
-          }
-        })
+      const hydrated: DeckCard[] = cardsData.map(c => {
+        const baseSf = sfMap.get(c.scryfall_id)
+        const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
+        const effectiveId = c.printing_scryfall_id || c.scryfall_id
+        const effSf = sfMap.get(effectiveId) ?? baseSf
+        const finish = (c.finish ?? 'nonfoil') as 'nonfoil' | 'foil' | 'etched'
+        return {
+          ...c,
+          oracle_id: oracleId,
+          finish,
+          printing_scryfall_id: c.printing_scryfall_id ?? null,
+          image_url: effSf?.image_uris?.normal,
+          type_line: effSf?.type_line || '',
+          mana_cost: effSf?.mana_cost || '',
+          cmc: effSf?.cmc ?? (effSf ? calculateCmc(effSf.mana_cost) : 0),
+          colors: effSf?.colors ?? [],
+          set_code: effSf?.set,
+          collector_number: effSf?.collector_number,
+          available_finishes: effSf?.finishes,
+          price_usd: pickPrice(effSf?.prices, finish),
+          effective_printing_id: effectiveId,
+        }
+      })
 
-      // Safely apply a hydrated cards array. If a drag is active we park the
+      // Safely apply the hydrated cards array. If a drag is active we park the
       // update in pendingSetCards — onDragEnd flushes it once the drag ends so
       // React never mutates the dragged element's DOM mid-drag (which would
       // cause the browser to lose the drag source and freeze dragend forever).
-      const applyHydrated = (hydrated: DeckCard[]) => {
-        if (isDragging.current) {
-          // Always keep the latest result; earlier phases become irrelevant.
-          pendingSetCards.current = hydrated
-          return
-        }
+      if (isDragging.current) {
+        pendingSetCards.current = hydrated
+      } else {
         pendingSetCards.current = null
-        setCards(prev => {
-          const prevById = new Map(prev.map(c => [c.id, c]))
-          return hydrated.map(h => {
-            if (h.image_url) return h
-            const p = prevById.get(h.id)
-            if (!p || p.effective_printing_id !== h.effective_printing_id || p.finish !== h.finish) return h
-            return {
-              ...h,
-              image_url: p.image_url,
-              type_line: h.type_line || p.type_line || '',
-              mana_cost: h.mana_cost || p.mana_cost || '',
-              cmc: h.cmc || p.cmc || 0,
-              colors: h.colors?.length ? h.colors : p.colors,
-              set_code: h.set_code ?? p.set_code,
-              collector_number: h.collector_number ?? p.collector_number,
-              available_finishes: h.available_finishes ?? p.available_finishes,
-              price_usd: h.price_usd ?? p.price_usd ?? null,
-            }
-          })
-        })
+        setCards(hydrated)
       }
-
-      // Phase 1: show cards immediately with whatever printing we already have.
-      applyHydrated(buildHydrated(new Map()))
       setCardsLoading(false)
-
-      // Phase 2: resolve the oldest printing for unassigned cards, then update.
-      const oracleIdsToResolve = new Set<string>()
-      for (const c of cardsData) {
-        if (!c.printing_scryfall_id) {
-          const sf = sfMap.get(c.scryfall_id)
-          const oid = c.oracle_id ?? sf?.oracle_id
-          if (oid) oracleIdsToResolve.add(oid)
-        }
-      }
-      const defaultByOracle = await getOldestPrintingsByOracleIds(Array.from(oracleIdsToResolve))
-      for (const sf of defaultByOracle.values()) sfMap.set(sf.id, sf)
-      applyHydrated(buildHydrated(defaultByOracle))
 
       // Cover image URL
       const coverId = deckData.cover_image_scryfall_id || null
@@ -320,7 +279,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         if (inDeck?.image_uris?.normal) setCoverImageUrl(inDeck.image_uris.normal)
         else {
           const fetched = await getCard(coverId)
-          setCoverImageUrl(fetched?.image_uris?.normal ?? null)
+          if (gen === fetchGenRef.current) setCoverImageUrl(fetched?.image_uris?.normal ?? null)
         }
       } else {
         setCoverImageUrl(null)
@@ -492,25 +451,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const sfCards = await getCardsByIds(Array.from(ids))
     const sfMap = new Map(sfCards.map(c => [c.id, c]))
 
-    // Resolve a default printing for snapshot cards with no chosen printing —
-    // same batched /cards/collection approach as fetchDeck.
-    const oracleIdsSnap = new Set<string>()
-    for (const c of snap.cards) {
-      if (!c.printing_scryfall_id) {
-        const oid = c.oracle_id ?? sfMap.get(c.scryfall_id)?.oracle_id
-        if (oid) oracleIdsSnap.add(oid)
-      }
-    }
-    const defaultByOracleSnap = await getOldestPrintingsByOracleIds(Array.from(oracleIdsSnap))
-    for (const sf of defaultByOracleSnap.values()) sfMap.set(sf.id, sf)
-
     const hydrated: DeckCard[] = snap.cards.map((c, i) => {
       const baseSf = sfMap.get(c.scryfall_id)
       const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
-      let effectiveId = c.printing_scryfall_id || c.scryfall_id
-      if (!c.printing_scryfall_id && oracleId && defaultByOracleSnap.has(oracleId)) {
-        effectiveId = defaultByOracleSnap.get(oracleId)!.id
-      }
+      const effectiveId = c.printing_scryfall_id || c.scryfall_id
       const effSf = sfMap.get(effectiveId) ?? baseSf
       return {
         id: `snap-${i}`,
