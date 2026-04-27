@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDown, Copy, Download, FileText, BookOpen } from "lucide-react"
+import { ChevronDown, Copy, Download, FileText, BookOpen, Share2, Globe, Lock, Link } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,13 +11,18 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import { supabase } from "@/lib/supabase/client"
 import type { DeckCard } from "@/lib/types"
 
 interface Props {
+  deckId: string
   deckName: string
   cards: DeckCard[]
   primerMarkdown: string
   commanderIds: string[]
+  isPublic: boolean
+  isOwner: boolean
+  onVisibilityChange?: (isPublic: boolean) => void
 }
 
 function formatAsText(cards: DeckCard[], commanderIds: string[]): string {
@@ -88,8 +93,46 @@ function downloadFile(filename: string, content: string, mimeType = "text/plain"
   URL.revokeObjectURL(url)
 }
 
-export function ExportDeckMenu({ deckName, cards, primerMarkdown, commanderIds }: Props) {
+export function ExportDeckMenu({
+  deckId,
+  deckName,
+  cards,
+  primerMarkdown,
+  commanderIds,
+  isPublic,
+  isOwner,
+  onVisibilityChange,
+}: Props) {
   const safeName = deckName.replace(/[^a-z0-9]/gi, "-").toLowerCase()
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      if (isPublic) {
+        toast.success("Link copied to clipboard")
+      } else {
+        toast.success("Link copied", {
+          description: "This deck is private — only you can open it.",
+        })
+      }
+    } catch {
+      toast.error("Failed to copy link")
+    }
+  }
+
+  const handleToggleVisibility = async () => {
+    const next = !isPublic
+    const { error } = await supabase
+      .from("decks")
+      .update({ is_public: next })
+      .eq("id", deckId)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+    onVisibilityChange?.(next)
+    toast.success(next ? "Deck is now public" : "Deck is now private")
+  }
 
   const handleCopyText = async () => {
     try {
@@ -145,11 +188,32 @@ export function ExportDeckMenu({ deckName, cards, primerMarkdown, commanderIds }
           />
         }
       >
-        <Download className="w-3.5 h-3.5" />
-        Export
+        <Share2 className="w-3.5 h-3.5" />
+        Export & Share
         <ChevronDown className="w-3 h-3 opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuLabel>Share</DropdownMenuLabel>
+        <DropdownMenuItem onClick={handleCopyLink}>
+          <Link className="w-4 h-4" />
+          Copy Link
+        </DropdownMenuItem>
+        {isOwner && (
+          <DropdownMenuItem onClick={handleToggleVisibility}>
+            {isPublic ? (
+              <>
+                <Lock className="w-4 h-4" />
+                Make Private
+              </>
+            ) : (
+              <>
+                <Globe className="w-4 h-4" />
+                Make Public
+              </>
+            )}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
         <DropdownMenuLabel>Decklist</DropdownMenuLabel>
         <DropdownMenuItem onClick={handleCopyText}>
           <Copy className="w-4 h-4" />

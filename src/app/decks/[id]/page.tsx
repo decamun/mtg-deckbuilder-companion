@@ -840,10 +840,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           )}
           {deck && (
             <ExportDeckMenu
+              deckId={deckId}
               deckName={displayedDeckName}
               cards={displayedCards}
               primerMarkdown={viewing ? viewing.primerMarkdown : primerMarkdown}
               commanderIds={displayedCommanderIds}
+              isPublic={!!deck.is_public}
+              isOwner={isOwner}
+              onVisibilityChange={(pub) => setDeck({ ...deck, is_public: pub })}
             />
           )}
         </div>
