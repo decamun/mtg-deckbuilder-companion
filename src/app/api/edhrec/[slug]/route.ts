@@ -19,23 +19,31 @@ const BROWSER_HEADERS = {
 }
 
 /** Parse whatever shape EDHREC returns into a normalised { decklist } string */
-function normalise(data: any): { decklist: string } | null {
+function normalise(data: unknown): { decklist: string } | null {
+  if (!data || typeof data !== "object") return null
+  const d = data as Record<string, unknown>
+
   // Shape 1: { deck: "1 Sol Ring\n..." }
-  if (typeof data?.deck === "string") return { decklist: data.deck }
+  if (typeof d.deck === "string") return { decklist: d.deck }
   // Shape 2: { decklist: "1 Sol Ring\n..." }
-  if (typeof data?.decklist === "string") return { decklist: data.decklist }
+  if (typeof d.decklist === "string") return { decklist: d.decklist }
   // Shape 3: { deck: { decklist: "..." } }
-  if (typeof data?.deck?.decklist === "string")
-    return { decklist: data.deck.decklist }
+  if (d.deck && typeof d.deck === "object") {
+    const inner = (d.deck as Record<string, unknown>).decklist
+    if (typeof inner === "string") return { decklist: inner }
+  }
   // Shape 4: { names: [...], qty: [...] }
-  if (Array.isArray(data?.names) && Array.isArray(data?.qty)) {
-    const lines = (data.names as string[]).map(
-      (n: string, i: number) => `${(data.qty as number[])[i] ?? 1} ${n}`
-    )
+  if (Array.isArray(d.names) && Array.isArray(d.qty)) {
+    const names = d.names as string[]
+    const qty = d.qty as number[]
+    const lines = names.map((n, i) => `${qty[i] ?? 1} ${n}`)
     return { decklist: lines.join("\n") }
   }
   return null
 }
+
+interface EdhrecCardview { label?: string; name?: string; inclusion?: number; num_decks?: number }
+interface EdhrecCardlist { cardviews?: EdhrecCardview[] }
 
 export async function GET(
   _req: NextRequest,
@@ -76,7 +84,7 @@ export async function GET(
 
     if (res.ok) {
       const data = await res.json()
-      const cardlists: any[] = data?.container?.json_dict?.cardlists ?? []
+      const cardlists: EdhrecCardlist[] = data?.container?.json_dict?.cardlists ?? []
       // Deduplicate; keep highest inclusion % per card name; sort and cap at 99
       const seen = new Map<string, number>()
       for (const list of cardlists) {

@@ -43,8 +43,9 @@ export default function LoginPage() {
           { duration: 8000 }
         )
       }
-    } catch (error: any) {
-      toast.error(error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "An unexpected error occurred"
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -65,8 +66,9 @@ export default function LoginPage() {
         duration: 8000,
       })
       setMode("auth")
-    } catch (error: any) {
-      toast.error(error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "An unexpected error occurred"
+      toast.error(message)
     } finally {
       setLoading(false)
     }

@@ -1,6 +1,6 @@
 # P4 · Code Quality Cleanup
 
-**Status:** ⚠️ Partial — about half the original list shipped; new items have surfaced.
+**Status:** ⚠️ Partial — original Phases 3, 5, 6 now shipped along with new item #9 (schema-mismatch resolved via shared `Deck` type from `P2-eliminate-any-types`). Right-click parity in stack/list views, the `getSession()` → `getUser()` swap, the `createDeck` extraction, the dead-column migration, and the menu deduplication remain.
 
 ## Resolution Summary
 
@@ -8,10 +8,10 @@
 |---|---|---|
 | Phase 1 — Stack-view interactivity | ✅ Mostly done | Stack view now has a 3-dot dropdown menu (`renderThreeDotMenu` at `decks/[id]/page.tsx:377`). It still lacks a right-click `<ContextMenu>` like the visual view — see "Remaining 1" below. |
 | Phase 2 — Unused icon imports | ✅ Done | Current imports at `decks/[id]/page.tsx:5` are all in use; the listed unused icons are gone. |
-| Phase 3 — Hardcoded Tailwind colors | ❌ Pending | Both call-outs are still present in `decks/page.tsx`. |
+| Phase 3 — Hardcoded Tailwind colors | ✅ Done | Both call-outs in `decks/page.tsx` (Create button + decklist textarea) now use design tokens (`bg-primary` / `bg-background/50` / `border-border` / `text-primary-foreground`). |
 | Phase 4 — Google logo SVG | ✅ Done | The original `src/app/page.tsx` was rewritten (now redirects to `/brew`). The login form moved to `src/app/login/page.tsx:163-184` and uses a proper inline Google SVG and a Facebook SVG. |
-| Phase 5 — `docker-compose.yml` `version:` field | ❌ Pending | `version: '3.8'` still present at `docker-compose.yml:1`. |
-| Phase 6 — `'use client'` on Supabase browser client | ❌ Pending | `src/lib/supabase/client.ts` is missing the directive. The file now also exports a `createClient()` factory and a default `supabase` singleton, so the directive prevents accidental server import of the singleton. |
+| Phase 5 — `docker-compose.yml` `version:` field | ✅ Done | Removed from both `docker-compose.yml` and `docker-compose.agent.yml`. |
+| Phase 6 — `'use client'` on Supabase browser client | ✅ Done | `src/lib/supabase/client.ts` now starts with `'use client'`, so importing the top-level `supabase` singleton from a Server Component is a build-time error. (The `\|\| 'placeholder'` env-var fallbacks at lines 5–6 were left untouched — a bigger conversation than this cleanup pass.) |
 
 ## Remaining Work
 
@@ -23,45 +23,17 @@ The visual view (lines 503–588) wraps each card in a `<ContextMenu>` so right-
 
 The dropdown content is already factored into `renderDropdownItems(c, groupName)` at line 336. Wrap the `<motion.div>` for stack cards (around line 643) and the row `<div>` for list cards (around line 692) in a `<ContextMenu>` whose `<ContextMenuContent>` reuses those items. Mirror the visual-view structure but render `ContextMenuItem` instead of `DropdownMenuItem`. (Or refactor `renderDropdownItems` into a shared menu-content helper that takes the item component as a generic — possibly worth a small follow-up if duplication grows.)
 
-### 2. Hardcoded Tailwind colors
+### 2. Hardcoded Tailwind colors — ✅ Done
 
-**File:** `src/app/decks/page.tsx`
+Both `decks/page.tsx` literals (Create button at line 216, decklist textarea at line 212) now use design tokens.
 
-Two literals still bypass the design tokens:
+### 3. Drop `version:` from `docker-compose.yml` — ✅ Done
 
-1. Create button at line 216:
-   ```tsx
-   className="w-full bg-indigo-500 hover:bg-indigo-600 text-white"
-   // → className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-   ```
-2. Decklist textarea at line 212:
-   ```tsx
-   className="bg-black/50 border-white/10 min-h-[150px]"
-   // → className="bg-background/50 border-border min-h-[150px]"
-   ```
+Removed from both `docker-compose.yml` and `docker-compose.agent.yml`.
 
-The `<DialogTrigger>` at line 170 already uses tokens (`bg-primary`) — it's only these two leaf elements.
+### 4. `'use client'` on the Supabase browser client — ✅ Done
 
-### 3. Drop `version:` from `docker-compose.yml`
-
-**File:** `docker-compose.yml`
-
-Delete line 1 (`version: '3.8'`). The Compose spec ignores it and it surfaces a deprecation warning on every command. The agent compose file (`docker-compose.agent.yml`) should be checked too — if it has the same line, drop it.
-
-### 4. `'use client'` on the Supabase browser client
-
-**File:** `src/lib/supabase/client.ts`
-
-```ts
-'use client'
-
-import { createBrowserClient } from '@supabase/ssr'
-// … rest unchanged
-```
-
-Why this matters now: the file exports both a factory (`createClient()`) and a top-level singleton (`supabase`). Without `'use client'`, importing `supabase` from a Server Component would silently instantiate a browser client on the server. The directive turns that into a build-time error.
-
-While in this file, audit whether the `|| 'https://placeholder.supabase.co'` / `|| 'placeholder'` fallbacks (lines 5–6) still earn their keep. They mask missing env vars rather than failing fast at startup.
+Directive added at top of `src/lib/supabase/client.ts`. The placeholder env-var fallbacks (`|| 'https://placeholder.supabase.co'`, `|| 'placeholder'`) on lines 5–6 are still in place — a separate audit can decide whether to fail fast on missing env instead.
 
 ## New Cleanup Items (added since the original plan)
 
@@ -92,19 +64,19 @@ Then `createDeck` becomes a sequence of pure builders followed by Supabase inser
 
 The original `decks` schema has both `commander_scryfall_id text` (singular, from `20240418000000_init.sql`) and the new `commander_scryfall_ids text[]` (plural, from `20240419000001_commander_array.sql`). The migration backfills plural from singular but never drops the singular column — and no application code reads it any more. Add a follow-up migration that `ALTER TABLE … DROP COLUMN commander_scryfall_id` once we're confident no reader remains.
 
-### 9. Schema mismatch in `Deck` interface
+### 9. Schema mismatch in `Deck` interface — ✅ Done
 
-`src/app/decks/page.tsx:19` declares `Deck` with `cover_image_scryfall_id` but not `commander_scryfall_ids`, even though the `/decks` page now renders decks that have commanders. The shared types module proposed in `P2-eliminate-any-types.md` will fix this — flagging here for visibility.
+`src/app/decks/page.tsx` no longer declares a local `Deck` interface; both deck pages now import the shared `Deck` type from `src/lib/types.ts`, which carries `commander_scryfall_ids: string[]` to match the schema.
+
+### 10. Unused `setSorting` setter in `decks/[id]/page.tsx`
+
+`const [sorting, setSorting] = useState<SortingMode>('name')` — `setSorting` is never called. Either wire up a sort selector in the toolbar (`name` vs. `mana`) or drop the setter and inline the constant. Surfaced by lint as `@typescript-eslint/no-unused-vars`.
 
 ## Files Touched (remaining work only)
 
 | File | Action |
 |---|---|
-| `src/app/decks/[id]/page.tsx` | Add `<ContextMenu>` wrapping for stack and list views; deduplicate menu content |
-| `src/app/decks/page.tsx` | Replace hardcoded indigo/black/white classes with design tokens |
-| `docker-compose.yml` | Remove `version:` |
-| `docker-compose.agent.yml` | Remove `version:` if present |
-| `src/lib/supabase/client.ts` | Add `'use client'`; reconsider placeholder fallbacks |
+| `src/app/decks/[id]/page.tsx` | Add `<ContextMenu>` wrapping for stack and list views; deduplicate menu content; drop unused `setSorting` or wire it up |
 | `src/app/decks/page.tsx`, `src/app/decks/[id]/page.tsx` | Swap `getSession()` for `getUser()` in auth-gated reads |
 | `src/app/brew/page.tsx` | Extract pure builders out of `createDeck` |
 | `supabase/migrations/<new>.sql` | Drop unused `commander_scryfall_id` (singular) column |
