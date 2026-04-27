@@ -55,7 +55,6 @@ export function BrewSection() {
   const debouncedQuery = useDebounce(query, 350)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const pendingHandled = useRef(false)
 
   useEffect(() => {
     if (!debouncedQuery.trim()) {
@@ -93,7 +92,7 @@ export function BrewSection() {
 
       if (!user) {
         sessionStorage.setItem(PENDING_COMMANDER_KEY, JSON.stringify(card))
-        router.push("/login")
+        window.dispatchEvent(new CustomEvent("open-login-dialog"))
         return
       }
 
@@ -252,21 +251,22 @@ export function BrewSection() {
     [router]
   )
 
+  // After sign-in, auto-resume a pending commander selection
   useEffect(() => {
-    if (pendingHandled.current) return
-    pendingHandled.current = true
-
-    const raw = sessionStorage.getItem(PENDING_COMMANDER_KEY)
-    if (!raw) return
-    sessionStorage.removeItem(PENDING_COMMANDER_KEY)
-
-    try {
-      const card = JSON.parse(raw) as ScryfallCard
-      setQuery(card.name)
-      createDeck(card)
-    } catch {
-      // malformed storage entry — ignore
-    }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event !== "SIGNED_IN" && event !== "INITIAL_SESSION") || !session?.user) return
+      const raw = sessionStorage.getItem(PENDING_COMMANDER_KEY)
+      if (!raw) return
+      sessionStorage.removeItem(PENDING_COMMANDER_KEY)
+      try {
+        const card = JSON.parse(raw) as ScryfallCard
+        setQuery(card.name)
+        createDeck(card)
+      } catch {
+        // malformed storage entry — ignore
+      }
+    })
+    return () => subscription.unsubscribe()
   }, [createDeck])
 
   const handleSelect = useCallback(
