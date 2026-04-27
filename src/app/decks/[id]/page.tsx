@@ -553,6 +553,23 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     toast.success('Primer saved')
   }
 
+  // Cards displayed in the workspace: live state by default, snapshot when viewing a version.
+  // Declared before getGroupedCards/totalUsd because both reference it.
+  const displayedCards = viewing ? viewing.cards : cards
+  const displayedCommanderIds = viewing ? viewing.deckMeta.commanders : commanderIds
+  const displayedCoverImageUrl = viewing ? viewing.coverImageUrl : coverImageUrl
+  const displayedDeckName = viewing ? viewing.deckMeta.name : (deck?.name || 'Loading...')
+
+  const totalUsd = useMemo(() => {
+    let sum = 0
+    let anyMissing = false
+    for (const c of displayedCards) {
+      if (c.price_usd == null) { anyMissing = true; continue }
+      sum += c.price_usd * c.quantity
+    }
+    return { sum, anyMissing }
+  }, [displayedCards])
+
   const getGroupedCards = () => {
     let sorted = [...displayedCards].sort((a, b) => {
       if (sorting === 'name') return a.name.localeCompare(b.name)
@@ -710,22 +727,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       </DropdownMenu>
     )
   }
-
-  // Cards displayed in the workspace: live state by default, snapshot when viewing a version.
-  const displayedCards = viewing ? viewing.cards : cards
-  const displayedCommanderIds = viewing ? viewing.deckMeta.commanders : commanderIds
-  const displayedCoverImageUrl = viewing ? viewing.coverImageUrl : coverImageUrl
-  const displayedDeckName = viewing ? viewing.deckMeta.name : (deck?.name || 'Loading...')
-
-  const totalUsd = useMemo(() => {
-    let sum = 0
-    let anyMissing = false
-    for (const c of displayedCards) {
-      if (c.price_usd == null) { anyMissing = true; continue }
-      sum += c.price_usd * c.quantity
-    }
-    return { sum, anyMissing }
-  }, [displayedCards])
 
   if (accessDenied) {
     return (
