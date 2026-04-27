@@ -1,9 +1,10 @@
 "use client"
 
-import { ChevronDown, Copy, Download, FileText, BookOpen, Share2, Globe, Lock, Link } from "lucide-react"
+import { ChevronDown, Copy, Download, FileText, BookOpen, Share2, Globe, Lock, Link as LinkIcon } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -122,16 +123,20 @@ export function ExportDeckMenu({
 
   const handleToggleVisibility = async () => {
     const next = !isPublic
-    const { error } = await supabase
-      .from("decks")
-      .update({ is_public: next })
-      .eq("id", deckId)
-    if (error) {
-      toast.error(error.message)
-      return
+    try {
+      const { error } = await supabase
+        .from("decks")
+        .update({ is_public: next })
+        .eq("id", deckId)
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+      onVisibilityChange?.(next)
+      toast.success(next ? "Deck is now public" : "Deck is now private")
+    } catch {
+      toast.error("Failed to update visibility")
     }
-    onVisibilityChange?.(next)
-    toast.success(next ? "Deck is now public" : "Deck is now private")
   }
 
   const handleCopyText = async () => {
@@ -193,48 +198,56 @@ export function ExportDeckMenu({
         <ChevronDown className="w-3 h-3 opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuLabel>Share</DropdownMenuLabel>
-        <DropdownMenuItem onClick={handleCopyLink}>
-          <Link className="w-4 h-4" />
-          Copy Link
-        </DropdownMenuItem>
-        {isOwner && (
-          <DropdownMenuItem onClick={handleToggleVisibility}>
-            {isPublic ? (
-              <>
-                <Lock className="w-4 h-4" />
-                Make Private
-              </>
-            ) : (
-              <>
-                <Globe className="w-4 h-4" />
-                Make Public
-              </>
-            )}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Share</DropdownMenuLabel>
+          <DropdownMenuItem onClick={handleCopyLink}>
+            <LinkIcon className="w-4 h-4" />
+            Copy Link
           </DropdownMenuItem>
-        )}
+          {isOwner && (
+            <DropdownMenuItem onClick={handleToggleVisibility}>
+              {isPublic ? (
+                <>
+                  <Lock className="w-4 h-4" />
+                  Make Private
+                </>
+              ) : (
+                <>
+                  <Globe className="w-4 h-4" />
+                  Make Public
+                </>
+              )}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Decklist</DropdownMenuLabel>
-        <DropdownMenuItem onClick={handleCopyText}>
-          <Copy className="w-4 h-4" />
-          Copy as Text
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleCopyArena}>
-          <FileText className="w-4 h-4" />
-          Copy for Arena
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Decklist</DropdownMenuLabel>
+          <DropdownMenuItem onClick={handleCopyText}>
+            <Copy className="w-4 h-4" />
+            Copy as Text
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleCopyArena}>
+            <FileText className="w-4 h-4" />
+            Copy for Arena
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Primer</DropdownMenuLabel>
-        <DropdownMenuItem onClick={handleDownloadPrimer}>
-          <BookOpen className="w-4 h-4" />
-          Download Primer (.md)
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Primer</DropdownMenuLabel>
+          <DropdownMenuItem onClick={handleDownloadPrimer}>
+            <BookOpen className="w-4 h-4" />
+            Download Primer (.md)
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Full Export</DropdownMenuLabel>
-        <DropdownMenuItem onClick={handleDownloadJson}>
-          <Download className="w-4 h-4" />
-          Export as JSON
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Full Export</DropdownMenuLabel>
+          <DropdownMenuItem onClick={handleDownloadJson}>
+            <Download className="w-4 h-4" />
+            Export as JSON
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )
