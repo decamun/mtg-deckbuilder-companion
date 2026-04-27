@@ -108,12 +108,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
   // Drag coordination. HTML5 drag is hostile to DOM mutations mid-drag —
-  // re-renders that unmount the source element before dragend deadlock the
-  // browser's drag state. So we defer all state changes triggered during
-  // drag (drops, real-time refreshes) until dragend fires.
+  // even an in-place re-render of the dragged element (e.g. swapping an img
+  // src) causes Chrome/Firefox to lose the drag source, leaving dragend
+  // unfired and isDragging stuck true forever. We defer ALL React state
+  // updates that originate inside fetchDeck until dragend fires:
+  //   - pendingFetch: a new fetchDeck() was requested while dragging
+  //   - pendingSetCards: fetchDeck completed but setCards was suppressed
   const isDragging = useRef(false)
   const pendingDrop = useRef<{ cardId: string; tag: string } | null>(null)
   const pendingFetch = useRef(false)
+  const pendingSetCards = useRef<DeckCard[] | null>(null)
   const dragCallbacksRef = useRef<{
     addTag: (cardId: string, tag: string) => Promise<void>
     fetchDeck: () => Promise<void>
@@ -144,6 +148,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   useEffect(() => {
     const onDragEnd = () => {
       isDragging.current = false
+
+      // Flush any cards state that was suppressed while dragging.
+      // Apply before addTag/fetchDeck so the UI isn't blank.
+      const pendingCards = pendingSetCards.current
+      pendingSetCards.current = null
+      if (pendingCards) setCards(pendingCards)
+
       const { addTag, fetchDeck } = dragCallbacksRef.current
       const drop = pendingDrop.current
       pendingDrop.current = null
@@ -221,9 +232,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       const sfCards = await getCardsByIds(Array.from(idsToFetch))
       const sfMap = new Map(sfCards.map(c => [c.id, c]))
 
-      // Shared hydration helper — called twice: once with an empty oracle map
-      // (fast, shows whatever printing the card was added with), then again
-      // once the oracle lookup resolves (updates to oldest printing).
+      // Build the hydrated DeckCard array for a given oracle-resolution map.
+      // Called twice: phase 1 with an empty map (fast, shows stored art
+      // immediately), phase 2 with the full oracle map (updates to oldest print).
       const buildHydrated = (defaultByOracle: Map<string, ScryfallCard>): DeckCard[] =>
         cardsData.map(c => {
           const baseSf = sfMap.get(c.scryfall_id)
@@ -252,15 +263,44 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           }
         })
 
+      // Safely apply a hydrated cards array. If a drag is active we park the
+      // update in pendingSetCards — onDragEnd flushes it once the drag ends so
+      // React never mutates the dragged element's DOM mid-drag (which would
+      // cause the browser to lose the drag source and freeze dragend forever).
+      const applyHydrated = (hydrated: DeckCard[]) => {
+        if (isDragging.current) {
+          // Always keep the latest result; earlier phases become irrelevant.
+          pendingSetCards.current = hydrated
+          return
+        }
+        pendingSetCards.current = null
+        setCards(prev => {
+          const prevById = new Map(prev.map(c => [c.id, c]))
+          return hydrated.map(h => {
+            if (h.image_url) return h
+            const p = prevById.get(h.id)
+            if (!p || p.effective_printing_id !== h.effective_printing_id || p.finish !== h.finish) return h
+            return {
+              ...h,
+              image_url: p.image_url,
+              type_line: h.type_line || p.type_line || '',
+              mana_cost: h.mana_cost || p.mana_cost || '',
+              cmc: h.cmc || p.cmc || 0,
+              colors: h.colors?.length ? h.colors : p.colors,
+              set_code: h.set_code ?? p.set_code,
+              collector_number: h.collector_number ?? p.collector_number,
+              available_finishes: h.available_finishes ?? p.available_finishes,
+              price_usd: h.price_usd ?? p.price_usd ?? null,
+            }
+          })
+        })
+      }
+
       // Phase 1: show cards immediately with whatever printing we already have.
-      // Cards with a chosen printing are already correct; others show the
-      // scryfall_id image as a stand-in until the oracle lookup finishes.
-      setCards(buildHydrated(new Map()))
+      applyHydrated(buildHydrated(new Map()))
       setCardsLoading(false)
 
-      // Phase 2: resolve the oldest printing for cards with no chosen printing,
-      // then update images in-place. Uses functional setCards to merge against
-      // current state, preserving images if a fetch fails (e.g. 429).
+      // Phase 2: resolve the oldest printing for unassigned cards, then update.
       const oracleIdsToResolve = new Set<string>()
       for (const c of cardsData) {
         if (!c.printing_scryfall_id) {
@@ -271,28 +311,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       }
       const defaultByOracle = await getOldestPrintingsByOracleIds(Array.from(oracleIdsToResolve))
       for (const sf of defaultByOracle.values()) sfMap.set(sf.id, sf)
-
-      const phase2 = buildHydrated(defaultByOracle)
-      setCards(prev => {
-        const prevById = new Map(prev.map(c => [c.id, c]))
-        return phase2.map(h => {
-          if (h.image_url) return h
-          const p = prevById.get(h.id)
-          if (!p || p.effective_printing_id !== h.effective_printing_id || p.finish !== h.finish) return h
-          return {
-            ...h,
-            image_url: p.image_url,
-            type_line: h.type_line || p.type_line || '',
-            mana_cost: h.mana_cost || p.mana_cost || '',
-            cmc: h.cmc || p.cmc || 0,
-            colors: h.colors?.length ? h.colors : p.colors,
-            set_code: h.set_code ?? p.set_code,
-            collector_number: h.collector_number ?? p.collector_number,
-            available_finishes: h.available_finishes ?? p.available_finishes,
-            price_usd: h.price_usd ?? p.price_usd ?? null,
-          }
-        })
-      })
+      applyHydrated(buildHydrated(defaultByOracle))
 
       // Cover image URL
       const coverId = deckData.cover_image_scryfall_id || null
