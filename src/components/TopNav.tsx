@@ -36,6 +36,7 @@ export function TopNav() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
+      if (session?.user) setLoginOpen(false)
     })
     return () => subscription.unsubscribe()
   }, [])
