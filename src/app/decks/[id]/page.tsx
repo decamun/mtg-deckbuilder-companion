@@ -12,7 +12,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, getOldestPrintingId, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
+import { searchCards, getCardsByIds, getCardsByOracleIds, getCard, getPrintingsByOracleId, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/types"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
@@ -224,33 +224,35 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       const sfCards = await getCardsByIds(Array.from(idsToFetch))
       const sfMap = new Map(sfCards.map(c => [c.id, c]))
 
-      // For cards without a chosen printing, swap to the oldest printing once we know the oracle_id.
-      // This is async but bounded to unique oracle_ids.
-      const oracleIds = new Set<string>()
+      // For cards with no chosen printing, resolve a default display card via a
+      // single batched /cards/collection call (oracle_id identifiers). This replaces
+      // the previous approach of one /cards/search per oracle_id, which caused 429s
+      // and multi-minute load times on large decks.
+      const oracleIdsToResolve = new Set<string>()
       for (const c of cardsData) {
         if (!c.printing_scryfall_id) {
           const sf = sfMap.get(c.scryfall_id)
-          if (sf?.oracle_id) oracleIds.add(sf.oracle_id)
-          else if (c.oracle_id) oracleIds.add(c.oracle_id)
+          const oid = c.oracle_id ?? sf?.oracle_id
+          if (oid) oracleIdsToResolve.add(oid)
         }
       }
-      const oldestByOracle = new Map<string, string>()
-      await Promise.all(Array.from(oracleIds).map(async oid => {
-        const id = await getOldestPrintingId(oid)
-        if (id) oldestByOracle.set(oid, id)
-      }))
-      const additionalIds = Array.from(oldestByOracle.values()).filter(id => !sfMap.has(id))
-      if (additionalIds.length > 0) {
-        const more = await getCardsByIds(additionalIds)
-        more.forEach(c => sfMap.set(c.id, c))
+      const defaultByOracle = new Map<string, ScryfallCard>()
+      if (oracleIdsToResolve.size > 0) {
+        const resolved = await getCardsByOracleIds(Array.from(oracleIdsToResolve))
+        for (const sf of resolved) {
+          if (sf.oracle_id) {
+            defaultByOracle.set(sf.oracle_id, sf)
+            sfMap.set(sf.id, sf)
+          }
+        }
       }
 
       const hydrated: DeckCard[] = cardsData.map(c => {
         const baseSf = sfMap.get(c.scryfall_id)
         const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
         let effectiveId = c.printing_scryfall_id || c.scryfall_id
-        if (!c.printing_scryfall_id && oracleId && oldestByOracle.has(oracleId)) {
-          effectiveId = oldestByOracle.get(oracleId)!
+        if (!c.printing_scryfall_id && oracleId && defaultByOracle.has(oracleId)) {
+          effectiveId = defaultByOracle.get(oracleId)!.id
         }
         const effSf = sfMap.get(effectiveId) ?? baseSf
         const finish = (c.finish ?? 'nonfoil') as 'nonfoil' | 'foil' | 'etched'
@@ -475,31 +477,32 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const sfCards = await getCardsByIds(Array.from(ids))
     const sfMap = new Map(sfCards.map(c => [c.id, c]))
 
-    // Resolve oldest printings for snapshot cards with no chosen printing
-    const oracleIds = new Set<string>()
+    // Resolve a default printing for snapshot cards with no chosen printing —
+    // same batched /cards/collection approach as fetchDeck.
+    const oracleIdsSnap = new Set<string>()
     for (const c of snap.cards) {
       if (!c.printing_scryfall_id) {
         const oid = c.oracle_id ?? sfMap.get(c.scryfall_id)?.oracle_id
-        if (oid) oracleIds.add(oid)
+        if (oid) oracleIdsSnap.add(oid)
       }
     }
-    const oldestByOracle = new Map<string, string>()
-    await Promise.all(Array.from(oracleIds).map(async oid => {
-      const id = await getOldestPrintingId(oid)
-      if (id) oldestByOracle.set(oid, id)
-    }))
-    const additionalIds = Array.from(oldestByOracle.values()).filter(id => !sfMap.has(id))
-    if (additionalIds.length) {
-      const more = await getCardsByIds(additionalIds)
-      more.forEach(c => sfMap.set(c.id, c))
+    const defaultByOracleSnap = new Map<string, ScryfallCard>()
+    if (oracleIdsSnap.size > 0) {
+      const resolved = await getCardsByOracleIds(Array.from(oracleIdsSnap))
+      for (const sf of resolved) {
+        if (sf.oracle_id) {
+          defaultByOracleSnap.set(sf.oracle_id, sf)
+          sfMap.set(sf.id, sf)
+        }
+      }
     }
 
     const hydrated: DeckCard[] = snap.cards.map((c, i) => {
       const baseSf = sfMap.get(c.scryfall_id)
       const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
       let effectiveId = c.printing_scryfall_id || c.scryfall_id
-      if (!c.printing_scryfall_id && oracleId && oldestByOracle.has(oracleId)) {
-        effectiveId = oldestByOracle.get(oracleId)!
+      if (!c.printing_scryfall_id && oracleId && defaultByOracleSnap.has(oracleId)) {
+        effectiveId = defaultByOracleSnap.get(oracleId)!.id
       }
       const effSf = sfMap.get(effectiveId) ?? baseSf
       return {

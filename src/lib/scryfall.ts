@@ -104,6 +104,16 @@ export function getCardsCollection(names: string[]): Promise<ScryfallCard[]> {
   return fetchCollection(names.map(name => ({ name })))
 }
 
+/**
+ * Batch-fetch one representative card per oracle_id — max 75 per request.
+ * Scryfall returns its "preferred" printing (usually a recent reprint with
+ * clean imagery). Use this to resolve a display card for unassigned deck slots
+ * instead of firing one /cards/search per oracle_id.
+ */
+export function getCardsByOracleIds(oracleIds: string[]): Promise<ScryfallCard[]> {
+  return fetchCollection(oracleIds.map(id => ({ oracle_id: id })))
+}
+
 /** Lookup a specific printing by set + collector number. */
 export async function getCardBySetAndCN(set: string, collectorNumber: string): Promise<ScryfallCard | null> {
   try {
