@@ -189,3 +189,68 @@ export async function getOldestPrintingId(oracleId: string): Promise<string | nu
   const prints = await getPrintingsByOracleId(oracleId)
   return prints[0]?.id ?? null
 }
+
+// Cache: oracle_id -> oldest ScryfallCard
+const oldestPrintingByOracle = new Map<string, ScryfallCard>()
+
+/**
+ * Batch-resolve the oldest printing for each oracle_id in one shot.
+ *
+ * Uses Scryfall search with compound `oracleid:A OR oracleid:B ...` queries
+ * and `unique=prints&order=released&dir=asc`. Because results are sorted
+ * oldest-first globally, the first time we see each oracle_id IS its oldest
+ * printing — we stop paginating once all oracle_ids in the batch are resolved.
+ *
+ * 100 oracle_ids → 4 batches of 25, run 3 concurrently → ~4–8 total requests.
+ */
+export async function getOldestPrintingsByOracleIds(
+  oracleIds: string[]
+): Promise<Map<string, ScryfallCard>> {
+  const result = new Map<string, ScryfallCard>()
+  const toFetch: string[] = []
+
+  for (const oid of oracleIds) {
+    const hit = oldestPrintingByOracle.get(oid)
+    if (hit) result.set(oid, hit)
+    else toFetch.push(oid)
+  }
+  if (toFetch.length === 0) return result
+
+  const BATCH = 25
+  const CONCURRENCY = 3
+
+  const runBatch = async (batch: string[]): Promise<void> => {
+    const pending = new Set(batch)
+    const q = batch.map(id => `oracleid:${id}`).join(' OR ')
+    let url: string | null =
+      `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=prints&order=released&dir=asc`
+    try {
+      while (url && pending.size > 0) {
+        const res = await fetch(url)
+        if (!res.ok) break
+        const json: { data?: ScryfallCard[]; has_more?: boolean; next_page?: string } = await res.json()
+        for (const card of json.data ?? []) {
+          if (card.oracle_id && pending.has(card.oracle_id)) {
+            result.set(card.oracle_id, card)
+            oldestPrintingByOracle.set(card.oracle_id, card)
+            pending.delete(card.oracle_id)
+          }
+        }
+        url = json.has_more && pending.size > 0 ? (json.next_page ?? null) : null
+        if (url) await new Promise(r => setTimeout(r, 100))
+      }
+    } catch (err) {
+      console.error('getOldestPrintingsByOracleIds error:', err)
+    }
+  }
+
+  const batches: string[][] = []
+  for (let i = 0; i < toFetch.length; i += BATCH) batches.push(toFetch.slice(i, i + BATCH))
+
+  for (let i = 0; i < batches.length; i += CONCURRENCY) {
+    await Promise.all(batches.slice(i, i + CONCURRENCY).map(runBatch))
+    if (i + CONCURRENCY < batches.length) await new Promise(r => setTimeout(r, 150))
+  }
+
+  return result
+}

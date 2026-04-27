@@ -12,7 +12,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsByIds, getCardsByOracleIds, getCard, getPrintingsByOracleId, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
+import { searchCards, getCardsByIds, getOldestPrintingsByOracleIds, getCard, getPrintingsByOracleId, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/types"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
@@ -236,16 +236,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           if (oid) oracleIdsToResolve.add(oid)
         }
       }
-      const defaultByOracle = new Map<string, ScryfallCard>()
-      if (oracleIdsToResolve.size > 0) {
-        const resolved = await getCardsByOracleIds(Array.from(oracleIdsToResolve))
-        for (const sf of resolved) {
-          if (sf.oracle_id) {
-            defaultByOracle.set(sf.oracle_id, sf)
-            sfMap.set(sf.id, sf)
-          }
-        }
-      }
+      const defaultByOracle = await getOldestPrintingsByOracleIds(Array.from(oracleIdsToResolve))
+      for (const sf of defaultByOracle.values()) sfMap.set(sf.id, sf)
 
       const hydrated: DeckCard[] = cardsData.map(c => {
         const baseSf = sfMap.get(c.scryfall_id)
@@ -486,16 +478,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         if (oid) oracleIdsSnap.add(oid)
       }
     }
-    const defaultByOracleSnap = new Map<string, ScryfallCard>()
-    if (oracleIdsSnap.size > 0) {
-      const resolved = await getCardsByOracleIds(Array.from(oracleIdsSnap))
-      for (const sf of resolved) {
-        if (sf.oracle_id) {
-          defaultByOracleSnap.set(sf.oracle_id, sf)
-          sfMap.set(sf.id, sf)
-        }
-      }
-    }
+    const defaultByOracleSnap = await getOldestPrintingsByOracleIds(Array.from(oracleIdsSnap))
+    for (const sf of defaultByOracleSnap.values()) sfMap.set(sf.id, sf)
 
     const hydrated: DeckCard[] = snap.cards.map((c, i) => {
       const baseSf = sfMap.get(c.scryfall_id)
