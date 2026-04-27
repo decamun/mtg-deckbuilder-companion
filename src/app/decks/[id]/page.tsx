@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use, useRef, useMemo } from "react"
 import { motion } from "framer-motion"
-import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon } from "lucide-react"
+import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -101,6 +101,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [primerEditing, setPrimerEditing] = useState(false)
   const [primerMarkdown, setPrimerMarkdown] = useState("")
+  const [cardsLoading, setCardsLoading] = useState(true)
   const [printingsByCard, setPrintingsByCard] = useState<Record<string, ScryfallPrinting[]>>({})
   const [viewing, setViewing] = useState<ViewingSnapshotState | null>(null)
 
@@ -213,21 +214,53 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     }
 
     if (cardsData) {
-      // Resolve effective printing id for each card (printing_scryfall_id ?? scryfall_id;
-      // for cards with NULL printing we still want the oldest printing's image).
       const idsToFetch = new Set<string>()
-      for (const c of cardsData) {
-        idsToFetch.add(c.printing_scryfall_id || c.scryfall_id)
-      }
+      for (const c of cardsData) idsToFetch.add(c.printing_scryfall_id || c.scryfall_id)
       if (deckData.cover_image_scryfall_id) idsToFetch.add(deckData.cover_image_scryfall_id)
 
       const sfCards = await getCardsByIds(Array.from(idsToFetch))
       const sfMap = new Map(sfCards.map(c => [c.id, c]))
 
-      // For cards with no chosen printing, resolve a default display card via a
-      // single batched /cards/collection call (oracle_id identifiers). This replaces
-      // the previous approach of one /cards/search per oracle_id, which caused 429s
-      // and multi-minute load times on large decks.
+      // Shared hydration helper — called twice: once with an empty oracle map
+      // (fast, shows whatever printing the card was added with), then again
+      // once the oracle lookup resolves (updates to oldest printing).
+      const buildHydrated = (defaultByOracle: Map<string, ScryfallCard>): DeckCard[] =>
+        cardsData.map(c => {
+          const baseSf = sfMap.get(c.scryfall_id)
+          const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
+          let effectiveId = c.printing_scryfall_id || c.scryfall_id
+          if (!c.printing_scryfall_id && oracleId && defaultByOracle.has(oracleId)) {
+            effectiveId = defaultByOracle.get(oracleId)!.id
+          }
+          const effSf = sfMap.get(effectiveId) ?? baseSf
+          const finish = (c.finish ?? 'nonfoil') as 'nonfoil' | 'foil' | 'etched'
+          return {
+            ...c,
+            oracle_id: oracleId,
+            finish,
+            printing_scryfall_id: c.printing_scryfall_id ?? null,
+            image_url: effSf?.image_uris?.normal,
+            type_line: effSf?.type_line || '',
+            mana_cost: effSf?.mana_cost || '',
+            cmc: effSf?.cmc ?? (effSf ? calculateCmc(effSf.mana_cost) : 0),
+            colors: effSf?.colors ?? [],
+            set_code: effSf?.set,
+            collector_number: effSf?.collector_number,
+            available_finishes: effSf?.finishes,
+            price_usd: pickPrice(effSf?.prices, finish),
+            effective_printing_id: effectiveId,
+          }
+        })
+
+      // Phase 1: show cards immediately with whatever printing we already have.
+      // Cards with a chosen printing are already correct; others show the
+      // scryfall_id image as a stand-in until the oracle lookup finishes.
+      setCards(buildHydrated(new Map()))
+      setCardsLoading(false)
+
+      // Phase 2: resolve the oldest printing for cards with no chosen printing,
+      // then update images in-place. Uses functional setCards to merge against
+      // current state, preserving images if a fetch fails (e.g. 429).
       const oracleIdsToResolve = new Set<string>()
       for (const c of cardsData) {
         if (!c.printing_scryfall_id) {
@@ -239,39 +272,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       const defaultByOracle = await getOldestPrintingsByOracleIds(Array.from(oracleIdsToResolve))
       for (const sf of defaultByOracle.values()) sfMap.set(sf.id, sf)
 
-      const hydrated: DeckCard[] = cardsData.map(c => {
-        const baseSf = sfMap.get(c.scryfall_id)
-        const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
-        let effectiveId = c.printing_scryfall_id || c.scryfall_id
-        if (!c.printing_scryfall_id && oracleId && defaultByOracle.has(oracleId)) {
-          effectiveId = defaultByOracle.get(oracleId)!.id
-        }
-        const effSf = sfMap.get(effectiveId) ?? baseSf
-        const finish = (c.finish ?? 'nonfoil') as 'nonfoil' | 'foil' | 'etched'
-        return {
-          ...c,
-          oracle_id: oracleId,
-          finish,
-          printing_scryfall_id: c.printing_scryfall_id ?? null,
-          image_url: effSf?.image_uris?.normal,
-          type_line: effSf?.type_line || '',
-          mana_cost: effSf?.mana_cost || '',
-          cmc: effSf?.cmc ?? (effSf ? calculateCmc(effSf.mana_cost) : 0),
-          colors: effSf?.colors ?? [],
-          set_code: effSf?.set,
-          collector_number: effSf?.collector_number,
-          available_finishes: effSf?.finishes,
-          price_usd: pickPrice(effSf?.prices, finish),
-          effective_printing_id: effectiveId,
-        }
-      })
-      // Preserve hydrated fields from previous state when this fetch lost some
-      // (e.g. Scryfall 429). Without this, a transient rate-limit blanks every
-      // image until the user triggers another action. Functional setCards
-      // ensures we merge against *current* state, not the closure's stale copy.
+      const phase2 = buildHydrated(defaultByOracle)
       setCards(prev => {
         const prevById = new Map(prev.map(c => [c.id, c]))
-        return hydrated.map(h => {
+        return phase2.map(h => {
           if (h.image_url) return h
           const p = prevById.get(h.id)
           if (!p || p.effective_printing_id !== h.effective_printing_id || p.finish !== h.finish) return h
@@ -880,6 +884,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       <div className="flex-1 overflow-y-auto bg-background/20">
         <div className="p-6 max-w-6xl mx-auto space-y-8">
         {tab === 'decklist' && (<>
+          {cardsLoading && cards.length === 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="aspect-[5/7] rounded-xl border border-border/30 bg-card/30 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/30" />
+                </div>
+              ))}
+            </div>
+          )}
           {Object.entries(groupedCards)
             .sort(([a], [b]) => {
               if (a === 'Untagged') return 1
@@ -920,7 +933,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           draggable
                           onDragStart={(e) => { isDragging.current = true; e.dataTransfer.setData('cardId', c.id) }}
                         >
-                          <img src={c.image_url} className="w-full h-full object-cover" />
+                          {c.image_url
+                            ? <img src={c.image_url} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center bg-card/50"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground/40" /></div>
+                          }
                           {commanderIds.includes(c.scryfall_id) && (
                             <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg">
                               <Crown className="w-2.5 h-2.5" /> CMD
@@ -1073,11 +1089,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 }}
                                 transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.4 }}
                               >
-                                <img
-                                  src={card.image_url}
-                                  className="w-full rounded-xl border border-black/60 shadow-xl"
-                                  draggable={false}
-                                />
+                                {card.image_url
+                                  ? <img src={card.image_url} className="w-full rounded-xl border border-black/60 shadow-xl" draggable={false} />
+                                  : <div className="w-full aspect-[5/7] rounded-xl border border-border/40 bg-card/50 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground/40" /></div>
+                                }
                                 {card.quantity > 1 && (
                                   <div className="absolute top-2 right-2 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
                                     {card.quantity}x
