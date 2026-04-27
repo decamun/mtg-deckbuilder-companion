@@ -16,6 +16,7 @@ import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
+
 type Mode = "auth" | "forgot"
 
 interface LoginDialogProps {
@@ -33,19 +34,6 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
   useEffect(() => {
     if (!open) setMode("auth")
   }, [open])
-
-  useEffect(() => {
-    const handleMessage = async (e: MessageEvent) => {
-      if (e.origin !== window.location.origin || e.data !== "auth-complete") return
-      const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        onOpenChange(false)
-        router.push("/brew")
-      }
-    }
-    window.addEventListener("message", handleMessage)
-    return () => window.removeEventListener("message", handleMessage)
-  }, [onOpenChange, router])
 
   const handleAuth = async (action: "login" | "signup") => {
     setLoading(true)
@@ -89,16 +77,12 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     }
   }
 
-  const handleGoogleOAuth = () => {
-    const width = 500
-    const height = 620
-    const left = Math.round(window.screenX + (window.outerWidth - width) / 2)
-    const top = Math.round(window.screenY + (window.outerHeight - height) / 2)
-    window.open(
-      "/auth/google-popup",
-      "google-oauth",
-      `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
-    )
+  const handleGoogleOAuth = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    })
+    if (error) toast.error(error.message)
   }
 
   return (

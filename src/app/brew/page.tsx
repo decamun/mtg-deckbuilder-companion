@@ -225,7 +225,7 @@ export default function BrewPage() {
   // After sign-in, auto-resume a pending commander selection
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event !== "SIGNED_IN" || !session?.user) return
+      if ((event !== "SIGNED_IN" && event !== "INITIAL_SESSION") || !session?.user) return
       const raw = sessionStorage.getItem(PENDING_COMMANDER_KEY)
       if (!raw) return
       sessionStorage.removeItem(PENDING_COMMANDER_KEY)
