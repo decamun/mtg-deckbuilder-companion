@@ -12,15 +12,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 2. Do not run `npm run dev` or other node scripts directly on the host machine. Instead, use `docker-compose up` or execute commands inside the container.
 3. If you need to run specific tools (like adding a Shadcn UI component), do it by prefixing with the appropriate docker-compose command, e.g., `docker-compose exec web npx shadcn add ...`.
 
-## Active Work
+## Testing Backend Changes
 
-**Branch `claude/mcp-api-integration-Z77S6`** has an implementation plan in progress.  
-Read **`docs/mcp-api-integration-plan.md`** before starting any work on MCP, API keys, or the `src/lib/mcp*.ts` / `src/app/api/` area.
+End-to-end backend testing (migrations, API routes that hit the DB, etc.) is only possible when the agent is running inside a cloud container that has been provisioned with the full local backend — i.e. a Docker daemon + the local Supabase stack + the `supabase` CLI. Most agent sessions are **not** in such an environment.
 
-This branch is designed to run in the **custom Docker + Supabase cloud environment**, which provides:
-- Docker daemon + `docker compose` (full containerization as normal)
-- Local Supabase stack on port 54321 (Studio on 54323)
-- Next.js app on port 3000
-- `supabase` CLI pre-installed for running `supabase db push`
+Before assuming you can test backend changes, sanity-check the environment:
+- `docker ps` succeeds (daemon is reachable)
+- `supabase --version` resolves
+- `curl -sf http://localhost:54321` reaches the local Supabase stack (Studio on 54323, app on 3000)
 
-In that environment, apply migrations with `supabase db push` (not inside the container) and execute all other commands via `docker compose exec web <cmd>` as usual.
+**If all three pass:** you're in a properly configured cloud container. Apply migrations with `supabase db push` (run on the host, not inside the container) and run all other commands via `docker compose exec web <cmd>`.
+
+**If any of them fail:** you cannot exercise backend changes end-to-end. Write the code and migrations, verify with type-checks / unit tests / `next build` where possible, and explicitly call out anything that needs to be validated by a human (or a properly-provisioned agent) running the full Docker + Supabase stack.
