@@ -1,0 +1,235 @@
+import { tool } from 'ai'
+import { z } from 'zod'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import * as deckService from './deck-service'
+import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfall'
+
+/**
+ * Tools exposed to the in-app deck-editor agent.
+ *
+ * Each tool closes over (supabase, userId, deckId). The deckId is
+ * forced — the agent cannot edit other decks even if the model hallucinates
+ * one, because tools that take a deckId double-check it equals the bound deck.
+ */
+export function buildDeckAgentTools(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string
+) {
+  const enforceDeck = (id: string) => {
+    if (id !== deckId) {
+      throw new Error(`This conversation is bound to deck ${deckId}; cannot operate on ${id}`)
+    }
+  }
+
+  return {
+    search_scryfall: tool({
+      description:
+        'Search Scryfall using their full search syntax (e.g. "t:creature c:wu cmc<=3"). Returns up to `limit` card objects with image URLs.',
+      inputSchema: z.object({
+        query: z.string().min(1),
+        limit: z.number().int().min(1).max(50).default(10),
+      }),
+      execute: async ({ query, limit }) => {
+        const cards = await searchCards(query)
+        return {
+          total: cards.length,
+          cards: cards.slice(0, limit).map(projectScryfallCard),
+        }
+      },
+    }),
+
+    list_printings: tool({
+      description: 'List every printing of a card by oracle_id (call before set_card_printing).',
+      inputSchema: z.object({ oracle_id: z.string() }),
+      execute: async ({ oracle_id }) => {
+        const printings = await getPrintingsByOracleId(oracle_id)
+        return printings.map((p) => ({
+          id: p.id,
+          set: p.set,
+          set_name: p.set_name,
+          collector_number: p.collector_number,
+          released_at: p.released_at,
+          finishes: p.finishes,
+        }))
+      },
+    }),
+
+    get_deck: tool({
+      description: 'Get this deck\'s metadata.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const deck = await deckService.getDeck(supabase, userId, deckId)
+        return {
+          id: deck.id,
+          name: deck.name,
+          format: deck.format,
+          description: deck.description,
+          commander_scryfall_ids: deck.commander_scryfall_ids,
+          cover_image_scryfall_id: deck.cover_image_scryfall_id,
+        }
+      },
+    }),
+
+    get_decklist: tool({
+      description: 'Get every card in this deck. Returns deck_card_ids, scryfall_ids, oracle_ids, quantity, finish, tags.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const cards = await deckService.getDecklist(supabase, userId, deckId)
+        return cards.map((c) => ({
+          deck_card_id: c.id,
+          name: c.name,
+          quantity: c.quantity,
+          scryfall_id: c.scryfall_id,
+          oracle_id: c.oracle_id,
+          printing_scryfall_id: c.printing_scryfall_id,
+          finish: c.finish,
+          tags: c.tags,
+        }))
+      },
+    }),
+
+    add_card: tool({
+      description: 'Add a card to the deck. Auto-increments quantity if the card is already there.',
+      inputSchema: z.object({
+        scryfall_id: z.string(),
+        name: z.string(),
+        oracle_id: z.string().nullable().optional(),
+        printing_scryfall_id: z.string().nullable().optional(),
+        quantity: z.number().int().min(1).default(1),
+        finish: z.enum(['nonfoil', 'foil', 'etched']).optional(),
+      }),
+      execute: async (input) => {
+        const row = await deckService.addCard(supabase, userId, deckId, {
+          scryfall_id: input.scryfall_id,
+          name: input.name,
+          oracle_id: input.oracle_id ?? null,
+          printing_scryfall_id: input.printing_scryfall_id ?? null,
+          quantity: input.quantity,
+          finish: input.finish,
+        })
+        return { deck_card_id: row.id, name: row.name, quantity: row.quantity }
+      },
+    }),
+
+    remove_card: tool({
+      description: 'Remove a card entry from the deck (regardless of quantity).',
+      inputSchema: z.object({ deck_card_id: z.string() }),
+      execute: async ({ deck_card_id }) => {
+        await deckService.removeCard(supabase, userId, deck_card_id)
+        return { removed: deck_card_id }
+      },
+    }),
+
+    set_card_quantity: tool({
+      description: 'Set a card\'s quantity. 0 deletes the entry.',
+      inputSchema: z.object({
+        deck_card_id: z.string(),
+        quantity: z.number().int().min(0),
+      }),
+      execute: async ({ deck_card_id, quantity }) => {
+        const row = await deckService.setCardQuantity(supabase, userId, deck_card_id, quantity)
+        return row ? { deck_card_id: row.id, quantity: row.quantity } : { removed: deck_card_id }
+      },
+    }),
+
+    add_card_tag: tool({
+      description: 'Add a tag to a card.',
+      inputSchema: z.object({ deck_card_id: z.string(), tag: z.string().min(1) }),
+      execute: async ({ deck_card_id, tag }) => {
+        const row = await deckService.addCardTag(supabase, userId, deck_card_id, tag)
+        return { deck_card_id: row.id, tags: row.tags }
+      },
+    }),
+
+    remove_card_tag: tool({
+      description: 'Remove a tag from a card.',
+      inputSchema: z.object({ deck_card_id: z.string(), tag: z.string().min(1) }),
+      execute: async ({ deck_card_id, tag }) => {
+        const row = await deckService.removeCardTag(supabase, userId, deck_card_id, tag)
+        return { deck_card_id: row.id, tags: row.tags }
+      },
+    }),
+
+    set_card_tags: tool({
+      description: 'Replace all tags on a card.',
+      inputSchema: z.object({ deck_card_id: z.string(), tags: z.array(z.string()) }),
+      execute: async ({ deck_card_id, tags }) => {
+        const row = await deckService.setCardTags(supabase, userId, deck_card_id, tags)
+        return { deck_card_id: row.id, tags: row.tags }
+      },
+    }),
+
+    set_card_printing: tool({
+      description: 'Override the printing on a card. null reverts to the default printing.',
+      inputSchema: z.object({
+        deck_card_id: z.string(),
+        printing_scryfall_id: z.string().nullable(),
+      }),
+      execute: async ({ deck_card_id, printing_scryfall_id }) => {
+        const row = await deckService.setCardPrinting(
+          supabase,
+          userId,
+          deck_card_id,
+          printing_scryfall_id
+        )
+        return { deck_card_id: row.id, printing_scryfall_id: row.printing_scryfall_id }
+      },
+    }),
+
+    set_card_finish: tool({
+      description: 'Set the finish (foil/etched/nonfoil) on a card.',
+      inputSchema: z.object({
+        deck_card_id: z.string(),
+        finish: z.enum(['nonfoil', 'foil', 'etched']),
+      }),
+      execute: async ({ deck_card_id, finish }) => {
+        const row = await deckService.setCardFinish(supabase, userId, deck_card_id, finish)
+        return { deck_card_id: row.id, finish: row.finish }
+      },
+    }),
+
+    set_commanders: tool({
+      description: 'Set the commander scryfall_ids for this deck (max 2). Empty array clears.',
+      inputSchema: z.object({
+        deck_id: z.string(),
+        scryfall_ids: z.array(z.string()).max(2),
+      }),
+      execute: async ({ deck_id, scryfall_ids }) => {
+        enforceDeck(deck_id)
+        const row = await deckService.setCommanders(supabase, userId, deck_id, scryfall_ids)
+        return { commander_scryfall_ids: row.commander_scryfall_ids }
+      },
+    }),
+
+    set_cover_image: tool({
+      description: 'Set the deck cover image to a scryfall_id (or null to clear).',
+      inputSchema: z.object({
+        deck_id: z.string(),
+        scryfall_id: z.string().nullable(),
+      }),
+      execute: async ({ deck_id, scryfall_id }) => {
+        enforceDeck(deck_id)
+        const row = await deckService.setCoverImage(supabase, userId, deck_id, scryfall_id)
+        return { cover_image_scryfall_id: row.cover_image_scryfall_id }
+      },
+    }),
+  }
+}
+
+function projectScryfallCard(c: ScryfallCard) {
+  return {
+    id: c.id,
+    oracle_id: c.oracle_id,
+    name: c.name,
+    type_line: c.type_line,
+    mana_cost: c.mana_cost,
+    cmc: c.cmc,
+    colors: c.colors,
+    color_identity: c.color_identity,
+    set: c.set,
+    set_name: c.set_name,
+    collector_number: c.collector_number,
+    image_url: c.image_uris?.normal ?? null,
+  }
+}

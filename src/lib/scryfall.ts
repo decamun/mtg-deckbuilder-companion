@@ -45,11 +45,28 @@ export async function searchCards(query: string): Promise<ScryfallCard[]> {
   }
 }
 
+/**
+ * Module-level cache shared across all helpers in this file. Keyed by
+ * Scryfall id. Lifetime = page lifetime — fresh on full reload, no LRU.
+ *
+ * Realtime updates re-run fetchDeck on every deck_cards change; without this
+ * cache, a 100-card deck round-trips ~200KB through Scryfall on every tag edit.
+ */
+const cardCache = new Map<string, ScryfallCard>()
+
+function rememberCards(cards: ScryfallCard[]) {
+  for (const c of cards) cardCache.set(c.id, c)
+}
+
 export async function getCard(id: string): Promise<ScryfallCard | null> {
+  const hit = cardCache.get(id)
+  if (hit) return hit
   try {
     const res = await fetch(`https://api.scryfall.com/cards/${id}`)
     if (!res.ok) return null
-    return res.json()
+    const card = (await res.json()) as ScryfallCard
+    cardCache.set(card.id, card)
+    return card
   } catch (error) {
     console.error("Scryfall getCard error:", error)
     return null
@@ -94,14 +111,31 @@ async function fetchCollection(identifiers: object[]): Promise<ScryfallCard[]> {
   return allCards
 }
 
-/** Batch-fetch cards by Scryfall UUID — max 75 per request, chunked automatically */
-export function getCardsByIds(ids: string[]): Promise<ScryfallCard[]> {
-  return fetchCollection(ids.map(id => ({ id })))
+/**
+ * Batch-fetch cards by Scryfall UUID — max 75 per request, chunked automatically.
+ *
+ * Cache-aware: ids already in `cardCache` are served locally and only the
+ * misses hit Scryfall. Fetched cards are cached for subsequent calls.
+ */
+export async function getCardsByIds(ids: string[]): Promise<ScryfallCard[]> {
+  const out: ScryfallCard[] = []
+  const missing: string[] = []
+  for (const id of ids) {
+    const hit = cardCache.get(id)
+    if (hit) out.push(hit)
+    else missing.push(id)
+  }
+  if (missing.length === 0) return out
+  const fetched = await fetchCollection(missing.map(id => ({ id })))
+  rememberCards(fetched)
+  return [...out, ...fetched]
 }
 
 /** Batch-fetch cards by name — max 75 per request, chunked automatically */
-export function getCardsCollection(names: string[]): Promise<ScryfallCard[]> {
-  return fetchCollection(names.map(name => ({ name })))
+export async function getCardsCollection(names: string[]): Promise<ScryfallCard[]> {
+  const fetched = await fetchCollection(names.map(name => ({ name })))
+  rememberCards(fetched)
+  return fetched
 }
 
 /**
@@ -110,8 +144,35 @@ export function getCardsCollection(names: string[]): Promise<ScryfallCard[]> {
  * clean imagery). Use this to resolve a display card for unassigned deck slots
  * instead of firing one /cards/search per oracle_id.
  */
-export function getCardsByOracleIds(oracleIds: string[]): Promise<ScryfallCard[]> {
-  return fetchCollection(oracleIds.map(id => ({ oracle_id: id })))
+export async function getCardsByOracleIds(oracleIds: string[]): Promise<ScryfallCard[]> {
+  const fetched = await fetchCollection(oracleIds.map(id => ({ oracle_id: id })))
+  rememberCards(fetched)
+  return fetched
+}
+
+/**
+ * Cheap CMC parser. Prefer `card.cmc` directly; fall back to this only when
+ * Scryfall didn't return one (e.g. legacy snapshot rows).
+ *
+ * Limitations: counts `{X}` as 1 and unknown tokens as 1.
+ */
+export function calculateCmc(manaCost: string | undefined | null): number {
+  if (!manaCost) return 0
+  const matches = manaCost.match(/\{[^}]+\}/g)
+  if (!matches) return 0
+  let cmc = 0
+  for (const m of matches) {
+    const v = parseInt(m.replace(/[{}]/g, ''))
+    cmc += isNaN(v) ? 1 : v
+  }
+  return cmc
+}
+
+/** Prefer `sf.cmc` when present; otherwise parse the mana_cost. */
+export function cmcOf(card: { cmc?: number; mana_cost?: string } | null | undefined): number {
+  if (!card) return 0
+  if (typeof card.cmc === 'number') return card.cmc
+  return calculateCmc(card.mana_cost)
 }
 
 /** Lookup a specific printing by set + collector number. */

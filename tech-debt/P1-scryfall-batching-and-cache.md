@@ -1,6 +1,6 @@
 # P1 · Scryfall Batching & In-Memory Cache
 
-**Status:** ⚠️ Partial — batching shipped; module-level cache and a few hygiene items still pending.
+**Status:** ✅ **Resolved on `claude/mcp-tech-debt-decks-VYAtJ`.** Module-level `cardCache` ships in `src/lib/scryfall.ts`; `getCardsByIds` is cache-aware; `calculateCmc` was hoisted to module scope and `cmcOf(card)` prefers `sf.cmc` when present. Item 3 (re-evaluate `mana_cost`-only CMC) is folded into `cmcOf`.
 
 ## Background
 

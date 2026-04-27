@@ -1,6 +1,6 @@
 # P2 · Migrate MCP Server to App Router Route Handlers
 
-**Status:** ❌ Not started — every phase still applies.
+**Status:** ✅ **Resolved on `claude/mcp-tech-debt-decks-VYAtJ`.** See `docs/mcp-api-integration-plan.md`. Streamable-HTTP transport replaced the SSE/messages pair, and `src/pages/` has been deleted.
 
 ## Background
 

@@ -52,8 +52,10 @@ export function DecksSection() {
   }, [])
 
   const fetchDecks = async () => {
-    const { data: session } = await supabase.auth.getSession()
-    if (!session.session) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
       setIsAuthenticated(false)
       setLoading(false)
       return
@@ -63,7 +65,7 @@ export function DecksSection() {
     const { data, error } = await supabase
       .from("decks")
       .select("*")
-      .eq("user_id", session.session.user.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
     if (error) {
