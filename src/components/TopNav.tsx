@@ -71,14 +71,33 @@ export function TopNav() {
     router.push("/brew")
   }
 
+  // Scroll to a shell section accounting for the sticky navbar height.
+  // Brew is always at the very top (scrollTop 0); other sections use their
+  // document offset minus the 56px navbar so content isn't hidden behind it.
+  const scrollToSection = (id: string, behavior: ScrollBehavior = "smooth") => {
+    if (id === "brew") {
+      window.scrollTo({ top: 0, behavior })
+      return
+    }
+    const el = document.getElementById(id)
+    if (!el) return
+    const top = el.getBoundingClientRect().top + window.scrollY - 56
+    window.scrollTo({ top: Math.max(0, top), behavior })
+  }
+
   // When already inside the scroll shell, intercept nav clicks and scroll
   // in-page instead of navigating (which would cause a full re-render).
   const handleNavClick = (e: React.MouseEvent, href: string) => {
     if (SHELL_PATHS.has(activePath) && SHELL_PATHS.has(href)) {
       e.preventDefault()
-      document
-        .getElementById(href.slice(1))
-        ?.scrollIntoView({ behavior: "smooth" })
+      scrollToSection(href.slice(1))
+    }
+  }
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    if (SHELL_PATHS.has(activePath)) {
+      e.preventDefault()
+      scrollToSection("brew")
     }
   }
 
@@ -89,6 +108,7 @@ export function TopNav() {
         {/* Logo & name — always anchored left */}
         <Link
           href="/brew"
+          onClick={handleLogoClick}
           className="flex shrink-0 items-center gap-2.5"
         >
           <IdlebrewLogo className="h-7 w-auto text-foreground" />

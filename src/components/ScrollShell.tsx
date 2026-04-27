@@ -22,11 +22,17 @@ export function ScrollShell({ initialSection }: Props) {
   const decksRef = useRef<HTMLElement>(null)
   const blogRef = useRef<HTMLElement>(null)
 
-  // Jump to the requested section immediately after hydration
+  // Jump to the requested section immediately after hydration.
+  // Use window.scrollTo with explicit nav-aware offsets instead of
+  // scrollIntoView so brew lands at scrollTop 0 (no decks peeking at the
+  // bottom) and other sections land flush below the sticky navbar.
   useEffect(() => {
     if (initialSection === "brew") return
     const refMap = { decks: decksRef, blog: blogRef }
-    refMap[initialSection].current?.scrollIntoView({ behavior: "instant" })
+    const el = refMap[initialSection].current
+    if (!el) return
+    const top = el.getBoundingClientRect().top + window.scrollY - 56
+    window.scrollTo({ top: Math.max(0, top), behavior: "instant" })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update the URL and fire a nav event as the user scrolls between sections.
