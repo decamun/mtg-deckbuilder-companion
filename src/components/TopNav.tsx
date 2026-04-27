@@ -29,6 +29,12 @@ export function TopNav() {
   const [loginOpen, setLoginOpen] = useState(false)
 
   useEffect(() => {
+    const handler = () => setLoginOpen(true)
+    window.addEventListener("open-login-dialog", handler)
+    return () => window.removeEventListener("open-login-dialog", handler)
+  }, [])
+
+  useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null)
     })
