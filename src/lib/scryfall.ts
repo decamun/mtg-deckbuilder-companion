@@ -17,6 +17,7 @@ export interface ScryfallCard {
   collector_number?: string
   released_at?: string
   finishes?: string[]
+  keywords?: string[]
   prices?: {
     usd?: string | null
     usd_foil?: string | null
