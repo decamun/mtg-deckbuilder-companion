@@ -22,10 +22,30 @@ const NAV_LINKS = [
   { href: "/blog", label: "Blog", requiresAuth: false },
 ]
 
+// Paths that render the scroll shell — clicking their nav links scrolls
+// in-page rather than triggering a full navigation.
+const SHELL_PATHS = new Set(["/brew", "/decks", "/blog"])
+
 export function TopNav() {
   const pathname = usePathname()
   const router = useRouter()
   const [user, setUser] = useState<SupabaseUser | null>(null)
+  // activePath tracks the currently visible section, updated by the
+  // IntersectionObserver in ScrollShell via a "sectionchange" custom event.
+  const [activePath, setActivePath] = useState(pathname ?? "")
+
+  useEffect(() => {
+    setActivePath(pathname ?? "")
+  }, [pathname])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { path } = (e as CustomEvent<{ path: string }>).detail
+      setActivePath(path)
+    }
+    window.addEventListener("sectionchange", handler)
+    return () => window.removeEventListener("sectionchange", handler)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -44,6 +64,17 @@ export function TopNav() {
     router.push("/brew")
   }
 
+  // When already inside the scroll shell, intercept nav clicks and scroll
+  // in-page instead of navigating (which would cause a full re-render).
+  const handleNavClick = (e: React.MouseEvent, href: string) => {
+    if (SHELL_PATHS.has(activePath) && SHELL_PATHS.has(href)) {
+      e.preventDefault()
+      document
+        .getElementById(href.slice(1))
+        ?.scrollIntoView({ behavior: "smooth" })
+    }
+  }
+
   return (
     <header className="sticky top-0 z-50 shrink-0 border-b border-border bg-background/80 backdrop-blur-xl">
       <div className="container mx-auto flex h-14 items-center gap-6 px-4">
@@ -58,20 +89,20 @@ export function TopNav() {
           </span>
         </Link>
 
-        {/* Nav links — flow left after logo; auth links are invisible (not removed)
-            so the layout never shifts */}
+        {/* Nav links */}
         <nav className="flex items-center gap-1">
           {NAV_LINKS.map(({ href, label, requiresAuth }) => {
             const hidden = requiresAuth && !user
             const isActive =
-              pathname === href ||
-              (href !== "/" && (pathname?.startsWith(href + "/") ?? false))
+              activePath === href ||
+              (href !== "/" && activePath.startsWith(href + "/"))
             return (
               <Link
                 key={href}
                 href={href}
                 aria-hidden={hidden}
                 tabIndex={hidden ? -1 : undefined}
+                onClick={(e) => handleNavClick(e, href)}
                 className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
                   hidden ? "invisible pointer-events-none" : ""
                 } ${
