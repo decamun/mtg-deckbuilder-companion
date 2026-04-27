@@ -9,10 +9,10 @@ Of the four stub menu items called out in the original plan, two are now real:
 - **Set as Cover Image** — implemented at `src/app/decks/[id]/page.tsx:245` (`setAsCoverImage`). Toggles `decks.cover_image_scryfall_id`.
 - **Set as Commander** — implemented at `src/app/decks/[id]/page.tsx:230` (`setAsCommander`). Writes to a new `decks.commander_scryfall_ids text[]` column (see `supabase/migrations/20240419000001_commander_array.sql`) and supports up to 2 commanders. Better than the "disable with tooltip" stopgap the original doc proposed.
 
-Two are still TODO comments in `src/app/decks/page.tsx`:
+Two are still stubs in `src/components/DecksSection.tsx` (the deck list logic moved here from `src/app/decks/page.tsx`, which is now a 6-line shell):
 
-- `:258` — `<DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* TODO rename */ }}>`
-- `:261` — `<DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* TODO duplicate */ }}>`
+- `:348-353` — Rename `<DropdownMenuItem>` with `onClick={(e) => { e.stopPropagation() }}` — no handler wired.
+- `:354-360` — Duplicate `<DropdownMenuItem>` with `onClick={(e) => { e.stopPropagation() }}` — no handler wired.
 
 This doc reduces to wiring those two items.
 
@@ -29,9 +29,9 @@ This doc reduces to wiring those two items.
 
 ### Phase 1 — Rename Deck
 
-**File:** `src/app/decks/page.tsx`
+**File:** `src/components/DecksSection.tsx`
 
-1. Add dialog state near the existing `useState`s (around line 27):
+1. Add dialog state near the existing `useState`s (around line 46):
    ```ts
    const [renameDeckId, setRenameDeckId] = useState<string | null>(null)
    const [renameValue, setRenameValue] = useState("")
@@ -57,7 +57,7 @@ This doc reduces to wiring those two items.
    }
    ```
 
-3. Wire the existing menu item at `decks/page.tsx:258`:
+3. Wire the existing menu item at `DecksSection.tsx:348-353`:
    ```tsx
    onClick={(e) => {
      e.stopPropagation()
@@ -65,9 +65,9 @@ This doc reduces to wiring those two items.
      setRenameDeckId(deck.id)
    }}
    ```
-   (Note: `deck` is already in scope from the `decks.map` above — there's no need for the `decks.find` shown in the original plan.)
+   (`deck` is already in scope from the `decks.map` at line 306.)
 
-4. Add the dialog (next to the existing create-deck `<Dialog>`):
+4. Add the dialog (next to the existing create-deck `<Dialog>` around line 229):
    ```tsx
    <Dialog open={!!renameDeckId} onOpenChange={(open) => !open && setRenameDeckId(null)}>
      <DialogContent className="bg-card border-border text-foreground">
@@ -87,11 +87,11 @@ This doc reduces to wiring those two items.
      </DialogContent>
    </Dialog>
    ```
-   (`DialogFooter` isn't currently imported in this file — add it to the import list.)
+   (`DialogFooter` is not currently imported — add it to the `Dialog` import line.)
 
 ### Phase 2 — Duplicate Deck
 
-**File:** `src/app/decks/page.tsx`
+**File:** `src/components/DecksSection.tsx`
 
 1. Add a handler:
    ```ts
@@ -109,7 +109,7 @@ This doc reduces to wiring those two items.
          name: `${original.name} (Copy)`,
          user_id: user.id,
          format: original.format,
-         commander_scryfall_ids: (original as Deck).commander_scryfall_ids ?? [],
+         commander_scryfall_ids: original.commander_scryfall_ids ?? [],
          cover_image_scryfall_id: original.cover_image_scryfall_id,
        })
        .select()
@@ -132,11 +132,11 @@ This doc reduces to wiring those two items.
    }
    ```
 
-   Notes vs. the original plan:
-   - Carry over `commander_scryfall_ids` and `cover_image_scryfall_id` so the duplicate isn't a stripped copy. The schema now includes `commander_scryfall_ids: text[]` (see `supabase/migrations/20240419000001_commander_array.sql`).
-   - Once `src/lib/types.ts` exists (see `P2-eliminate-any-types.md`), drop the `(original as Deck)` cast.
+   Notes:
+   - `Deck` is already imported from `src/lib/types` at line 36, so `original.commander_scryfall_ids` is typed without a cast.
+   - Carry over `commander_scryfall_ids` and `cover_image_scryfall_id` so the duplicate isn't a stripped copy.
 
-2. Wire the existing menu item at `decks/page.tsx:261`:
+2. Wire the existing menu item at `DecksSection.tsx:354-360`:
    ```tsx
    onClick={(e) => handleDuplicate(deck.id, e)}
    ```
@@ -156,5 +156,5 @@ This doc reduces to wiring those two items.
 
 | File | Action |
 |---|---|
-| `src/app/decks/page.tsx` | Add rename state + dialog + handler; add `handleDuplicate`; wire two menu items; import `DialogFooter` |
+| `src/components/DecksSection.tsx` | Add rename state + dialog + handler; add `handleDuplicate`; wire two menu items; import `DialogFooter` |
 | `src/app/decks/[id]/page.tsx` | None — Phase 3/4 already shipped |

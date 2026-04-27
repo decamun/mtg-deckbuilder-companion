@@ -41,18 +41,18 @@ These weren't in the original doc but came up while auditing:
 
 ### 5. `getSession()` vs `getUser()` for auth-gated reads
 
-`getSession()` reads the local cookie without re-validating with Supabase. It's appropriate for cosmetic UI (e.g. `TopNav.tsx:30`) but **not** for redirect decisions. The middleware plan in `P2-auth-middleware.md` is the principled fix, but until it lands, swap these two sites to `getUser()`:
+`getSession()` reads the local cookie without re-validating with Supabase. It's appropriate for cosmetic UI (e.g. `TopNav.tsx:57`) but **not** for auth-gated reads. The middleware plan in `P2-auth-middleware.md` is the principled fix, but until it lands, swap these two sites to `getUser()`:
 
-- `src/app/decks/page.tsx:42`
-- `src/app/decks/[id]/page.tsx:131`
+- `src/components/DecksSection.tsx:55` (deck list; `src/app/decks/page.tsx` is now a 6-line shell — this is where the auth check actually lives)
+- `src/app/decks/[id]/page.tsx:197` (reads viewer ID to determine ownership)
 
 ### 6. Duplicated context-menu content in `decks/[id]/page.tsx`
 
 The visual view inlines the full menu in `<ContextMenuContent>` (lines 549–585) **and** also gets the same menu through `renderThreeDotMenu` → `renderDropdownItems` (lines 336–374). Two near-identical lists drift apart easily. Extract a single `cardMenuItems(c, groupName, ItemComponent)` helper used by both menus.
 
-### 7. `createDeck` in `src/app/brew/page.tsx` is doing too much
+### 7. `createDeck` in `src/components/BrewSection.tsx` is doing too much
 
-`createDeck` (lines 89–225) inserts a deck, inserts the commander, fetches Sol Ring, fetches EDHREC, picks land budget, splits into lands/spells, and inserts everything. It's ~135 lines and untestable. Extract:
+`createDeck` (lines 87–252) inserts a deck, inserts the commander, fetches Sol Ring, fetches EDHREC, picks land budget, splits into lands/spells, and inserts everything. It's ~166 lines and untestable. (The brew flow moved from `src/app/brew/page.tsx` to `src/components/BrewSection.tsx`.) Extract:
 
 - `buildBasicLandPlan(colorIdentity, edhrecLandSlots)` → array of `{ name, count }`
 - `splitEdhrecCardsByType(cards: ScryfallCard[])` → `{ lands, spells }`
@@ -70,13 +70,14 @@ The original `decks` schema has both `commander_scryfall_id text` (singular, fro
 
 ### 10. Unused `setSorting` setter in `decks/[id]/page.tsx`
 
-`const [sorting, setSorting] = useState<SortingMode>('name')` — `setSorting` is never called. Either wire up a sort selector in the toolbar (`name` vs. `mana`) or drop the setter and inline the constant. Surfaced by lint as `@typescript-eslint/no-unused-vars`.
+`const [sorting, setSorting] = useState<SortingMode>('name')` at line 76 — `setSorting` is never called anywhere in the file. Either wire up a sort selector in the toolbar (`name` vs. `mana`) or drop the setter and inline the constant. Surfaced by lint as `@typescript-eslint/no-unused-vars`.
 
 ## Files Touched (remaining work only)
 
 | File | Action |
 |---|---|
 | `src/app/decks/[id]/page.tsx` | Add `<ContextMenu>` wrapping for stack and list views; deduplicate menu content; drop unused `setSorting` or wire it up |
-| `src/app/decks/page.tsx`, `src/app/decks/[id]/page.tsx` | Swap `getSession()` for `getUser()` in auth-gated reads |
-| `src/app/brew/page.tsx` | Extract pure builders out of `createDeck` |
+| `src/components/DecksSection.tsx` | Swap `getSession()` for `getUser()` in auth-gated read |
+| `src/app/decks/[id]/page.tsx` | Swap `getSession()` for `getUser()` in viewer-ID read |
+| `src/components/BrewSection.tsx` | Extract pure builders out of `createDeck` |
 | `supabase/migrations/<new>.sql` | Drop unused `commander_scryfall_id` (singular) column |

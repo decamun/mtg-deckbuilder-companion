@@ -8,11 +8,11 @@
 
 Since this doc was written:
 
-- A reusable `fetchCollection` helper plus two thin wrappers (`getCardsByIds`, `getCardsCollection`) were added to `src/lib/scryfall.ts:47`. They chunk requests at 75 identifiers and sleep 150ms between chunks.
-- `fetchDeck` in `src/app/decks/[id]/page.tsx:166` now uses `getCardsByIds` and resolves card hydration in one batched POST.
-- `MyDecks` in `src/app/decks/page.tsx:61` uses `getCardsByIds` for cover images.
-- `/brew`'s `createDeck` uses `getCardsCollection` to resolve EDHREC card names.
-- Error handling on the deck/cards Supabase queries now exists at `src/app/decks/[id]/page.tsx:138-163`.
+- A reusable `fetchCollection` helper plus two thin wrappers (`getCardsByIds`, `getCardsCollection`) were added to `src/lib/scryfall.ts:70`. They chunk requests at 75 identifiers and sleep 150ms between chunks.
+- `fetchDeck` in `src/app/decks/[id]/page.tsx` now uses `getCardsByIds` and resolves card hydration in one batched POST.
+- `DecksSection` in `src/components/DecksSection.tsx:77` uses `getCardsByIds` for cover images. (The old `src/app/decks/page.tsx` is now a 6-line shell that renders `<ScrollShell initialSection="decks" />`; the deck list logic lives entirely in `DecksSection`.)
+- `/brew`'s `createDeck` in `src/components/BrewSection.tsx` uses `getCardsCollection` to resolve EDHREC card names. (The brew flow moved from `src/app/brew/page.tsx` to `src/components/BrewSection.tsx`.)
+- Error handling on the deck/cards Supabase queries now exists in `fetchDeck`.
 
 ## Resolution Summary
 
@@ -61,13 +61,13 @@ export async function getCardsByIdsCached(ids: string[]): Promise<Map<string, Sc
 ```
 
 Then update three call sites to use the cached helper:
-- `src/app/decks/[id]/page.tsx:166`
-- `src/app/decks/page.tsx:61` (cover-image batch)
-- `src/app/brew/page.tsx` Scryfall lookups
+- `src/app/decks/[id]/page.tsx` (in `fetchDeck`)
+- `src/components/DecksSection.tsx:77` (cover-image batch)
+- `src/components/BrewSection.tsx` (EDHREC card lookups)
 
 ### 2. Move `calculateCmc` out of the component
 
-`calculateCmc` is still defined inside `DeckWorkspace` at `src/app/decks/[id]/page.tsx:182`. It has no closure over component state. Hoist it to module scope (or into `src/lib/scryfall.ts`) so it isn't re-allocated on every render and can be unit-tested.
+`calculateCmc` is still defined inside `DeckWorkspace` at `src/app/decks/[id]/page.tsx:290`. It has no closure over component state. Hoist it to module scope (or into `src/lib/scryfall.ts`) so it isn't re-allocated on every render and can be unit-tested.
 
 ### 3. Re-evaluate `mana_cost`-only CMC
 
@@ -77,10 +77,10 @@ Then update three call sites to use the cached helper:
 
 | File | Action |
 |---|---|
-| `src/lib/scryfall.ts` | Add `cardCache`; wrap `getCard`; export `getCardsByIdsCached`; surface `cmc` on `ScryfallCard` |
+| `src/lib/scryfall.ts` | Add `cardCache`; wrap `getCard`; export `getCardsByIdsCached` |
 | `src/app/decks/[id]/page.tsx` | Switch to cached helper; hoist `calculateCmc` to module scope |
-| `src/app/decks/page.tsx` | Switch cover-image batch to cached helper |
-| `src/app/brew/page.tsx` | Switch EDHREC card lookup to cached helper |
+| `src/components/DecksSection.tsx` | Switch cover-image batch to cached helper |
+| `src/components/BrewSection.tsx` | Switch EDHREC card lookup to cached helper |
 
 ## Smoke Test (after changes)
 
