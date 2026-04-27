@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { User, LogOut, ChevronDown, Settings } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
+import { LoginDialog } from "@/components/LoginDialog"
 
 const NAV_LINKS = [
   { href: "/brew", label: "Brew", requiresAuth: false },
@@ -25,6 +26,13 @@ export function TopNav() {
   const pathname = usePathname()
   const router = useRouter()
   const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [loginOpen, setLoginOpen] = useState(false)
+
+  useEffect(() => {
+    const handler = () => setLoginOpen(true)
+    window.addEventListener("open-login-dialog", handler)
+    return () => window.removeEventListener("open-login-dialog", handler)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -34,6 +42,7 @@ export function TopNav() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
+      if (session?.user) setLoginOpen(false)
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -44,6 +53,7 @@ export function TopNav() {
   }
 
   return (
+    <>
     <header className="sticky top-0 z-50 shrink-0 border-b border-border bg-background/80 backdrop-blur-xl">
       <div className="container mx-auto flex h-14 items-center gap-6 px-4">
         {/* Logo & name — always anchored left */}
@@ -116,7 +126,7 @@ export function TopNav() {
                 </DropdownMenuItem>
               </>
             ) : (
-              <DropdownMenuItem onClick={() => router.push("/login")}>
+              <DropdownMenuItem onClick={() => setLoginOpen(true)}>
                 Log In
               </DropdownMenuItem>
             )}
@@ -124,5 +134,7 @@ export function TopNav() {
         </DropdownMenu>
       </div>
     </header>
+    <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
+    </>
   )
 }
