@@ -612,7 +612,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               className={c.printing_scryfall_id == null ? 'text-primary' : ''}
               onClick={() => setCardPrinting(c.id, null)}
             >
-              Default (oldest)
+              Default
             </DropdownMenuItem>
             {printings.length > 0 && <DropdownMenuSeparator className="bg-border" />}
             {printings.map(p => (
