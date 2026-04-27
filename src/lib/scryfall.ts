@@ -190,18 +190,22 @@ export async function getOldestPrintingId(oracleId: string): Promise<string | nu
   return prints[0]?.id ?? null
 }
 
-// Cache: oracle_id -> oldest ScryfallCard
+// Cache: oracle_id -> oldest ScryfallCard (survives re-renders within a session)
 const oldestPrintingByOracle = new Map<string, ScryfallCard>()
 
 /**
- * Batch-resolve the oldest printing for each oracle_id in one shot.
+ * Resolve the oldest printing for each oracle_id.
  *
- * Uses Scryfall search with compound `oracleid:A OR oracleid:B ...` queries
- * and `unique=prints&order=released&dir=asc`. Because results are sorted
- * oldest-first globally, the first time we see each oracle_id IS its oldest
- * printing — we stop paginating once all oracle_ids in the batch are resolved.
+ * One search per oracle_id (`unique=prints&order=released&dir=asc`), taking
+ * only `data[0]` — the oldest printing by definition. Runs up to 8 in
+ * parallel, with a 100ms pause between groups to stay within Scryfall's
+ * rate-limit guidance. Results are cached so re-fetches (e.g. Realtime
+ * triggers) are instant.
  *
- * 100 oracle_ids → 4 batches of 25, run 3 concurrently → ~4–8 total requests.
+ * Why not a compound `oracleid:A OR oracleid:B` query?  When results contain
+ * many printings of one card (basics have 400+), Scryfall may group them
+ * rather than interleave globally, so the "first occurrence per oracle_id"
+ * heuristic fails for cards that appear late in the response.
  */
 export async function getOldestPrintingsByOracleIds(
   oracleIds: string[]
@@ -211,45 +215,32 @@ export async function getOldestPrintingsByOracleIds(
 
   for (const oid of oracleIds) {
     const hit = oldestPrintingByOracle.get(oid)
-    if (hit) result.set(oid, hit)
-    else toFetch.push(oid)
+    if (hit) { result.set(oid, hit); continue }
+    toFetch.push(oid)
   }
   if (toFetch.length === 0) return result
 
-  const BATCH = 25
-  const CONCURRENCY = 3
-
-  const runBatch = async (batch: string[]): Promise<void> => {
-    const pending = new Set(batch)
-    const q = batch.map(id => `oracleid:${id}`).join(' OR ')
-    let url: string | null =
-      `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=prints&order=released&dir=asc`
+  const fetchOne = async (oid: string): Promise<void> => {
     try {
-      while (url && pending.size > 0) {
-        const res = await fetch(url)
-        if (!res.ok) break
-        const json: { data?: ScryfallCard[]; has_more?: boolean; next_page?: string } = await res.json()
-        for (const card of json.data ?? []) {
-          if (card.oracle_id && pending.has(card.oracle_id)) {
-            result.set(card.oracle_id, card)
-            oldestPrintingByOracle.set(card.oracle_id, card)
-            pending.delete(card.oracle_id)
-          }
-        }
-        url = json.has_more && pending.size > 0 ? (json.next_page ?? null) : null
-        if (url) await new Promise(r => setTimeout(r, 100))
+      const url =
+        `https://api.scryfall.com/cards/search?q=${encodeURIComponent(`oracleid:${oid}`)}&unique=prints&order=released&dir=asc`
+      const res = await fetch(url)
+      if (!res.ok) return
+      const json: { data?: ScryfallCard[] } = await res.json()
+      const card = json.data?.[0]
+      if (card) {
+        result.set(oid, card)
+        oldestPrintingByOracle.set(oid, card)
       }
     } catch (err) {
       console.error('getOldestPrintingsByOracleIds error:', err)
     }
   }
 
-  const batches: string[][] = []
-  for (let i = 0; i < toFetch.length; i += BATCH) batches.push(toFetch.slice(i, i + BATCH))
-
-  for (let i = 0; i < batches.length; i += CONCURRENCY) {
-    await Promise.all(batches.slice(i, i + CONCURRENCY).map(runBatch))
-    if (i + CONCURRENCY < batches.length) await new Promise(r => setTimeout(r, 150))
+  const CONCURRENCY = 8
+  for (let i = 0; i < toFetch.length; i += CONCURRENCY) {
+    await Promise.all(toFetch.slice(i, i + CONCURRENCY).map(fetchOne))
+    if (i + CONCURRENCY < toFetch.length) await new Promise(r => setTimeout(r, 100))
   }
 
   return result
