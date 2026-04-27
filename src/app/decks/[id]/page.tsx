@@ -663,7 +663,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         <DropdownMenuSeparator className="bg-border" />
         <DropdownMenuSub>
           <DropdownMenuSubTrigger onMouseEnter={() => void ensurePrintingsLoaded(c)}>Printing</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="bg-card border-border text-foreground max-h-80 overflow-y-auto">
+          <DropdownMenuSubContent className="bg-white border-border text-foreground max-h-80 overflow-y-auto">
             <DropdownMenuItem
               className={c.printing_scryfall_id == null ? 'text-primary' : ''}
               onClick={() => setCardPrinting(c.id, null)}
@@ -689,7 +689,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         </DropdownMenuSub>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>Foil</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="bg-card border-border text-foreground">
+          <DropdownMenuSubContent className="bg-white border-border text-foreground">
             <DropdownMenuItem
               disabled={!finishes.includes('nonfoil')}
               className={c.finish === 'nonfoil' ? 'text-primary' : ''}
@@ -710,7 +710,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         <DropdownMenuSeparator className="bg-border" />
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>Tags</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="bg-card border-border text-foreground">
+          <DropdownMenuSubContent className="bg-white border-border text-foreground">
             {allUniqueTags.map(tag => (
               <DropdownMenuItem key={tag} onClick={() => addTag(c.id, tag)}>{tag}</DropdownMenuItem>
             ))}
@@ -744,7 +744,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         >
           <MoreVertical className="w-3.5 h-3.5" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align={align} className="w-56 bg-card border-border text-foreground">
+        <DropdownMenuContent align={align} className="w-56 bg-white border-border text-foreground">
           {renderDropdownItems(c, groupName)}
         </DropdownMenuContent>
       </DropdownMenu>
@@ -953,7 +953,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           onDragStart={(e) => { isDragging.current = true; e.dataTransfer.setData('cardId', c.id) }}
                         >
                           {c.image_url
-                            ? <img src={c.image_url} className="w-full h-full object-cover" />
+                            ? <>
+                                <img src={c.image_url} className="w-full h-full object-cover" />
+                                {(c.finish === 'foil' || c.finish === 'etched') && (
+                                  <div className="absolute inset-0 pointer-events-none foil-overlay" />
+                                )}
+                              </>
                             : <div className="w-full h-full flex items-center justify-center bg-card/50"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground/40" /></div>
                           }
                           {commanderIds.includes(c.scryfall_id) && (
@@ -997,7 +1002,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           </div>
                         </div>
                       </ContextMenuTrigger>
-                      <ContextMenuContent className="w-48 bg-card border-border text-foreground">
+                      <ContextMenuContent className="w-48 bg-white border-border text-foreground">
                         <ContextMenuItem
                           onClick={() => setAsCommander(c.scryfall_id)}
                           className={commanderIds.includes(c.scryfall_id) ? 'text-yellow-400 focus:text-yellow-300 focus:bg-yellow-400/10' : ''}
@@ -1015,7 +1020,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         <ContextMenuSeparator className="bg-border" />
                         <ContextMenuSub>
                           <ContextMenuSubTrigger>Tags</ContextMenuSubTrigger>
-                          <ContextMenuSubContent className="bg-card border-border text-foreground">
+                          <ContextMenuSubContent className="bg-white border-border text-foreground">
                             {allUniqueTags.map(tag => (
                               <ContextMenuItem key={tag} onClick={() => addTag(c.id, tag)}>{tag}</ContextMenuItem>
                             ))}
@@ -1109,7 +1114,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.4 }}
                               >
                                 {card.image_url
-                                  ? <img src={card.image_url} className="w-full rounded-xl border border-black/60 shadow-xl" draggable={false} />
+                                  ? <div className="relative w-full">
+                                      <img src={card.image_url} className="w-full rounded-xl border border-black/60 shadow-xl" draggable={false} />
+                                      {(card.finish === 'foil' || card.finish === 'etched') && (
+                                        <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
+                                      )}
+                                    </div>
                                   : <div className="w-full aspect-[5/7] rounded-xl border border-border/40 bg-card/50 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground/40" /></div>
                                 }
                                 {card.quantity > 1 && (
@@ -1159,7 +1169,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       </div>
                       {/* Hover image preview */}
                       <div className="hidden group-hover:block absolute left-1/3 top-0 -translate-y-1/2 z-50 pointer-events-none drop-shadow-2xl">
-                        <img src={c.image_url} className="w-48 rounded-xl border border-border/50" />
+                        <div className="relative">
+                          <img src={c.image_url} className="w-48 rounded-xl border border-border/50" />
+                          {(c.finish === 'foil' || c.finish === 'etched') && (
+                            <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-3 ml-auto">
                         <span className="text-xs font-mono text-muted-foreground tabular-nums w-16 text-right">
