@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { getCardsByIds, getCardsCollection } from "@/lib/scryfall"
+import { getCardsByIds, getCardsCollection, getCardBySetAndCN } from "@/lib/scryfall"
+import { parseDecklist } from "@/lib/decklist-import"
 import type { Deck } from "@/lib/types"
 
 export default function MyDecks() {
@@ -62,24 +63,6 @@ export default function MyDecks() {
     setLoading(false)
   }
 
-  function parseDecklist(text: string) {
-    const lines = text.split('\n')
-    const cards: { quantity: number, name: string }[] = []
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('//')) continue
-      const match = trimmed.match(/^(\d+)[xX]?\s+(.+)$/)
-      if (match) {
-        const quantity = parseInt(match[1])
-        const name = match[2].replace(/(?: \([^)]+\)| \[[^\]]+\])(?: \d+[a-zA-Z]?)?$/, '').trim()
-        cards.push({ quantity, name })
-      } else {
-        cards.push({ quantity: 1, name: trimmed.replace(/(?: \([^)]+\)| \[[^\]]+\])(?: \d+[a-zA-Z]?)?$/, '').trim() })
-      }
-    }
-    return cards
-  }
-
   const handleCreateDeck = async () => {
     if (!newDeckName) return
     setIsCreating(true)
@@ -106,22 +89,57 @@ export default function MyDecks() {
       const uniqueNames = Array.from(new Set(parsedCards.map(p => p.name)))
       const scryfallCards = await getCardsCollection(uniqueNames)
 
+      // Resolve specific printings (set + CN) for any line that asked for one.
+      const printingKeys = parsedCards
+        .filter(p => p.setCode && p.collectorNumber)
+        .map(p => `${p.setCode!.toLowerCase()}/${p.collectorNumber!}`)
+      const uniquePrintingKeys = Array.from(new Set(printingKeys))
+      const printingMap = new Map<string, { id: string; finishes?: string[] }>()
+      await Promise.all(uniquePrintingKeys.map(async k => {
+        const [s, cn] = k.split('/')
+        const card = await getCardBySetAndCN(s, cn)
+        if (card) printingMap.set(k, { id: card.id, finishes: card.finishes })
+      }))
+
       let addedCount = 0
-      const inserts: Array<{ deck_id: string; scryfall_id: string; name: string; quantity: number }> = []
+      const inserts: Array<{
+        deck_id: string
+        scryfall_id: string
+        name: string
+        quantity: number
+        printing_scryfall_id: string | null
+        finish: 'nonfoil' | 'foil' | 'etched'
+        oracle_id: string | null
+      }> = []
 
       for (const parsed of parsedCards) {
         const scryfallCard = scryfallCards.find(c => c.name.toLowerCase() === parsed.name.toLowerCase())
-        if (scryfallCard) {
-          inserts.push({
-            deck_id: data.id,
-            scryfall_id: scryfallCard.id,
-            name: scryfallCard.name,
-            quantity: parsed.quantity
-          })
-          addedCount++
-        } else {
+        if (!scryfallCard) {
           toast.error(`Could not find card: ${parsed.name}`)
+          continue
         }
+        let printingId: string | null = null
+        let finishes: string[] | undefined
+        if (parsed.setCode && parsed.collectorNumber) {
+          const k = `${parsed.setCode.toLowerCase()}/${parsed.collectorNumber}`
+          const hit = printingMap.get(k)
+          if (hit) { printingId = hit.id; finishes = hit.finishes }
+        }
+        let finish: 'nonfoil' | 'foil' | 'etched' = 'nonfoil'
+        if (parsed.foil) {
+          if (!finishes || finishes.includes('foil')) finish = 'foil'
+          else toast.message(`${parsed.name}: foil not available for this printing — saved as non-foil`)
+        }
+        inserts.push({
+          deck_id: data.id,
+          scryfall_id: scryfallCard.id,
+          printing_scryfall_id: printingId,
+          finish,
+          oracle_id: scryfallCard.oracle_id ?? null,
+          name: scryfallCard.name,
+          quantity: parsed.quantity,
+        })
+        addedCount++
       }
 
       if (inserts.length > 0) {
