@@ -10,17 +10,18 @@ Authentication is still enforced entirely client-side: each protected page calls
 2. A full client-side render before the redirect — wasted work.
 3. The `getSession()` call in client code reads from local storage only; Supabase docs recommend `getUser()` (which re-validates with the server) for any auth-gated decision.
 
-Since this doc was written, two relevant pieces shipped:
+Since this doc was written, several relevant pieces shipped or changed:
 
 - `src/app/auth/callback/route.ts` exists and exchanges the OAuth code via the server client at `src/lib/supabase/server.ts`. ✅
 - `src/lib/supabase/server.ts` provides a cookie-aware server client, so the middleware below can be wired up cleanly.
+- **Architecture change:** The decks list page (`src/app/decks/page.tsx`) is now a 6-line shell that renders `<ScrollShell initialSection="decks" />`. The actual deck list logic — including the auth check — lives in `src/components/DecksSection.tsx`. File references below reflect this.
 
 ## Resolution Summary
 
 | Phase | Status | Notes |
 |---|---|---|
 | Phase 1 — `src/middleware.ts` | ❌ Pending | File does not exist. |
-| Phase 2 — Remove redundant client-side checks | ❌ Pending | Still present in `src/app/decks/page.tsx:42-46` and `src/app/decks/[id]/page.tsx:131-136`. |
+| Phase 2 — Remove redundant client-side checks | ❌ Pending | Still present in `src/components/DecksSection.tsx:55-60` and `src/app/decks/[id]/page.tsx:197-198`. |
 | Phase 3 — Auth callback handler | ✅ Done | `src/app/auth/callback/route.ts` redirects to `/brew` on success, `/?error=auth_callback_error` on failure. |
 
 ## Remaining Work
@@ -80,26 +81,25 @@ Notes vs. the original plan:
 
 After middleware ships, remove these blocks (RLS still protects the underlying queries):
 
-1. `src/app/decks/page.tsx:42-46`:
+1. `src/components/DecksSection.tsx:55-60`:
    ```ts
    const { data: session } = await supabase.auth.getSession()
    if (!session.session) {
-     router.push('/login')
+     setIsAuthenticated(false)
+     setLoading(false)
      return
    }
    ```
-2. `src/app/decks/[id]/page.tsx:131-136`:
+   (The decks list page was refactored into `DecksSection`; this is the equivalent of the old `src/app/decks/page.tsx:42-46` check. The component now renders a "Log in" prompt instead of redirecting, which is reasonable — but the `getSession()` call should still become `getUser()` per item #5 in `P4-code-quality-cleanup.md`.)
+
+2. `src/app/decks/[id]/page.tsx:197-198`:
    ```ts
    const { data: { session } } = await supabase.auth.getSession()
-   const authenticatedUserId = session?.user.id
-   if (!authenticatedUserId) {
-     router.push('/')
-     return
-   }
+   const viewerId = session?.user.id ?? null
    ```
-   (Also note: this redirect goes to `/`, which now redirects to `/brew` — change to `/login` even before middleware lands, for consistency.)
+   This currently only reads the viewer ID to determine ownership (not to redirect), so it's less security-critical. Still, swap to `getUser()` for consistency once middleware handles the redirect gate.
 
-The `decks/page.tsx` query at line 51 currently also filters by `user_id`. With RLS in place (see `supabase/migrations/20240420000000_rls_policies.sql`), that filter is redundant but harmless — leave it as a defence-in-depth.
+The `DecksSection` query at line 63 also filters by `user_id`. With RLS in place (see `supabase/migrations/20240420000000_rls_policies.sql`), that filter is redundant but harmless — leave it as defence-in-depth.
 
 ### Phase 3 — Already done
 
@@ -107,7 +107,7 @@ The `decks/page.tsx` query at line 51 currently also filters by `user_id`. With 
 
 ### Bonus — TopNav uses `getSession`
 
-`src/components/TopNav.tsx:30` calls `getSession()` to populate the user dropdown. That's fine for UI hints (no security decision is made), but if the middleware route refreshes cookies, make sure `onAuthStateChange` (line 35) keeps the navbar in sync. Verify after middleware lands.
+`src/components/TopNav.tsx:57` calls `getSession()` to populate the user dropdown. That's fine for UI hints (no security decision is made), but if the middleware route refreshes cookies, make sure `onAuthStateChange` keeps the navbar in sync. Verify after middleware lands.
 
 ## Smoke Test
 
@@ -122,6 +122,6 @@ The `decks/page.tsx` query at line 51 currently also filters by `user_id`. With 
 | File | Action |
 |---|---|
 | `src/middleware.ts` | **[NEW]** Edge middleware guarding `/decks/**` |
-| `src/app/decks/page.tsx` | Remove `getSession()` block in `fetchDecks` |
-| `src/app/decks/[id]/page.tsx` | Remove `getSession()` block in `fetchDeck`; align stray redirect target |
+| `src/components/DecksSection.tsx` | Swap `getSession()` for `getUser()` in `fetchDecks` |
+| `src/app/decks/[id]/page.tsx` | Swap `getSession()` for `getUser()` in `fetchDeck` |
 | `src/app/auth/callback/route.ts` | Already shipped — no change |
