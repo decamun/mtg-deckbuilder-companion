@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, use, useRef } from "react"
+import { useState, useEffect, use, useRef, useMemo } from "react"
 import { motion } from "framer-motion"
-import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical } from "lucide-react"
+import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,15 +12,26 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsByIds, getCard, ScryfallCard } from "@/lib/scryfall"
+import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, getOldestPrintingId, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { DeckAnalytics } from "@/components/deck-analytics"
+import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
+import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
+import { PrimerView } from "@/components/primer/PrimerView"
+import { PrimerEditor } from "@/components/primer/PrimerEditor"
+import { VersionsTab } from "@/components/versions/VersionsTab"
+import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner"
+import { recordVersion, getVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
+import { formatPrice, pickPrice } from "@/lib/format"
 
 interface DeckCard {
   id: string
   scryfall_id: string
+  printing_scryfall_id: string | null
+  finish: 'nonfoil' | 'foil' | 'etched'
+  oracle_id: string | null
   name: string
   quantity: number
   zone: string
@@ -30,6 +41,20 @@ interface DeckCard {
   mana_cost?: string
   cmc?: number
   colors?: string[]
+  set_code?: string
+  collector_number?: string
+  available_finishes?: string[]
+  price_usd?: number | null
+  effective_printing_id?: string
+}
+
+type ViewingSnapshotState = {
+  versionId: string
+  label: string
+  cards: DeckCard[]
+  deckMeta: { name: string; description: string | null; format: string | null; commanders: string[]; cover_image_scryfall_id: string | null; is_public: boolean }
+  primerMarkdown: string
+  coverImageUrl: string | null
 }
 
 // Stack card width is w-44 (176px); height ≈ 176 * 1.4 = 246px
@@ -38,9 +63,25 @@ const STACK_EXTRA_PEEK = 14
 const STACK_CARD_HEIGHT = 246
 const STACK_HOVER_SHIFT = 44
 
+const defaultPrimerSeed = (deckName: string) =>
+`# ${deckName}
+
+Welcome to the primer for **${deckName}**.
+
+## Game Plan
+- _Describe the high-level strategy here._
+
+## Key Cards
+- _List your engine pieces and why they matter._
+
+## Mulligans
+- _What does an ideal opening hand look like?_
+`
+
 export default function DeckWorkspace({ params }: { params: Promise<{ id: string }> }) {
   const { id: deckId } = use(params)
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [deck, setDeck] = useState<any>(null)
   const [cards, setCards] = useState<DeckCard[]>([])
@@ -63,6 +104,24 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [activeCardIdForTag, setActiveCardIdForTag] = useState<string | null>(null)
 
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
+
+  // New: ownership, tabs, settings, primer, version-viewing
+  const [isOwner, setIsOwner] = useState(false)
+  const [accessDenied, setAccessDenied] = useState(false)
+  const tabParam = (searchParams?.get("tab") ?? null) as DeckTab | null
+  const [tab, setTabState] = useState<DeckTab>(tabParam ?? "decklist")
+  const setTab = (t: DeckTab) => {
+    setTabState(t)
+    const url = new URL(window.location.href)
+    if (t === "decklist") url.searchParams.delete("tab")
+    else url.searchParams.set("tab", t)
+    router.replace(`${url.pathname}${url.search}`)
+  }
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [primerEditing, setPrimerEditing] = useState(false)
+  const [primerMarkdown, setPrimerMarkdown] = useState("")
+  const [printingsByCard, setPrintingsByCard] = useState<Record<string, ScryfallPrinting[]>>({})
+  const [viewing, setViewing] = useState<ViewingSnapshotState | null>(null)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
@@ -90,6 +149,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
+  }, [deckId])
+
+  useEffect(() => {
+    if (tab === 'versions') void flushPendingVersion(deckId)
+  }, [tab, deckId])
+
+  useEffect(() => {
+    return () => { void flushPendingVersion(deckId) }
   }, [deckId])
 
   useEffect(() => {
@@ -132,28 +199,27 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const fetchDeck = async () => {
     const { data: { session } } = await supabase.auth.getSession()
-    const authenticatedUserId = session?.user.id
-    if (!authenticatedUserId) {
-      router.push('/')
-      return
-    }
+    const viewerId = session?.user.id ?? null
 
     const { data: deckData, error: deckError } = await supabase
       .from('decks')
       .select('*')
       .eq('id', deckId)
-      .eq('user_id', authenticatedUserId)
-      .single()
+      .maybeSingle()
 
-    if (deckError) {
-      toast.error('Failed to load deck')
-      router.push('/decks')
+    if (deckError || !deckData) {
+      // RLS hides private decks from non-owners — render the access-denied page.
+      setAccessDenied(true)
       return
     }
+    setAccessDenied(false)
 
+    const owner = !!viewerId && deckData.user_id === viewerId
+    setIsOwner(owner)
     setDeck(deckData)
     setCommanderIds(deckData.commander_scryfall_ids || [])
     setCoverImageId(deckData.cover_image_scryfall_id || null)
+    setPrimerMarkdown(deckData.primer_markdown || '')
 
     const { data: cardsData, error: cardsError } = await supabase
       .from('deck_cards')
@@ -166,28 +232,82 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     }
 
     if (cardsData) {
-      const sfCards = await getCardsByIds(cardsData.map(c => c.scryfall_id))
+      // Resolve effective printing id for each card (printing_scryfall_id ?? scryfall_id;
+      // for cards with NULL printing we still want the oldest printing's image).
+      const idsToFetch = new Set<string>()
+      for (const c of cardsData) {
+        idsToFetch.add(c.printing_scryfall_id || c.scryfall_id)
+      }
+      if (deckData.cover_image_scryfall_id) idsToFetch.add(deckData.cover_image_scryfall_id)
+
+      const sfCards = await getCardsByIds(Array.from(idsToFetch))
       const sfMap = new Map(sfCards.map(c => [c.id, c]))
-      const hydrated = cardsData.map(c => {
-        const sf = sfMap.get(c.scryfall_id)
+
+      // For cards without a chosen printing, swap to the oldest printing once we know the oracle_id.
+      // This is async but bounded to unique oracle_ids.
+      const oracleIds = new Set<string>()
+      for (const c of cardsData) {
+        if (!c.printing_scryfall_id) {
+          const sf = sfMap.get(c.scryfall_id)
+          if (sf?.oracle_id) oracleIds.add(sf.oracle_id)
+          else if (c.oracle_id) oracleIds.add(c.oracle_id)
+        }
+      }
+      const oldestByOracle = new Map<string, string>()
+      await Promise.all(Array.from(oracleIds).map(async oid => {
+        const id = await getOldestPrintingId(oid)
+        if (id) oldestByOracle.set(oid, id)
+      }))
+      const additionalIds = Array.from(oldestByOracle.values()).filter(id => !sfMap.has(id))
+      if (additionalIds.length > 0) {
+        const more = await getCardsByIds(additionalIds)
+        more.forEach(c => sfMap.set(c.id, c))
+      }
+
+      const hydrated: DeckCard[] = cardsData.map(c => {
+        const baseSf = sfMap.get(c.scryfall_id)
+        const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
+        let effectiveId = c.printing_scryfall_id || c.scryfall_id
+        if (!c.printing_scryfall_id && oracleId && oldestByOracle.has(oracleId)) {
+          effectiveId = oldestByOracle.get(oracleId)!
+        }
+        const effSf = sfMap.get(effectiveId) ?? baseSf
+        const finish = (c.finish ?? 'nonfoil') as 'nonfoil' | 'foil' | 'etched'
         return {
           ...c,
-          image_url: sf?.image_uris?.normal,
-          type_line: sf?.type_line || '',
-          mana_cost: sf?.mana_cost || '',
-          cmc: sf?.cmc ?? (sf ? calculateCmc(sf.mana_cost) : 0),
-          colors: sf?.colors ?? [],
+          oracle_id: oracleId,
+          finish,
+          printing_scryfall_id: c.printing_scryfall_id ?? null,
+          image_url: effSf?.image_uris?.normal,
+          type_line: effSf?.type_line || '',
+          mana_cost: effSf?.mana_cost || '',
+          cmc: effSf?.cmc ?? (effSf ? calculateCmc(effSf.mana_cost) : 0),
+          colors: effSf?.colors ?? [],
+          set_code: effSf?.set,
+          collector_number: effSf?.collector_number,
+          available_finishes: effSf?.finishes,
+          price_usd: pickPrice(effSf?.prices, finish),
+          effective_printing_id: effectiveId,
         }
       })
       setCards(hydrated)
 
-      // Resolve cover image URL — prefer in-deck card, fall back to a separate fetch.
+      // Backfill missing oracle_id rows quietly so future renders don't re-resolve.
+      const missingOracle = cardsData.filter(c => !c.oracle_id && sfMap.get(c.scryfall_id)?.oracle_id)
+      if (owner && missingOracle.length > 0) {
+        await Promise.all(missingOracle.map(c => {
+          const oid = sfMap.get(c.scryfall_id)?.oracle_id
+          if (!oid) return Promise.resolve()
+          return supabase.from('deck_cards').update({ oracle_id: oid }).eq('id', c.id).then(() => undefined)
+        }))
+      }
+
+      // Cover image URL
       const coverId = deckData.cover_image_scryfall_id || null
       if (coverId) {
         const inDeck = sfMap.get(coverId)
-        if (inDeck?.image_uris?.normal) {
-          setCoverImageUrl(inDeck.image_uris.normal)
-        } else {
+        if (inDeck?.image_uris?.normal) setCoverImageUrl(inDeck.image_uris.normal)
+        else {
           const fetched = await getCard(coverId)
           setCoverImageUrl(fetched?.image_uris?.normal ?? null)
         }
@@ -212,8 +332,18 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const existing = cards.find(c => c.scryfall_id === card.id)
     if (existing) {
       await supabase.from('deck_cards').update({ quantity: existing.quantity + 1 }).eq('id', existing.id)
+      recordVersion(deckId, `Increased ${existing.name} to ${existing.quantity + 1}`)
     } else {
-      await supabase.from('deck_cards').insert({ deck_id: deckId, scryfall_id: card.id, name: card.name, quantity: 1 })
+      await supabase.from('deck_cards').insert({
+        deck_id: deckId,
+        scryfall_id: card.id,
+        oracle_id: card.oracle_id ?? null,
+        printing_scryfall_id: null,
+        finish: 'nonfoil',
+        name: card.name,
+        quantity: 1,
+      })
+      recordVersion(deckId, `Added ${card.name}`)
     }
   }
 
@@ -242,7 +372,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const deleteCard = async (id: string) => {
+    const card = cards.find(c => c.id === id)
     await supabase.from('deck_cards').delete().eq('id', id)
+    if (card) recordVersion(deckId, `Removed ${card.name}`)
   }
 
   const setAsCommander = async (scryfallId: string) => {
@@ -257,17 +389,24 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     }
     setCommanderIds(newIds)
     await supabase.from('decks').update({ commander_scryfall_ids: newIds }).eq('id', deckId)
-    toast.success(newIds.includes(scryfallId) ? 'Set as commander!' : 'Removed as commander')
+    const card = cards.find(c => c.scryfall_id === scryfallId)
+    const cardName = card?.name ?? 'card'
+    const becameCmd = newIds.includes(scryfallId)
+    recordVersion(deckId, becameCmd ? `Set ${cardName} as commander` : `Unset ${cardName} as commander`)
+    toast.success(becameCmd ? 'Set as commander!' : 'Removed as commander')
   }
 
   const setAsCoverImage = async (scryfallId: string) => {
     if (coverImageId === scryfallId) {
       setCoverImageId(null)
       await supabase.from('decks').update({ cover_image_scryfall_id: null }).eq('id', deckId)
+      recordVersion(deckId, 'Removed cover image')
       toast.success('Cover image removed')
     } else {
       setCoverImageId(scryfallId)
       await supabase.from('decks').update({ cover_image_scryfall_id: scryfallId }).eq('id', deckId)
+      const card = cards.find(c => c.scryfall_id === scryfallId)
+      recordVersion(deckId, `Set cover image to ${card?.name ?? 'card'}`)
       toast.success('Set as cover image!')
     }
   }
@@ -281,6 +420,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const newTags = [...currentTags, tag]
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: newTags } : c))
     await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
+    recordVersion(deckId, `Tagged ${card.name} with "${tag}"`)
   }
 
   const removeTag = async (cardId: string, tag: string) => {
@@ -289,6 +429,30 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const newTags = (card.tags || []).filter(t => t !== tag)
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: newTags } : c))
     await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
+    recordVersion(deckId, `Untagged ${card.name} from "${tag}"`)
+  }
+
+  const setCardPrinting = async (cardId: string, printingId: string | null) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    await supabase.from('deck_cards').update({ printing_scryfall_id: printingId }).eq('id', cardId)
+    recordVersion(deckId, printingId
+      ? `Changed ${card.name} printing`
+      : `Reset ${card.name} to default printing`)
+  }
+
+  const setCardFinish = async (cardId: string, finish: 'nonfoil' | 'foil' | 'etched') => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    await supabase.from('deck_cards').update({ finish }).eq('id', cardId)
+    recordVersion(deckId, `Changed ${card.name} finish to ${finish}`)
+  }
+
+  const ensurePrintingsLoaded = async (card: DeckCard) => {
+    if (printingsByCard[card.id]) return
+    if (!card.oracle_id) return
+    const prints = await getPrintingsByOracleId(card.oracle_id)
+    setPrintingsByCard(prev => ({ ...prev, [card.id]: prints }))
   }
 
   const handleCustomTagSubmit = () => {
@@ -303,8 +467,112 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const allUniqueTags = Array.from(new Set(cards.flatMap(c => c.tags || []))).sort()
 
+  const enterVersionView = async (versionId: string) => {
+    const row: DeckVersionRow | null = await getVersion(versionId)
+    if (!row) {
+      toast.error('Version not found')
+      return
+    }
+    const snap = row.snapshot
+    const ids = new Set<string>()
+    for (const c of snap.cards) ids.add(c.printing_scryfall_id || c.scryfall_id)
+    if (snap.deck.cover_image_scryfall_id) ids.add(snap.deck.cover_image_scryfall_id)
+
+    const sfCards = await getCardsByIds(Array.from(ids))
+    const sfMap = new Map(sfCards.map(c => [c.id, c]))
+
+    // Resolve oldest printings for snapshot cards with no chosen printing
+    const oracleIds = new Set<string>()
+    for (const c of snap.cards) {
+      if (!c.printing_scryfall_id) {
+        const oid = c.oracle_id ?? sfMap.get(c.scryfall_id)?.oracle_id
+        if (oid) oracleIds.add(oid)
+      }
+    }
+    const oldestByOracle = new Map<string, string>()
+    await Promise.all(Array.from(oracleIds).map(async oid => {
+      const id = await getOldestPrintingId(oid)
+      if (id) oldestByOracle.set(oid, id)
+    }))
+    const additionalIds = Array.from(oldestByOracle.values()).filter(id => !sfMap.has(id))
+    if (additionalIds.length) {
+      const more = await getCardsByIds(additionalIds)
+      more.forEach(c => sfMap.set(c.id, c))
+    }
+
+    const hydrated: DeckCard[] = snap.cards.map((c, i) => {
+      const baseSf = sfMap.get(c.scryfall_id)
+      const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
+      let effectiveId = c.printing_scryfall_id || c.scryfall_id
+      if (!c.printing_scryfall_id && oracleId && oldestByOracle.has(oracleId)) {
+        effectiveId = oldestByOracle.get(oracleId)!
+      }
+      const effSf = sfMap.get(effectiveId) ?? baseSf
+      return {
+        id: `snap-${i}`,
+        scryfall_id: c.scryfall_id,
+        printing_scryfall_id: c.printing_scryfall_id,
+        finish: c.finish,
+        oracle_id: oracleId,
+        name: c.name,
+        quantity: c.quantity,
+        zone: c.zone,
+        tags: c.tags,
+        image_url: effSf?.image_uris?.normal,
+        type_line: effSf?.type_line || '',
+        mana_cost: effSf?.mana_cost || '',
+        cmc: effSf?.cmc ?? (effSf ? calculateCmc(effSf.mana_cost) : 0),
+        colors: effSf?.colors ?? [],
+        set_code: effSf?.set,
+        collector_number: effSf?.collector_number,
+        available_finishes: effSf?.finishes,
+        price_usd: pickPrice(effSf?.prices, c.finish),
+        effective_printing_id: effectiveId,
+      }
+    })
+
+    const coverId = snap.deck.cover_image_scryfall_id
+    const coverImageUrlSnap = coverId ? (sfMap.get(coverId)?.image_uris?.normal ?? null) : null
+
+    setViewing({
+      versionId: row.id,
+      label: row.name ?? new Date(row.created_at).toLocaleString(),
+      cards: hydrated,
+      deckMeta: snap.deck,
+      primerMarkdown: snap.primer_markdown,
+      coverImageUrl: coverImageUrlSnap,
+    })
+  }
+
+  const exitVersionView = () => setViewing(null)
+
+  const handleRevertFromBanner = async () => {
+    if (!viewing) return
+    if (!confirm("Revert deck to this version? Your current state will be saved as a new version first.")) return
+    const ok = await revertToVersion(deckId, viewing.versionId)
+    if (!ok) {
+      toast.error('Revert failed')
+      return
+    }
+    toast.success('Reverted')
+    setViewing(null)
+    await fetchDeck()
+  }
+
+  const savePrimer = async (markdown: string) => {
+    const { error } = await supabase.from('decks').update({ primer_markdown: markdown }).eq('id', deckId)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+    setPrimerMarkdown(markdown)
+    setPrimerEditing(false)
+    recordVersion(deckId, 'Updated primer')
+    toast.success('Primer saved')
+  }
+
   const getGroupedCards = () => {
-    let sorted = [...cards].sort((a, b) => {
+    let sorted = [...displayedCards].sort((a, b) => {
       if (sorting === 'name') return a.name.localeCompare(b.name)
       if (sorting === 'mana') return (a.cmc || 0) - (b.cmc || 0)
       return 0
@@ -351,73 +619,164 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const groupedCards = getGroupedCards()
 
   // Shared dropdown menu items rendered inside both ContextMenu and DropdownMenu
-  const renderDropdownItems = (c: DeckCard, groupName: string) => (
-    <>
-      <DropdownMenuItem
-        onClick={() => setAsCommander(c.scryfall_id)}
-        className={commanderIds.includes(c.scryfall_id) ? 'text-yellow-400' : ''}
-      >
-        <Crown className="w-3.5 h-3.5 mr-2" />
-        {commanderIds.includes(c.scryfall_id) ? 'Remove as Commander' : 'Set as Commander'}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        onClick={() => setAsCoverImage(c.scryfall_id)}
-        className={coverImageId === c.scryfall_id ? 'text-blue-400' : ''}
-      >
-        <ImageIcon className="w-3.5 h-3.5 mr-2" />
-        {coverImageId === c.scryfall_id ? 'Remove Cover Image' : 'Set as Cover Image'}
-      </DropdownMenuItem>
-      <DropdownMenuSeparator className="bg-border" />
-      <DropdownMenuSub>
-        <DropdownMenuSubTrigger>Tags</DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="bg-card border-border text-foreground">
-          {allUniqueTags.map(tag => (
-            <DropdownMenuItem key={tag} onClick={() => addTag(c.id, tag)}>{tag}</DropdownMenuItem>
-          ))}
-          {allUniqueTags.length > 0 && <DropdownMenuSeparator className="bg-border" />}
-          <DropdownMenuItem onClick={() => { setActiveCardIdForTag(c.id); setTagDialogOpen(true) }}>Add Custom Tag...</DropdownMenuItem>
-        </DropdownMenuSubContent>
-      </DropdownMenuSub>
-      <DropdownMenuSeparator className="bg-border" />
-      {grouping === 'tag' && groupName !== 'Untagged' && (
-        <>
-          <DropdownMenuItem className="text-orange-400" onClick={() => removeTag(c.id, groupName)}>
-            Remove from &apos;{groupName}&apos;
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-border" />
-        </>
-      )}
-      <DropdownMenuItem className="text-destructive" onClick={() => deleteCard(c.id)}>Remove from Deck</DropdownMenuItem>
-    </>
-  )
+  const renderDropdownItems = (c: DeckCard, groupName: string) => {
+    const printings = printingsByCard[c.id] ?? []
+    const finishes = c.available_finishes ?? ['nonfoil']
+    return (
+      <>
+        <DropdownMenuItem
+          onClick={() => setAsCommander(c.scryfall_id)}
+          className={commanderIds.includes(c.scryfall_id) ? 'text-yellow-400' : ''}
+        >
+          <Crown className="w-3.5 h-3.5 mr-2" />
+          {commanderIds.includes(c.scryfall_id) ? 'Remove as Commander' : 'Set as Commander'}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => setAsCoverImage(c.scryfall_id)}
+          className={coverImageId === c.scryfall_id ? 'text-blue-400' : ''}
+        >
+          <ImageIcon className="w-3.5 h-3.5 mr-2" />
+          {coverImageId === c.scryfall_id ? 'Remove Cover Image' : 'Set as Cover Image'}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="bg-border" />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger onMouseEnter={() => void ensurePrintingsLoaded(c)}>Printing</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="bg-card border-border text-foreground max-h-80 overflow-y-auto">
+            <DropdownMenuItem
+              className={c.printing_scryfall_id == null ? 'text-primary' : ''}
+              onClick={() => setCardPrinting(c.id, null)}
+            >
+              Default (oldest)
+            </DropdownMenuItem>
+            {printings.length > 0 && <DropdownMenuSeparator className="bg-border" />}
+            {printings.map(p => (
+              <DropdownMenuItem
+                key={p.id}
+                className={c.printing_scryfall_id === p.id ? 'text-primary' : ''}
+                onClick={() => setCardPrinting(c.id, p.id)}
+              >
+                <span className="font-mono text-xs mr-2 text-muted-foreground">{p.set?.toUpperCase()}</span>
+                {p.set_name}
+                <span className="ml-auto text-xs text-muted-foreground">{(p.released_at ?? '').slice(0, 4)}</span>
+              </DropdownMenuItem>
+            ))}
+            {printings.length === 0 && c.oracle_id && (
+              <DropdownMenuItem disabled>Loading printings…</DropdownMenuItem>
+            )}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Foil</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="bg-card border-border text-foreground">
+            <DropdownMenuItem
+              disabled={!finishes.includes('nonfoil')}
+              className={c.finish === 'nonfoil' ? 'text-primary' : ''}
+              onClick={() => setCardFinish(c.id, 'nonfoil')}
+            >Non-foil</DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!finishes.includes('foil')}
+              className={c.finish === 'foil' ? 'text-primary' : ''}
+              onClick={() => setCardFinish(c.id, 'foil')}
+            >Foil</DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!finishes.includes('etched')}
+              className={c.finish === 'etched' ? 'text-primary' : ''}
+              onClick={() => setCardFinish(c.id, 'etched')}
+            >Etched</DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSeparator className="bg-border" />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Tags</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="bg-card border-border text-foreground">
+            {allUniqueTags.map(tag => (
+              <DropdownMenuItem key={tag} onClick={() => addTag(c.id, tag)}>{tag}</DropdownMenuItem>
+            ))}
+            {allUniqueTags.length > 0 && <DropdownMenuSeparator className="bg-border" />}
+            <DropdownMenuItem onClick={() => { setActiveCardIdForTag(c.id); setTagDialogOpen(true) }}>Add Custom Tag...</DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSeparator className="bg-border" />
+        {grouping === 'tag' && groupName !== 'Untagged' && (
+          <>
+            <DropdownMenuItem className="text-orange-400" onClick={() => removeTag(c.id, groupName)}>
+              Remove from &apos;{groupName}&apos;
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-border" />
+          </>
+        )}
+        <DropdownMenuItem className="text-destructive" onClick={() => deleteCard(c.id)}>Remove from Deck</DropdownMenuItem>
+      </>
+    )
+  }
 
   // Render as a plain function (not a component) so React doesn't remount it on parent re-renders
-  const renderThreeDotMenu = (c: DeckCard, groupName: string, align: 'start' | 'end' = 'end') => (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className="h-7 w-7 flex items-center justify-center bg-background/75 hover:bg-background/95 rounded-full border border-border/50 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-        onContextMenu={(e: React.MouseEvent) => e.stopPropagation()}
-      >
-        <MoreVertical className="w-3.5 h-3.5" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align={align} className="w-48 bg-card border-border text-foreground">
-        {renderDropdownItems(c, groupName)}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
+  const renderThreeDotMenu = (c: DeckCard, groupName: string, align: 'start' | 'end' = 'end') => {
+    if (!isOwner || viewing) return null
+    return (
+      <DropdownMenu onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(c) }}>
+        <DropdownMenuTrigger
+          className="h-7 w-7 flex items-center justify-center bg-background/75 hover:bg-background/95 rounded-full border border-border/50 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          onContextMenu={(e: React.MouseEvent) => e.stopPropagation()}
+        >
+          <MoreVertical className="w-3.5 h-3.5" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align={align} className="w-56 bg-card border-border text-foreground">
+          {renderDropdownItems(c, groupName)}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
+
+  // Cards displayed in the workspace: live state by default, snapshot when viewing a version.
+  const displayedCards = viewing ? viewing.cards : cards
+  const displayedCommanderIds = viewing ? viewing.deckMeta.commanders : commanderIds
+  const displayedCoverImageUrl = viewing ? viewing.coverImageUrl : coverImageUrl
+  const displayedDeckName = viewing ? viewing.deckMeta.name : (deck?.name || 'Loading...')
+
+  const totalUsd = useMemo(() => {
+    let sum = 0
+    let anyMissing = false
+    for (const c of displayedCards) {
+      if (c.price_usd == null) { anyMissing = true; continue }
+      sum += c.price_usd * c.quantity
+    }
+    return { sum, anyMissing }
+  }, [displayedCards])
+
+  if (accessDenied) {
+    return (
+      <div className="container mx-auto px-4 py-16 text-center">
+        <h1 className="text-2xl font-bold mb-2">This deck is private</h1>
+        <p className="text-muted-foreground mb-6">You don&apos;t have access to view this deck.</p>
+        <Button onClick={() => router.push('/decks')}>Back to my decks</Button>
+      </div>
+    )
+  }
+
+  const interactionsLocked = !isOwner || !!viewing
 
   return (
     <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
+
+      {viewing && (
+        <ViewingVersionBanner
+          versionLabel={viewing.label}
+          isOwner={isOwner}
+          onRevert={handleRevertFromBanner}
+          onBackToLatest={exitVersionView}
+        />
+      )}
 
       {/* Combined toolbar: title | search | controls — banner with cover image background */}
       <header className="border-b border-border h-28 shrink-0 relative z-40">
         {/* Background: cover image with gradient overlay (clipped to banner), or fallback */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {coverImageUrl ? (
+          {displayedCoverImageUrl ? (
             <>
               <img
-                src={coverImageUrl}
+                src={displayedCoverImageUrl}
                 alt=""
                 aria-hidden
                 className="absolute inset-0 w-full h-full object-cover object-center"
@@ -433,17 +792,24 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         {/* Foreground: toolbar pinned to bottom */}
         <div className="absolute inset-x-0 bottom-0 h-14 flex items-center gap-3 px-4">
         {/* Left: back + deck title */}
-        <Button variant="ghost" size="sm" onClick={() => router.push('/decks')} className="text-muted-foreground hover:text-foreground shrink-0">
+        <Button variant="ghost" size="sm" onClick={() => router.push(isOwner ? '/decks' : '/')} className="text-muted-foreground hover:text-foreground shrink-0">
           &larr; Back
         </Button>
         <div className="flex items-center gap-2 shrink-0 border-r border-border pr-3">
-          <h1 className="font-bold text-base whitespace-nowrap drop-shadow-md">{deck?.name || 'Loading...'}</h1>
+          <h1 className="font-bold text-base whitespace-nowrap drop-shadow-md">{displayedDeckName}</h1>
           <Badge variant="outline" className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm">
-            {cards.reduce((a, c) => a + c.quantity, 0)}
+            {displayedCards.reduce((a, c) => a + c.quantity, 0)}
           </Badge>
+          <Badge variant="outline" className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm font-mono" title={totalUsd.anyMissing ? "Some cards have no price data" : undefined}>
+            {formatPrice(totalUsd.sum)}{totalUsd.anyMissing ? "+" : ""}
+          </Badge>
+          {deck && !deck.is_public && (
+            <Badge className="bg-muted text-muted-foreground border-border">Private</Badge>
+          )}
         </div>
 
-        {/* Center: add-a-card search */}
+        {/* Center: add-a-card search (owner-only, decklist tab only, not while viewing a version) */}
+        {!interactionsLocked && tab === 'decklist' ? (
         <div ref={searchContainerRef} className="flex-1 relative min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           <Input
@@ -484,34 +850,53 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             </div>
           )}
         </div>
+        ) : (
+          <div className="flex-1 min-w-0" />
+        )}
 
-        {/* Right: group + view controls */}
+        {/* Right: group + view controls (decklist tab only) + settings (owner only) */}
         <div className="flex items-center gap-2 shrink-0">
-          <Select value={grouping} onValueChange={(v: any) => setGrouping(v)}>
-            <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
-              <SelectValue placeholder="Group by" />
-            </SelectTrigger>
-            <SelectContent className="bg-card border-border text-foreground">
-              <SelectItem value="none">No Grouping</SelectItem>
-              <SelectItem value="type">By Type</SelectItem>
-              <SelectItem value="mana">By Mana Cost</SelectItem>
-              <SelectItem value="tag">By Tags</SelectItem>
-            </SelectContent>
-          </Select>
-          <Tabs value={viewMode} onValueChange={(v: any) => setViewMode(v)} className="bg-card rounded-md p-0.5 border border-border">
-            <TabsList className="h-7 bg-transparent">
-              <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
-              <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
-              <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {tab === 'decklist' && (
+            <>
+              <Select value={grouping} onValueChange={(v: any) => setGrouping(v)}>
+                <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
+                  <SelectValue placeholder="Group by" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border text-foreground">
+                  <SelectItem value="none">No Grouping</SelectItem>
+                  <SelectItem value="type">By Type</SelectItem>
+                  <SelectItem value="mana">By Mana Cost</SelectItem>
+                  <SelectItem value="tag">By Tags</SelectItem>
+                </SelectContent>
+              </Select>
+              <Tabs value={viewMode} onValueChange={(v: any) => setViewMode(v)} className="bg-card rounded-md p-0.5 border border-border">
+                <TabsList className="h-7 bg-transparent">
+                  <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
+                  <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
+                  <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </>
+          )}
+          {isOwner && !viewing && (
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="h-8 w-8 inline-flex items-center justify-center rounded-md bg-card border border-border hover:bg-accent text-foreground"
+              title="Deck settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
         </div>
         </div>
       </header>
 
+      <DeckTabs tab={tab} onChange={setTab} />
+
       {/* Workspace */}
       <div className="flex-1 overflow-y-auto bg-background/20">
         <div className="p-6 max-w-6xl mx-auto space-y-8">
+        {tab === 'decklist' && (<>
           {Object.entries(groupedCards)
             .sort(([a], [b]) => {
               if (a === 'Untagged') return 1
@@ -572,10 +957,20 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                             </div>
                           )}
                           {c.tags && c.tags.length > 0 && (
-                            <div className="absolute bottom-1 right-1 flex flex-wrap justify-end gap-1 p-1 max-w-full">
+                            <div className="absolute bottom-1 left-1 flex flex-wrap gap-1 p-1 max-w-[60%]">
                               {c.tags.map(t => (
                                 <Badge key={t} className="text-[10px] px-1.5 py-0 bg-background/80 text-foreground border-border truncate max-w-full">{t}</Badge>
                               ))}
+                            </div>
+                          )}
+                          {/* Cost badge (bottom-right) */}
+                          <div className="absolute bottom-1 right-1 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
+                            {formatPrice(c.price_usd)}
+                          </div>
+                          {/* Set/finish indicator (top-left under commander/cover badges) */}
+                          {(c.printing_scryfall_id || c.finish !== 'nonfoil') && c.set_code && (
+                            <div className="absolute top-2 right-9 bg-background/80 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase border border-border">
+                              {c.set_code}{c.finish === 'foil' ? ' ★' : c.finish === 'etched' ? ' ✦' : ''}
                             </div>
                           )}
                           {/* Three-dot menu */}
@@ -710,10 +1105,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                     <Crown className="w-2.5 h-2.5" /> CMD
                                   </div>
                                 )}
-                                {/* Three-dot menu shows on card hover */}
-                                <div className="absolute bottom-3 right-2 z-10">
+                                {/* Three-dot menu (top-right) */}
+                                <div className="absolute top-2 right-2 z-10">
                                   {renderThreeDotMenu(card, groupName, 'end')}
                                 </div>
+                                {/* Cost (bottom-right) */}
+                                {itemIdx === colCards.length - 1 && (
+                                  <div className="absolute bottom-2 right-2 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
+                                    {formatPrice(card.price_usd)}
+                                  </div>
+                                )}
                               </motion.div>
                             )
                           })}
@@ -743,7 +1144,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       <div className="hidden group-hover:block absolute left-1/3 top-0 -translate-y-1/2 z-50 pointer-events-none drop-shadow-2xl">
                         <img src={c.image_url} className="w-48 rounded-xl border border-border/50" />
                       </div>
-                      {renderThreeDotMenu(c, groupName, 'end')}
+                      <div className="flex items-center gap-3 ml-auto">
+                        <span className="text-xs font-mono text-muted-foreground tabular-nums w-16 text-right">
+                          {formatPrice(c.price_usd)}
+                        </span>
+                        {renderThreeDotMenu(c, groupName, 'end')}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -754,12 +1160,58 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           {/* ── Analytics ── */}
           <div className="border-t border-border pt-8 mt-4">
             <DeckAnalytics
-              cards={cards.filter(c => !commanderIds.includes(c.scryfall_id))}
-              commanders={cards.filter(c => commanderIds.includes(c.scryfall_id))}
+              cards={displayedCards.filter(c => !displayedCommanderIds.includes(c.scryfall_id))}
+              commanders={displayedCards.filter(c => displayedCommanderIds.includes(c.scryfall_id))}
             />
           </div>
+        </>)}
+
+        {tab === 'primer' && (
+          <div className="space-y-4">
+            {!viewing && isOwner && !primerEditing && (
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => setPrimerEditing(true)}>
+                  <EditIcon className="w-3.5 h-3.5 mr-1.5" /> Edit Primer
+                </Button>
+              </div>
+            )}
+            {primerEditing && !viewing ? (
+              <PrimerEditor
+                initial={primerMarkdown || defaultPrimerSeed(displayedDeckName)}
+                onSave={savePrimer}
+                onCancel={() => setPrimerEditing(false)}
+              />
+            ) : (
+              <PrimerView markdown={viewing ? viewing.primerMarkdown : primerMarkdown} />
+            )}
+          </div>
+        )}
+
+        {tab === 'versions' && (
+          <VersionsTab
+            deckId={deckId}
+            isOwner={isOwner}
+            onViewVersion={(id) => { setTab('decklist'); void enterVersionView(id) }}
+            onReverted={() => { setViewing(null); void fetchDeck() }}
+          />
+        )}
         </div>
       </div>
+
+      {deck && (
+        <DeckSettingsDialog
+          deckId={deckId}
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          initial={{
+            name: deck.name ?? "",
+            description: deck.description ?? null,
+            format: deck.format ?? null,
+            is_public: !!deck.is_public,
+          }}
+          onSaved={(next) => setDeck({ ...deck, ...next })}
+        />
+      )}
 
       <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
