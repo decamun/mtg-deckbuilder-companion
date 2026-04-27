@@ -3,6 +3,7 @@ import { Armata, Audiowide } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { TopNav } from "@/components/TopNav";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const armata = Armata({
   variable: "--font-armata",
@@ -35,6 +36,7 @@ export default function RootLayout({
         <TopNav />
         {children}
         <Toaster theme="dark" />
+        <SpeedInsights />
         <footer className="mt-auto border-t border-border py-4 px-6">
           <nav className="flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
             <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
