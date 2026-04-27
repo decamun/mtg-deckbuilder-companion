@@ -19,6 +19,7 @@ import type { User as SupabaseUser } from "@supabase/supabase-js"
 const NAV_LINKS = [
   { href: "/brew", label: "Brew", requiresAuth: false },
   { href: "/decks", label: "Your Decks", requiresAuth: true },
+  { href: "/blog", label: "Blog", requiresAuth: false },
 ]
 
 export function TopNav() {

@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase/client"
 import { searchCards, getCardsCollection, getCardByName, ScryfallCard } from "@/lib/scryfall"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
+import { BLOG_POSTS } from "@/lib/blog"
 
 const PENDING_COMMANDER_KEY = "idlebrew:pendingCommander"
 
@@ -261,91 +262,127 @@ export default function BrewPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center p-8">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="w-full max-w-2xl space-y-10 text-center"
-      >
-        <h1 className="font-heading text-5xl font-bold leading-tight text-foreground md:text-6xl">
-          Welcome to idlebrew
-        </h1>
+    <div className="flex flex-1 flex-col">
+      {/* Hero: occupies the full visible viewport below the navbar */}
+      <section className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center p-8">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="w-full max-w-2xl space-y-10 text-center"
+        >
+          <h1 className="font-heading text-5xl font-bold leading-tight text-foreground md:text-6xl">
+            Welcome to idlebrew
+          </h1>
 
-        <div ref={containerRef} className="relative w-full">
-          <div className="relative">
-            <div className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2">
-              {searching || creating ? (
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              ) : (
-                <Search className="h-5 w-5 text-muted-foreground" />
-              )}
+          <div ref={containerRef} className="relative w-full">
+            <div className="relative">
+              <div className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2">
+                {searching || creating ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                ) : (
+                  <Search className="h-5 w-5 text-muted-foreground" />
+                )}
+              </div>
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="what shall we brew?"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onFocus={() => results.length > 0 && setShowResults(true)}
+                disabled={creating}
+                className="h-16 w-full rounded-2xl border-2 border-border bg-card pl-14 pr-6 text-lg text-foreground shadow-lg placeholder:text-muted-foreground transition-colors hover:border-primary/40 focus:border-primary focus:outline-none disabled:opacity-60"
+              />
             </div>
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder="what shall we brew?"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => results.length > 0 && setShowResults(true)}
-              disabled={creating}
-              className="h-16 w-full rounded-2xl border-2 border-border bg-card pl-14 pr-6 text-lg text-foreground shadow-lg placeholder:text-muted-foreground transition-colors hover:border-primary/40 focus:border-primary focus:outline-none disabled:opacity-60"
-            />
+
+            <AnimatePresence>
+              {showResults && results.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute top-full z-50 mt-2 w-full overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+                >
+                  {results.map((card, i) => (
+                    <div
+                      key={card.id}
+                      onClick={() => handleSelect(card)}
+                      className={`flex cursor-pointer items-center gap-4 p-3 transition-colors hover:bg-muted ${
+                        i > 0 ? "border-t border-border/50" : ""
+                      }`}
+                    >
+                      {card.image_uris && (
+                        <img
+                          src={card.image_uris.small}
+                          alt={card.name}
+                          className="h-14 w-auto shrink-0 rounded-md shadow-md"
+                        />
+                      )}
+                      <div className="min-w-0 text-left">
+                        <p className="truncate font-semibold text-foreground">
+                          {card.name}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {card.type_line}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <AnimatePresence>
-            {showResults && results.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -8, scale: 0.98 }}
-                transition={{ duration: 0.12 }}
-                className="absolute top-full z-50 mt-2 w-full overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+            {creating && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-muted-foreground"
               >
-                {results.map((card, i) => (
-                  <div
-                    key={card.id}
-                    onClick={() => handleSelect(card)}
-                    className={`flex cursor-pointer items-center gap-4 p-3 transition-colors hover:bg-muted ${
-                      i > 0 ? "border-t border-border/50" : ""
-                    }`}
-                  >
-                    {card.image_uris && (
-                      <img
-                        src={card.image_uris.small}
-                        alt={card.name}
-                        className="h-14 w-auto shrink-0 rounded-md shadow-md"
-                      />
-                    )}
-                    <div className="min-w-0 text-left">
-                      <p className="truncate font-semibold text-foreground">
-                        {card.name}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {card.type_line}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </motion.div>
+                Building your deck...
+              </motion.p>
             )}
           </AnimatePresence>
-        </div>
+        </motion.div>
+      </section>
 
-        <AnimatePresence>
-          {creating && (
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="text-muted-foreground"
-            >
-              Building your deck...
-            </motion.p>
-          )}
-        </AnimatePresence>
-      </motion.div>
+      {/* Blog content — revealed when the user scrolls below the hero */}
+      <section className="border-t border-border">
+        <div className="mx-auto w-full max-w-2xl px-4 py-12">
+          <h2 className="font-heading text-3xl font-bold text-foreground mb-2">From the Blog</h2>
+          <p className="text-muted-foreground mb-10">Tips and guides for Commander deckbuilding.</p>
+
+          <div className="flex flex-col gap-12">
+            {BLOG_POSTS.map((post) => (
+              <article key={post.slug} className="border-t border-border pt-10 first:border-none first:pt-0">
+                <time className="text-xs text-muted-foreground" dateTime={post.date}>
+                  {new Date(post.date).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </time>
+                <h3 className="font-heading text-2xl font-bold text-foreground mt-1 mb-3">
+                  {post.title}
+                </h3>
+                <p className="text-muted-foreground mb-5 italic">{post.excerpt}</p>
+                <div className="flex flex-col gap-4">
+                  {post.body.map((paragraph, i) => (
+                    <p key={i} className="text-foreground/90 leading-relaxed">
+                      {paragraph}
+                    </p>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
