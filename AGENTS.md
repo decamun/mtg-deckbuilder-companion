@@ -14,4 +14,13 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Testing Backend Changes
 
-The cloud agent environment does **not** include a running Docker daemon, a local Supabase stack, or the `supabase` CLI, so backend changes (migrations, API routes that hit the DB, etc.) cannot be exercised end-to-end from inside an agent session. Write the code and migrations, verify with type-checks / unit tests / `next build` where possible, and call out anything that needs to be validated by a human running the full Docker + Supabase stack locally.
+End-to-end backend testing (migrations, API routes that hit the DB, etc.) is only possible when the agent is running inside a cloud container that has been provisioned with the full local backend — i.e. a Docker daemon + the local Supabase stack + the `supabase` CLI. Most agent sessions are **not** in such an environment.
+
+Before assuming you can test backend changes, sanity-check the environment:
+- `docker ps` succeeds (daemon is reachable)
+- `supabase --version` resolves
+- `curl -sf http://localhost:54321` reaches the local Supabase stack (Studio on 54323, app on 3000)
+
+**If all three pass:** you're in a properly configured cloud container. Apply migrations with `supabase db push` (run on the host, not inside the container) and run all other commands via `docker compose exec web <cmd>`.
+
+**If any of them fail:** you cannot exercise backend changes end-to-end. Write the code and migrations, verify with type-checks / unit tests / `next build` where possible, and explicitly call out anything that needs to be validated by a human (or a properly-provisioned agent) running the full Docker + Supabase stack.
