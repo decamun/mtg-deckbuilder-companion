@@ -271,17 +271,30 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           effective_printing_id: effectiveId,
         }
       })
-      setCards(hydrated)
-
-      // Backfill missing oracle_id rows quietly so future renders don't re-resolve.
-      const missingOracle = cardsData.filter(c => !c.oracle_id && sfMap.get(c.scryfall_id)?.oracle_id)
-      if (owner && missingOracle.length > 0) {
-        await Promise.all(missingOracle.map(c => {
-          const oid = sfMap.get(c.scryfall_id)?.oracle_id
-          if (!oid) return Promise.resolve()
-          return supabase.from('deck_cards').update({ oracle_id: oid }).eq('id', c.id).then(() => undefined)
-        }))
-      }
+      // Preserve hydrated fields from previous state when this fetch lost some
+      // (e.g. Scryfall 429). Without this, a transient rate-limit blanks every
+      // image until the user triggers another action. Functional setCards
+      // ensures we merge against *current* state, not the closure's stale copy.
+      setCards(prev => {
+        const prevById = new Map(prev.map(c => [c.id, c]))
+        return hydrated.map(h => {
+          if (h.image_url) return h
+          const p = prevById.get(h.id)
+          if (!p || p.effective_printing_id !== h.effective_printing_id || p.finish !== h.finish) return h
+          return {
+            ...h,
+            image_url: p.image_url,
+            type_line: h.type_line || p.type_line || '',
+            mana_cost: h.mana_cost || p.mana_cost || '',
+            cmc: h.cmc || p.cmc || 0,
+            colors: h.colors?.length ? h.colors : p.colors,
+            set_code: h.set_code ?? p.set_code,
+            collector_number: h.collector_number ?? p.collector_number,
+            available_finishes: h.available_finishes ?? p.available_finishes,
+            price_usd: h.price_usd ?? p.price_usd ?? null,
+          }
+        })
+      })
 
       // Cover image URL
       const coverId = deckData.cover_image_scryfall_id || null

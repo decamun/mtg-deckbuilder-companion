@@ -119,31 +119,59 @@ export async function getCardBySetAndCN(set: string, collectorNumber: string): P
 }
 
 const printingsByOracleCache = new Map<string, ScryfallPrinting[]>()
+const inFlightPrintings = new Map<string, Promise<ScryfallPrinting[]>>()
+
+// Single-file FIFO queue: serializes Scryfall search requests with a small
+// gap between them. Scryfall asks for 50–100ms between requests; bursting
+// 100+ in parallel returns 429s that the browser surfaces as CORS errors
+// (their CDN strips Access-Control-Allow-Origin on rate-limit responses).
+let scryfallSearchChain: Promise<unknown> = Promise.resolve()
+const SCRYFALL_SEARCH_GAP_MS = 110
+function queueScryfallSearch<T>(fn: () => Promise<T>): Promise<T> {
+  const next = scryfallSearchChain.then(async () => {
+    const result = await fn()
+    await new Promise(r => setTimeout(r, SCRYFALL_SEARCH_GAP_MS))
+    return result
+  })
+  scryfallSearchChain = next.catch(() => undefined)
+  return next
+}
 
 /** All printings of a card, sorted oldest-first. Cached per oracle_id for the page lifetime. */
 export async function getPrintingsByOracleId(oracleId: string): Promise<ScryfallPrinting[]> {
   if (!oracleId) return []
   const cached = printingsByOracleCache.get(oracleId)
   if (cached) return cached
+  const inFlight = inFlightPrintings.get(oracleId)
+  if (inFlight) return inFlight
 
-  const all: ScryfallPrinting[] = []
-  let url: string | null =
-    `https://api.scryfall.com/cards/search?q=${encodeURIComponent(`oracleid:${oracleId}`)}&unique=prints&order=released&dir=asc`
-  try {
-    while (url) {
-      const res: Response = await fetch(url)
-      if (!res.ok) break
-      const json: { data?: ScryfallPrinting[]; has_more?: boolean; next_page?: string } = await res.json()
-      if (json.data) all.push(...json.data)
-      url = json.has_more && json.next_page ? json.next_page : null
-      if (url) await new Promise(r => setTimeout(r, 100))
+  const promise = queueScryfallSearch(async () => {
+    const all: ScryfallPrinting[] = []
+    let url: string | null =
+      `https://api.scryfall.com/cards/search?q=${encodeURIComponent(`oracleid:${oracleId}`)}&unique=prints&order=released&dir=asc`
+    try {
+      while (url) {
+        const res: Response = await fetch(url)
+        if (!res.ok) break
+        const json: { data?: ScryfallPrinting[]; has_more?: boolean; next_page?: string } = await res.json()
+        if (json.data) all.push(...json.data)
+        url = json.has_more && json.next_page ? json.next_page : null
+        if (url) await new Promise(r => setTimeout(r, 100))
+      }
+    } catch (error) {
+      console.error("Scryfall getPrintingsByOracleId error:", error)
     }
-  } catch (error) {
-    console.error("Scryfall getPrintingsByOracleId error:", error)
-  }
-
-  printingsByOracleCache.set(oracleId, all)
-  return all
+    return all
+  }).then(all => {
+    printingsByOracleCache.set(oracleId, all)
+    inFlightPrintings.delete(oracleId)
+    return all
+  }).catch(err => {
+    inFlightPrintings.delete(oracleId)
+    throw err
+  })
+  inFlightPrintings.set(oracleId, promise)
+  return promise
 }
 
 /** Convenience: oldest printing's scryfall id, or null if oracle not found. */
