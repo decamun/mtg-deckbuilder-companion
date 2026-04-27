@@ -8,7 +8,7 @@ function PopupCallbackInner() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    const code = searchParams.get("code")
+    const code = searchParams?.get("code")
 
     if (!code) {
       if (window.opener) {
