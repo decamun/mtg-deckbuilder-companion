@@ -20,6 +20,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { DeckAnalytics } from "@/components/deck-analytics"
 import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
 import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
+import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
 import { PrimerView } from "@/components/primer/PrimerView"
 import { PrimerEditor } from "@/components/primer/PrimerEditor"
 import { VersionsTab } from "@/components/versions/VersionsTab"
@@ -836,6 +837,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             >
               <Settings className="w-4 h-4" />
             </button>
+          )}
+          {deck && (
+            <ExportDeckMenu
+              deckName={displayedDeckName}
+              cards={displayedCards}
+              primerMarkdown={viewing ? viewing.primerMarkdown : primerMarkdown}
+              commanderIds={displayedCommanderIds}
+            />
           )}
         </div>
         </div>
