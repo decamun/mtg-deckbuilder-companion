@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use, useRef, useMemo } from "react"
 import { motion } from "framer-motion"
-import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2, Sparkles } from "lucide-react"
+import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -803,19 +803,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
             {/* Right: settings + export */}
             <div className="flex items-center gap-2 shrink-0">
-              {isOwner && !viewing && (
-                <button
-                  onClick={() => setAgentOpen((o) => !o)}
-                  className={`h-8 w-8 inline-flex items-center justify-center rounded-md border text-foreground ${
-                    agentOpen
-                      ? 'bg-primary/15 border-primary/40 text-primary'
-                      : 'bg-card border-border hover:bg-accent'
-                  }`}
-                  title="Deck assistant"
-                >
-                  <Sparkles className="w-4 h-4" />
-                </button>
-              )}
               {isOwner && !viewing && (
                 <button
                   onClick={() => setSettingsOpen(true)}

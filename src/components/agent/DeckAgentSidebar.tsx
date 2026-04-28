@@ -61,12 +61,43 @@ function summariseOutput(toolName: string, output: unknown): string | undefined 
   return undefined
 }
 
+const MIN_WIDTH = 240
+const MAX_WIDTH = 720
+const DEFAULT_WIDTH = 320
+
 export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
   const [model, setModel] = useState<ModelId>(DEFAULT_MODEL)
   const [reasoning, setReasoning] = useState(false)
   const [draft, setDraft] = useState("")
   const [limits, setLimits] = useState<LimitsResponse | null>(null)
+  const [width, setWidth] = useState(DEFAULT_WIDTH)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const isResizing = useRef(false)
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    // Resize only on md+ screens (≥768px)
+    if (window.innerWidth < 768) return
+    e.preventDefault()
+    isResizing.current = true
+    const startX = e.clientX
+    const startWidth = width
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return
+      setWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + startX - ev.clientX)))
+    }
+    const onMouseUp = () => {
+      isResizing.current = false
+      document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("mouseup", onMouseUp)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+    document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("mouseup", onMouseUp)
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }
 
   const transport = useMemo(
     () =>
@@ -145,7 +176,16 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
   const reasoningAvailable = modelDesc.reasoning
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card/95 shadow-xl">
+    <aside
+      className="relative flex shrink-0 flex-col border-l border-border bg-card/95 shadow-xl"
+      style={{ width }}
+    >
+      {/* Drag handle — desktop only */}
+      <div
+        className="absolute left-0 top-0 bottom-0 z-10 w-1 hidden md:block cursor-col-resize hover:bg-primary/40 active:bg-primary/60 transition-colors"
+        onMouseDown={handleResizeStart}
+      />
+
       <header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <Sparkles className="h-4 w-4 text-primary" />
         <span className="text-sm font-semibold">Deck assistant</span>
