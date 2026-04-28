@@ -23,6 +23,13 @@ import { toast } from "sonner"
 
 const PENDING_COMMANDER_KEY = "idlebrew:pendingCommander"
 
+type BrewOpts = {
+  secondCommander: ScryfallCard | null
+  bracket: Bracket
+  budgetUsd: number | null
+  slots: { lands: number; creatures: number; spells: number }
+}
+
 function toEDHRECSlug(name: string): string {
   return name
     .toLowerCase()
@@ -63,7 +70,11 @@ export function BrewSection() {
   const [results, setResults] = useState<ScryfallCard[]>([])
   const [searching, setSearching] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [buildStatus, setBuildStatus] = useState("Setting up your deck…")
+  const [statusQueue, setStatusQueue] = useState<string[]>(["Setting up your deck…"])
+  const displayedStatus = statusQueue[0] ?? "Setting up your deck…"
+  const pushStatus = useCallback((msg: string) => {
+    setStatusQueue((q) => [...q, msg])
+  }, [])
   const [showResults, setShowResults] = useState(false)
   const debouncedQuery = useDebounce(query, 350)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -85,6 +96,11 @@ export function BrewSection() {
     lands: 37,
     creatures: 30,
     spells: 32,
+  })
+  const [slotDrafts, setSlotDrafts] = useState<{ lands: string | null; creatures: string | null; spells: string | null }>({
+    lands: null,
+    creatures: null,
+    spells: null,
   })
 
   const slotTotal = 99 - (secondCommander ? 1 : 0)
@@ -160,17 +176,22 @@ export function BrewSection() {
       setSlots((prev) => {
         const total = 99 - (secondCommander ? 1 : 0)
         const newVal = Math.max(0, Math.min(total, Math.round(rawVal)))
-        const otherKeys = (["lands", "creatures", "spells"] as const).filter((k) => k !== key)
-        const otherSum = total - newVal
-        const prevOtherSum = prev[otherKeys[0]] + prev[otherKeys[1]]
-        let a: number
-        if (prevOtherSum <= 0) {
-          a = Math.floor(otherSum / 2)
-        } else {
-          a = Math.max(0, Math.round((prev[otherKeys[0]] / prevOtherSum) * otherSum))
+        const next = { ...prev, [key]: newVal }
+        let diff = newVal - prev[key]
+        const order = ["lands", "creatures", "spells"] as const
+        const idx = order.indexOf(key)
+        for (let offset = 1; offset < order.length && diff !== 0; offset++) {
+          const target = order[(idx + offset) % order.length]
+          if (diff > 0) {
+            const taken = Math.min(next[target], diff)
+            next[target] -= taken
+            diff -= taken
+          } else {
+            next[target] += -diff
+            diff = 0
+          }
         }
-        const b = Math.max(0, otherSum - a)
-        return { ...prev, [key]: newVal, [otherKeys[0]]: a, [otherKeys[1]]: b }
+        return next
       })
     },
     [secondCommander]
@@ -186,28 +207,33 @@ export function BrewSection() {
     })
   }, [secondCommander])
 
+  // Drain status queue — display each message for at least 300ms before
+  // advancing, so fast back-to-back updates don't flash by unread.
+  useEffect(() => {
+    if (statusQueue.length <= 1) return
+    const t = setTimeout(() => {
+      setStatusQueue((q) => (q.length > 1 ? q.slice(1) : q))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [statusQueue])
+
   const createDeck = useCallback(
-    async (
-      card: ScryfallCard,
-      opts: {
-        secondCommander: ScryfallCard | null
-        bracket: Bracket
-        budgetUsd: number | null
-        slots: { lands: number; creatures: number; spells: number }
-      }
-    ) => {
+    async (card: ScryfallCard, opts: BrewOpts) => {
       const {
         data: { user },
       } = await supabase.auth.getUser()
 
       if (!user) {
-        sessionStorage.setItem(PENDING_COMMANDER_KEY, JSON.stringify(card))
+        sessionStorage.setItem(
+          PENDING_COMMANDER_KEY,
+          JSON.stringify({ card, opts })
+        )
         window.dispatchEvent(new CustomEvent("open-login-dialog"))
         return
       }
 
       setCreating(true)
-      setBuildStatus("Setting up your deck…")
+      setStatusQueue(["Setting up your deck…"])
       setShowResults(false)
 
       try {
@@ -242,7 +268,7 @@ export function BrewSection() {
         const wouldExceedBudget = (cost: number): boolean =>
           opts.budgetUsd !== null && totalCost + cost > opts.budgetUsd
 
-        setBuildStatus(
+        pushStatus(
           opts.secondCommander
             ? "Seating your commanders…"
             : "Seating your commander…"
@@ -267,7 +293,7 @@ export function BrewSection() {
           totalCost += priceOf(opts.secondCommander)
         }
 
-        setBuildStatus("Tossing in a Sol Ring…")
+        pushStatus("Tossing in a Sol Ring…")
         let solRingInserted = false
         const solRing = await getCardByName("Sol Ring")
         if (solRing && !wouldExceedBudget(priceOf(solRing))) {
@@ -304,7 +330,7 @@ export function BrewSection() {
               ]
             : ["Wastes"]
 
-        setBuildStatus("Consulting EDHREC…")
+        pushStatus("Consulting EDHREC…")
         const edhrecRaw = await fetchEDHRECCards(card.name)
         const skipNames = new Set([
           card.name.toLowerCase(),
@@ -324,11 +350,11 @@ export function BrewSection() {
         const edhrecCreatures: DeckRow[] = []
         const edhrecSpells: DeckRow[] = []
         if (edhrecFiltered.length > 0) {
-          setBuildStatus("Looking up cards on Scryfall…")
+          pushStatus("Looking up cards on Scryfall…")
           const scryfallCards = await getCardsCollection(
             edhrecFiltered.map((c) => c.name)
           )
-          setBuildStatus("Sorting cards into roles…")
+          pushStatus("Sorting cards into roles…")
           for (const ec of edhrecFiltered) {
             const sc = scryfallCards.find(
               (s) => s.name.toLowerCase() === ec.name.toLowerCase()
@@ -367,7 +393,7 @@ export function BrewSection() {
           return taken
         }
 
-        setBuildStatus("Building your mana base…")
+        pushStatus("Building your mana base…")
         const minBasicEach = Math.min(4, Math.floor(LAND_COUNT / Math.max(1, basicLandNames.length)))
         const minBasicsTotal = basicLandNames.length * minBasicEach
         const edhrecLandSlots = Math.max(0, LAND_COUNT - minBasicsTotal)
@@ -406,7 +432,7 @@ export function BrewSection() {
           await supabase.from("deck_cards").insert(allLandInserts)
         }
 
-        setBuildStatus("Filling out creatures and spells…")
+        pushStatus("Filling out creatures and spells…")
         const creatureInserts = takeForRole(edhrecCreatures, opts.slots.creatures)
         const spellSlotsRemaining = Math.max(0, opts.slots.spells - (solRingInserted ? 1 : 0))
         const spellInserts = takeForRole(edhrecSpells, spellSlotsRemaining)
@@ -426,7 +452,7 @@ export function BrewSection() {
           toast.success(`Loaded ${edhrecLandsTaken} cards from EDHREC`)
         }
 
-        setBuildStatus("Shuffling up…")
+        pushStatus("Shuffling up…")
         router.push(`/decks/${deck.id}`)
       } catch (err: unknown) {
         const message =
@@ -446,14 +472,36 @@ export function BrewSection() {
       if (!raw) return
       sessionStorage.removeItem(PENDING_COMMANDER_KEY)
       try {
-        const card = JSON.parse(raw) as ScryfallCard
+        const parsed = JSON.parse(raw) as
+          | { card: ScryfallCard; opts: BrewOpts }
+          | ScryfallCard
+        const card = "card" in parsed ? parsed.card : parsed
+        const opts: BrewOpts =
+          "opts" in parsed
+            ? parsed.opts
+            : {
+                secondCommander: null,
+                bracket: 3,
+                budgetUsd: null,
+                slots: { lands: 37, creatures: 30, spells: 32 },
+              }
         setQuery(card.name)
-        createDeck(card, {
-          secondCommander: null,
-          bracket: 3,
-          budgetUsd: null,
-          slots: { lands: 37, creatures: 30, spells: 32 },
-        })
+        setPrimaryCommander(card)
+        if (opts.secondCommander) {
+          setSecondCommander(opts.secondCommander)
+          setSecondQuery(opts.secondCommander.name)
+        }
+        setBracket(opts.bracket)
+        setBudget(opts.budgetUsd === null ? "" : String(opts.budgetUsd))
+        setSlots(opts.slots)
+        if (
+          opts.secondCommander ||
+          opts.bracket !== 3 ||
+          opts.budgetUsd !== null
+        ) {
+          setAdvancedOpen(true)
+        }
+        createDeck(card, opts)
       } catch {
         // malformed storage entry — ignore
       }
@@ -735,11 +783,17 @@ export function BrewSection() {
                           type="number"
                           min={0}
                           max={slotTotal}
-                          value={slots[key]}
+                          value={slotDrafts[key] ?? String(slots[key])}
                           onChange={(e) => {
-                            const n = parseInt(e.target.value)
+                            const v = e.target.value
+                            setSlotDrafts((d) => ({ ...d, [key]: v }))
+                            if (v === "" || v === "-") return
+                            const n = parseInt(v)
                             if (!isNaN(n)) adjustSlots(key, n)
                           }}
+                          onBlur={() =>
+                            setSlotDrafts((d) => ({ ...d, [key]: null }))
+                          }
                           disabled={creating}
                           className="h-9 w-16 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:opacity-50"
                         />
@@ -799,14 +853,14 @@ export function BrewSection() {
         <AnimatePresence mode="wait">
           {creating && (
             <motion.p
-              key={buildStatus}
+              key={displayedStatus}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.18 }}
               className="text-muted-foreground"
             >
-              {buildStatus}
+              {displayedStatus}
             </motion.p>
           )}
         </AnimatePresence>
