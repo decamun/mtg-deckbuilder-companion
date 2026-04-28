@@ -105,7 +105,7 @@ export async function POST(request: Request) {
   await recordCall(supabase, user.id, modelId)
 
   const tools = buildDeckAgentTools(supabase, user.id, body.deckId)
-  const isHaiku = modelId === 'claude-haiku-4-5-20251001'
+  const isHaiku = modelId === 'anthropic/claude-haiku-4.5'
 
   const result = streamText({
     model: resolveModel(modelId),

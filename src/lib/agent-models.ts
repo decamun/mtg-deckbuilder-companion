@@ -1,6 +1,4 @@
-import { anthropic } from '@ai-sdk/anthropic'
-import { google } from '@ai-sdk/google'
-import { openai } from '@ai-sdk/openai'
+import { createGatewayProvider } from '@ai-sdk/gateway'
 import type { LanguageModel } from 'ai'
 import type { ProviderOptions } from '@ai-sdk/provider-utils'
 import type { ModelId } from './agent-quota'
@@ -8,61 +6,76 @@ import type { ModelId } from './agent-quota'
 export interface ModelDescriptor {
   id: ModelId
   label: string
-  /** Provider name shown in the UI. */
+  /** Underlying provider key — used to namespace `providerOptions`. */
   provider: 'anthropic' | 'google' | 'openai'
   /** Whether this model supports a "thinking" / reasoning budget. */
   reasoning: boolean
 }
 
 export const MODEL_DESCRIPTORS: Record<ModelId, ModelDescriptor> = {
-  'claude-haiku-4-5-20251001': {
-    id: 'claude-haiku-4-5-20251001',
+  'anthropic/claude-haiku-4.5': {
+    id: 'anthropic/claude-haiku-4.5',
     label: 'Claude Haiku 4.5',
     provider: 'anthropic',
     reasoning: false,
   },
-  'claude-sonnet-4-6': {
-    id: 'claude-sonnet-4-6',
+  'anthropic/claude-sonnet-4.6': {
+    id: 'anthropic/claude-sonnet-4.6',
     label: 'Claude Sonnet 4.6',
     provider: 'anthropic',
     reasoning: true,
   },
-  'claude-opus-4-7': {
-    id: 'claude-opus-4-7',
+  'anthropic/claude-opus-4.7': {
+    id: 'anthropic/claude-opus-4.7',
     label: 'Claude Opus 4.7',
     provider: 'anthropic',
     reasoning: true,
   },
-  'gemini-2.5-pro': {
-    id: 'gemini-2.5-pro',
+  'google/gemini-2.5-pro': {
+    id: 'google/gemini-2.5-pro',
     label: 'Gemini 2.5 Pro',
     provider: 'google',
     reasoning: true,
   },
-  'gpt-5.1': {
-    id: 'gpt-5.1',
-    label: 'GPT-5.1',
+  'openai/gpt-5.1-thinking': {
+    id: 'openai/gpt-5.1-thinking',
+    label: 'GPT-5.1 (thinking)',
     provider: 'openai',
     reasoning: true,
   },
 }
 
-export function resolveModel(modelId: ModelId): LanguageModel {
-  const desc = MODEL_DESCRIPTORS[modelId]
-  if (!desc) throw new Error(`Unknown model: ${modelId}`)
-  switch (desc.provider) {
-    case 'anthropic':
-      return anthropic(desc.id)
-    case 'google':
-      return google(desc.id)
-    case 'openai':
-      return openai(desc.id)
+/**
+ * Lazy gateway singleton. The gateway routes to whichever upstream provider
+ * the model id names, billed against a single Vercel AI Gateway key.
+ *
+ * The SDK reads `AI_GATEWAY_API_KEY` from env by default; we accept either
+ * that or `VERCEL_AI_GATEWAY_KEY` so deployments using the historical name
+ * keep working without a rename.
+ */
+let _gateway: ReturnType<typeof createGatewayProvider> | null = null
+function getGateway() {
+  if (!_gateway) {
+    const apiKey =
+      process.env.VERCEL_AI_GATEWAY_KEY ?? process.env.AI_GATEWAY_API_KEY
+    if (!apiKey) {
+      throw new Error(
+        'VERCEL_AI_GATEWAY_KEY (or AI_GATEWAY_API_KEY) is not set. ' +
+          'Add it to .env / docker-compose.yml so the agent route can call the gateway.'
+      )
+    }
+    _gateway = createGatewayProvider({ apiKey })
   }
+  return _gateway
+}
+
+export function resolveModel(modelId: ModelId): LanguageModel {
+  return getGateway()(modelId)
 }
 
 /**
- * Build provider-specific options for reasoning. Exposed as one record because
- * `streamText` accepts `providerOptions` keyed by provider id and dispatches.
+ * Build provider-specific options for reasoning. The gateway forwards these
+ * verbatim, keyed by underlying provider name.
  */
 export function reasoningProviderOptions(
   modelId: ModelId,

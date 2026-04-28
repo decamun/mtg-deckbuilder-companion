@@ -1,11 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+/**
+ * Model ids use the Vercel AI Gateway naming convention: `provider/model`.
+ * The gateway forwards requests to the underlying provider and accepts
+ * provider-specific options via `providerOptions[<provider name>]`.
+ */
 export type ModelId =
-  | 'claude-haiku-4-5-20251001'
-  | 'claude-sonnet-4-6'
-  | 'claude-opus-4-7'
-  | 'gemini-2.5-pro'
-  | 'gpt-5.1'
+  | 'anthropic/claude-haiku-4.5'
+  | 'anthropic/claude-sonnet-4.6'
+  | 'anthropic/claude-opus-4.7'
+  | 'google/gemini-2.5-pro'
+  | 'openai/gpt-5.1-thinking'
 
 export type AgentTier = 'free' | 'pro' | 'unlimited'
 
@@ -16,19 +21,19 @@ export interface TierLimits {
 }
 
 export const ALL_MODELS: ReadonlyArray<ModelId> = [
-  'claude-haiku-4-5-20251001',
-  'claude-sonnet-4-6',
-  'claude-opus-4-7',
-  'gemini-2.5-pro',
-  'gpt-5.1',
+  'anthropic/claude-haiku-4.5',
+  'anthropic/claude-sonnet-4.6',
+  'anthropic/claude-opus-4.7',
+  'google/gemini-2.5-pro',
+  'openai/gpt-5.1-thinking',
 ]
 
-export const DEFAULT_MODEL: ModelId = 'claude-haiku-4-5-20251001'
+export const DEFAULT_MODEL: ModelId = 'anthropic/claude-haiku-4.5'
 
 export const TIER_LIMITS: Record<AgentTier, TierLimits> = {
   free: {
     callsPerHour: 30,
-    allowedModels: ['claude-haiku-4-5-20251001'],
+    allowedModels: ['anthropic/claude-haiku-4.5'],
     maxStepsPerCall: 10,
   },
   pro: {
