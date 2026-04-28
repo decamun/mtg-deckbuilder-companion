@@ -10,7 +10,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase/client"
 import type { DeckCard } from "@/lib/types"
@@ -184,15 +183,7 @@ export function ExportDeckMenu({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 bg-card border-border text-foreground hover:bg-accent"
-          />
-        }
-      >
+      <DropdownMenuTrigger className="h-8 inline-flex items-center gap-1.5 rounded-md bg-card border border-border px-2.5 text-sm font-medium text-foreground hover:bg-accent transition-colors">
         <Share2 className="w-3.5 h-3.5" />
         Export & Share
         <ChevronDown className="w-3 h-3 opacity-60" />
