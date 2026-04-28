@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { toast } from "sonner"
-import { Send, Square, X, Trash2, Sparkles, Brain } from "lucide-react"
+import { Send, Square, Trash2, Sparkles, Brain, PanelRightClose, PanelRightOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ToolChip } from "./ToolChip"
@@ -22,6 +22,7 @@ interface Props {
   deckId: string
   open: boolean
   onClose: () => void
+  onOpen: () => void
 }
 
 interface LimitsResponse {
@@ -60,7 +61,7 @@ function summariseOutput(toolName: string, output: unknown): string | undefined 
   return undefined
 }
 
-export function DeckAgentSidebar({ deckId, open, onClose }: Props) {
+export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
   const [model, setModel] = useState<ModelId>(DEFAULT_MODEL)
   const [reasoning, setReasoning] = useState(false)
   const [draft, setDraft] = useState("")
@@ -120,13 +121,31 @@ export function DeckAgentSidebar({ deckId, open, onClose }: Props) {
     setMessages([])
   }
 
-  if (!open) return null
+  if (!open) {
+    return (
+      <aside className="flex w-10 shrink-0 flex-col items-center border-l border-border bg-card/50 py-3 gap-4">
+        <button
+          onClick={onOpen}
+          className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          title="Open Deck assistant"
+        >
+          <PanelRightOpen className="h-4 w-4" />
+        </button>
+        <span
+          className="text-[10px] font-medium text-muted-foreground select-none"
+          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+        >
+          Deck assistant
+        </span>
+      </aside>
+    )
+  }
 
   const modelDesc = MODEL_DESCRIPTORS[model]
   const reasoningAvailable = modelDesc.reasoning
 
   return (
-    <aside className="fixed right-0 top-14 bottom-0 z-50 flex w-full max-w-md flex-col border-l border-border bg-card/95 shadow-2xl backdrop-blur-xl">
+    <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card/95 shadow-xl">
       <header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <Sparkles className="h-4 w-4 text-primary" />
         <span className="text-sm font-semibold">Deck assistant</span>
@@ -140,8 +159,8 @@ export function DeckAgentSidebar({ deckId, open, onClose }: Props) {
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClose} title="Close">
-            <X className="h-4 w-4" />
+          <Button variant="ghost" size="sm" onClick={onClose} title="Collapse sidebar">
+            <PanelRightClose className="h-4 w-4" />
           </Button>
         </div>
       </header>
