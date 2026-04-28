@@ -104,7 +104,7 @@ export function TopNav() {
   return (
     <>
     <header className="sticky top-0 z-50 shrink-0 border-b border-border bg-background/80 backdrop-blur-xl">
-      <div className="container mx-auto flex h-14 items-center gap-6 px-4">
+      <div className="container mx-auto flex h-14 items-center gap-2 sm:gap-6 px-4">
         {/* Logo & name — always anchored left */}
         <Link
           href="/brew"
@@ -112,13 +112,13 @@ export function TopNav() {
           className="flex shrink-0 items-center gap-2.5"
         >
           <IdlebrewLogo className="h-7 w-auto text-foreground" />
-          <span className="font-heading text-lg font-bold tracking-tight text-foreground">
+          <span className="hidden sm:inline font-heading text-lg font-bold tracking-tight text-foreground">
             idlebrew
           </span>
         </Link>
 
         {/* Nav links */}
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-0.5 sm:gap-1">
           {NAV_LINKS.map(({ href, label, requiresAuth }) => {
             const hidden = requiresAuth && !user
             const isActive =
@@ -131,7 +131,7 @@ export function TopNav() {
                 aria-hidden={hidden}
                 tabIndex={hidden ? -1 : undefined}
                 onClick={(e) => handleNavClick(e, href)}
-                className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                className={`rounded-md px-2 sm:px-4 py-1.5 text-sm font-medium transition-colors ${
                   hidden ? "invisible pointer-events-none" : ""
                 } ${
                   isActive
