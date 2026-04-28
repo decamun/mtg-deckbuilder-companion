@@ -63,6 +63,7 @@ export function BrewSection() {
   const [results, setResults] = useState<ScryfallCard[]>([])
   const [searching, setSearching] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [buildStatus, setBuildStatus] = useState("Setting up your deck…")
   const [showResults, setShowResults] = useState(false)
   const debouncedQuery = useDebounce(query, 350)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -206,6 +207,7 @@ export function BrewSection() {
       }
 
       setCreating(true)
+      setBuildStatus("Setting up your deck…")
       setShowResults(false)
 
       try {
@@ -240,6 +242,11 @@ export function BrewSection() {
         const wouldExceedBudget = (cost: number): boolean =>
           opts.budgetUsd !== null && totalCost + cost > opts.budgetUsd
 
+        setBuildStatus(
+          opts.secondCommander
+            ? "Seating your commanders…"
+            : "Seating your commander…"
+        )
         await supabase.from("deck_cards").insert({
           deck_id: deck.id,
           scryfall_id: card.id,
@@ -260,6 +267,7 @@ export function BrewSection() {
           totalCost += priceOf(opts.secondCommander)
         }
 
+        setBuildStatus("Tossing in a Sol Ring…")
         let solRingInserted = false
         const solRing = await getCardByName("Sol Ring")
         if (solRing && !wouldExceedBudget(priceOf(solRing))) {
@@ -296,6 +304,7 @@ export function BrewSection() {
               ]
             : ["Wastes"]
 
+        setBuildStatus("Consulting EDHREC…")
         const edhrecRaw = await fetchEDHRECCards(card.name)
         const skipNames = new Set([
           card.name.toLowerCase(),
@@ -315,9 +324,11 @@ export function BrewSection() {
         const edhrecCreatures: DeckRow[] = []
         const edhrecSpells: DeckRow[] = []
         if (edhrecFiltered.length > 0) {
+          setBuildStatus("Looking up cards on Scryfall…")
           const scryfallCards = await getCardsCollection(
             edhrecFiltered.map((c) => c.name)
           )
+          setBuildStatus("Sorting cards into roles…")
           for (const ec of edhrecFiltered) {
             const sc = scryfallCards.find(
               (s) => s.name.toLowerCase() === ec.name.toLowerCase()
@@ -356,6 +367,7 @@ export function BrewSection() {
           return taken
         }
 
+        setBuildStatus("Building your mana base…")
         const minBasicEach = Math.min(4, Math.floor(LAND_COUNT / Math.max(1, basicLandNames.length)))
         const minBasicsTotal = basicLandNames.length * minBasicEach
         const edhrecLandSlots = Math.max(0, LAND_COUNT - minBasicsTotal)
@@ -394,6 +406,7 @@ export function BrewSection() {
           await supabase.from("deck_cards").insert(allLandInserts)
         }
 
+        setBuildStatus("Filling out creatures and spells…")
         const creatureInserts = takeForRole(edhrecCreatures, opts.slots.creatures)
         const spellSlotsRemaining = Math.max(0, opts.slots.spells - (solRingInserted ? 1 : 0))
         const spellInserts = takeForRole(edhrecSpells, spellSlotsRemaining)
@@ -413,6 +426,7 @@ export function BrewSection() {
           toast.success(`Loaded ${edhrecLandsTaken} cards from EDHREC`)
         }
 
+        setBuildStatus("Shuffling up…")
         router.push(`/decks/${deck.id}`)
       } catch (err: unknown) {
         const message =
@@ -782,15 +796,17 @@ export function BrewSection() {
           </AnimatePresence>
         </div>
 
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {creating && (
             <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              key={buildStatus}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.18 }}
               className="text-muted-foreground"
             >
-              Building your deck...
+              {buildStatus}
             </motion.p>
           )}
         </AnimatePresence>
