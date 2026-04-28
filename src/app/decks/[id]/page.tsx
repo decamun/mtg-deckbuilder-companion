@@ -739,105 +739,112 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           )}
         </div>
 
-        {/* Foreground: toolbar pinned to bottom */}
-        <div className="absolute inset-x-0 bottom-0 h-14 flex items-center gap-3 px-4">
-        {/* Left: back + deck title */}
-        <Button variant="ghost" size="sm" onClick={() => router.push(isOwner ? '/decks' : '/')} className="text-muted-foreground hover:text-foreground shrink-0">
-          &larr; Back
-        </Button>
-        <div className="flex items-center gap-2 shrink-0 border-r border-border pr-3">
-          <h1 className="font-bold text-base whitespace-nowrap drop-shadow-md">{displayedDeckName}</h1>
-          <Badge variant="outline" className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm">
-            {displayedCards.reduce((a, c) => a + c.quantity, 0)}
-          </Badge>
-          <Badge variant="outline" className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm font-mono" title={totalUsd.anyMissing ? "Some cards have no price data" : undefined}>
-            {formatPrice(totalUsd.sum)}{totalUsd.anyMissing ? "+" : ""}
-          </Badge>
-          {deck && !deck.is_public && (
-            <Badge className="bg-muted text-muted-foreground border-border">Private</Badge>
-          )}
-        </div>
+        {/* Foreground: two rows on mobile, single row on sm+ */}
+        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 px-4 pb-2 sm:flex-row sm:items-center sm:gap-3 sm:h-14 sm:pb-0">
 
-        {/* Center: add-a-card search (owner-only, decklist tab only, not while viewing a version) */}
-        {!interactionsLocked && tab === 'decklist' ? (
-        <div ref={searchContainerRef} className="flex-1 relative min-w-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Add a card..."
-            className="pl-9 pr-4 bg-background/60 border-border text-foreground h-9 w-full"
-            value={query}
-            onChange={e => { setQuery(e.target.value); setSearchFocused(true) }}
-            onFocus={() => setSearchFocused(true)}
-            onKeyDown={handleSearchKeyDown}
-          />
-          {searchFocused && results.length > 0 && (
-            <div className="absolute top-full mt-1 left-0 right-0 bg-card border border-border rounded-lg shadow-2xl overflow-hidden z-50">
-              <div className="max-h-80 overflow-y-auto">
-                {results.slice(0, 10).map((card, idx) => (
-                  <div
-                    key={card.id}
-                    className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
-                      idx === selectedResultIdx ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60'
-                    }`}
-                    onMouseEnter={() => setSelectedResultIdx(idx)}
-                    onClick={() => handleAddCard(card)}
-                  >
-                    {card.image_uris && (
-                      <img
-                        src={card.image_uris.small ?? card.image_uris.normal}
-                        className="w-7 h-auto rounded shrink-0"
-                        draggable={false}
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{card.name}</div>
-                      <div className="text-xs text-muted-foreground truncate">{card.type_line}</div>
-                    </div>
-                    <div className="text-xs text-muted-foreground shrink-0 ml-2">{card.mana_cost}</div>
-                  </div>
-                ))}
-              </div>
+          {/* Row 1 (mobile) / inlined (sm+): back + deck title */}
+          <div className="flex h-9 items-center gap-2 w-full sm:contents">
+            <Button variant="ghost" size="sm" onClick={() => router.push(isOwner ? '/decks' : '/')} className="text-muted-foreground hover:text-foreground shrink-0">
+              &larr; Back
+            </Button>
+            <div className="flex flex-1 min-w-0 sm:flex-none sm:shrink-0 items-center gap-2 border-r border-border pr-3">
+              <h1 className="min-w-0 truncate font-bold text-base drop-shadow-md sm:whitespace-nowrap">{displayedDeckName}</h1>
+              <Badge variant="outline" className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm">
+                {displayedCards.reduce((a, c) => a + c.quantity, 0)}
+              </Badge>
+              <Badge variant="outline" className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm font-mono" title={totalUsd.anyMissing ? "Some cards have no price data" : undefined}>
+                {formatPrice(totalUsd.sum)}{totalUsd.anyMissing ? "+" : ""}
+              </Badge>
+              {deck && !deck.is_public && (
+                <Badge className="bg-muted text-muted-foreground border-border">Private</Badge>
+              )}
             </div>
-          )}
-        </div>
-        ) : (
-          <div className="flex-1 min-w-0" />
-        )}
+          </div>
 
-        {/* Right: group + view controls (decklist tab only) + settings (owner only) */}
-        <div className="flex items-center gap-2 shrink-0">
-          {tab === 'decklist' && (
-            <>
-              <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
-                <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
-                  <SelectValue placeholder="Group by" />
-                </SelectTrigger>
-                <SelectContent className="bg-card border-border text-foreground">
-                  <SelectItem value="none">No Grouping</SelectItem>
-                  <SelectItem value="type">By Type</SelectItem>
-                  <SelectItem value="mana">By Mana Cost</SelectItem>
-                  <SelectItem value="tag">By Tags</SelectItem>
-                </SelectContent>
-              </Select>
-              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
-                <TabsList className="h-7 bg-transparent">
-                  <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
-                  <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
-                  <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </>
-          )}
-          {isOwner && !viewing && (
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="h-8 w-8 inline-flex items-center justify-center rounded-md bg-card border border-border hover:bg-accent text-foreground"
-              title="Deck settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+          {/* Row 2 (mobile) / inlined (sm+): search + controls */}
+          <div className="flex h-9 items-center gap-2 w-full sm:contents">
+            {/* Center: add-a-card search (owner-only, decklist tab only, not while viewing a version) */}
+            {!interactionsLocked && tab === 'decklist' ? (
+            <div ref={searchContainerRef} className="flex-1 relative min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Add a card..."
+                className="pl-9 pr-4 bg-background/60 border-border text-foreground h-9 w-full"
+                value={query}
+                onChange={e => { setQuery(e.target.value); setSearchFocused(true) }}
+                onFocus={() => setSearchFocused(true)}
+                onKeyDown={handleSearchKeyDown}
+              />
+              {searchFocused && results.length > 0 && (
+                <div className="absolute top-full mt-1 left-0 right-0 bg-card border border-border rounded-lg shadow-2xl overflow-hidden z-50">
+                  <div className="max-h-80 overflow-y-auto">
+                    {results.slice(0, 10).map((card, idx) => (
+                      <div
+                        key={card.id}
+                        className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
+                          idx === selectedResultIdx ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60'
+                        }`}
+                        onMouseEnter={() => setSelectedResultIdx(idx)}
+                        onClick={() => handleAddCard(card)}
+                      >
+                        {card.image_uris && (
+                          <img
+                            src={card.image_uris.small ?? card.image_uris.normal}
+                            className="w-7 h-auto rounded shrink-0"
+                            draggable={false}
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{card.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">{card.type_line}</div>
+                        </div>
+                        <div className="text-xs text-muted-foreground shrink-0 ml-2">{card.mana_cost}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            ) : (
+              <div className="flex-1 min-w-0" />
+            )}
+
+            {/* Right: group + view controls (decklist tab only) + settings (owner only) */}
+            <div className="flex items-center gap-2 shrink-0">
+              {tab === 'decklist' && (
+                <>
+                  <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
+                    <SelectTrigger className="w-24 sm:w-32 bg-card border-border h-8 text-foreground">
+                      <SelectValue placeholder="Group by" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border text-foreground">
+                      <SelectItem value="none">No Grouping</SelectItem>
+                      <SelectItem value="type">By Type</SelectItem>
+                      <SelectItem value="mana">By Mana Cost</SelectItem>
+                      <SelectItem value="tag">By Tags</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
+                    <TabsList className="h-7 bg-transparent">
+                      <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
+                      <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
+                      <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </>
+              )}
+              {isOwner && !viewing && (
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-md bg-card border border-border hover:bg-accent text-foreground"
+                  title="Deck settings"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+
         </div>
       </header>
 
