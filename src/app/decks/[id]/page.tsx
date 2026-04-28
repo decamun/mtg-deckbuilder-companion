@@ -21,6 +21,7 @@ import { DeckAgentSidebar } from "@/components/agent/DeckAgentSidebar"
 import { DeckAnalytics } from "@/components/deck-analytics"
 import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
 import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
+import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
 import { PrimerView } from "@/components/primer/PrimerView"
 import { PrimerEditor } from "@/components/primer/PrimerEditor"
 import { VersionsTab } from "@/components/versions/VersionsTab"
@@ -800,30 +801,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               <div className="flex-1 min-w-0" />
             )}
 
-            {/* Right: group + view controls (decklist tab only) + settings (owner only) */}
+            {/* Right: settings + export */}
             <div className="flex items-center gap-2 shrink-0">
-              {tab === 'decklist' && (
-                <>
-                  <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
-                    <SelectTrigger className="w-24 sm:w-32 bg-card border-border h-8 text-foreground">
-                      <SelectValue placeholder="Group by" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-border text-foreground">
-                      <SelectItem value="none">No Grouping</SelectItem>
-                      <SelectItem value="type">By Type</SelectItem>
-                      <SelectItem value="mana">By Mana Cost</SelectItem>
-                      <SelectItem value="tag">By Tags</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
-                    <TabsList className="h-7 bg-transparent">
-                      <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
-                      <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
-                      <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </>
-              )}
               {isOwner && !viewing && (
                 <button
                   onClick={() => setAgentOpen((o) => !o)}
@@ -846,9 +825,20 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   <Settings className="w-4 h-4" />
                 </button>
               )}
+              {deck && (
+                <ExportDeckMenu
+                  deckId={deckId}
+                  deckName={displayedDeckName}
+                  cards={displayedCards}
+                  primerMarkdown={viewing ? viewing.primerMarkdown : primerMarkdown}
+                  commanderIds={displayedCommanderIds}
+                  isPublic={!!deck.is_public}
+                  isOwner={isOwner}
+                  onVisibilityChange={(pub) => setDeck({ ...deck, is_public: pub })}
+                />
+              )}
             </div>
           </div>
-
         </div>
       </header>
 
@@ -858,6 +848,26 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       <div className="flex-1 overflow-y-auto bg-background/20">
         <div className="p-6 max-w-6xl mx-auto space-y-8">
         {tab === 'decklist' && (<>
+          <div className="flex items-center justify-end gap-2">
+            <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
+              <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
+                <SelectValue placeholder="Group by" />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border text-foreground">
+                <SelectItem value="none">No Grouping</SelectItem>
+                <SelectItem value="type">By Type</SelectItem>
+                <SelectItem value="mana">By Mana Cost</SelectItem>
+                <SelectItem value="tag">By Tags</SelectItem>
+              </SelectContent>
+            </Select>
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
+              <TabsList className="h-7 bg-transparent">
+                <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
+                <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
+                <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
           {cardsLoading && cards.length === 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
               {Array.from({ length: 12 }).map((_, i) => (
