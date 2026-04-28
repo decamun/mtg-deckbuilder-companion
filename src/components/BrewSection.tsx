@@ -310,7 +310,7 @@ export function BrewSection() {
             <input
               ref={inputRef}
               type="text"
-              placeholder="what shall we brew?"
+              placeholder="what commander shall we brew?"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}

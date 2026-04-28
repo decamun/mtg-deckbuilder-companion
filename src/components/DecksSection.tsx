@@ -344,7 +344,7 @@ export function DecksSection() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
                         align="end"
-                        className="bg-card border-border text-foreground"
+                        className="bg-white border-border text-foreground"
                       >
                         <DropdownMenuItem
                           onClick={(e) => {
