@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToolChip } from "./ToolChip"
 import { ReasoningPane } from "./ReasoningPane"
 import { ModelPicker } from "./ModelPicker"
+import { AgentMessageText } from "./AgentMessageText"
 import {
   ALL_MODELS,
   DEFAULT_MODEL,
@@ -227,15 +228,16 @@ function MessageBubble({ message }: { message: UIMessage }) {
   return (
     <div className={`text-sm ${isUser ? "text-right" : ""}`}>
       <div
-        className={`inline-block max-w-full whitespace-pre-wrap rounded-lg px-3 py-2 text-left ${
+        className={`inline-block max-w-full rounded-lg px-3 py-2 text-left ${
           isUser
-            ? "bg-primary/15 text-foreground"
+            ? "bg-primary/15 text-foreground whitespace-pre-wrap"
             : "bg-muted/40 text-foreground"
         }`}
       >
         {message.parts.map((part, i) => {
           if (part.type === "text") {
-            return <span key={i}>{part.text}</span>
+            if (isUser) return <span key={i}>{part.text}</span>
+            return <AgentMessageText key={i} text={part.text} />
           }
           if (part.type === "reasoning") {
             return <ReasoningPane key={i} text={part.text} />
