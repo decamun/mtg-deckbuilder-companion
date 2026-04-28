@@ -18,6 +18,7 @@ import {
 import { supabase } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
+import { ApiKeysCard } from "@/components/profile/ApiKeysCard"
 
 function getInitials(name: string | null | undefined, email: string | null | undefined) {
   const source = (name && name.trim()) || (email && email.split("@")[0]) || "?"
@@ -306,6 +307,8 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       )}
+
+      <ApiKeysCard />
 
       <Card className="border-destructive/30">
         <CardHeader>

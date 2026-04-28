@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use, useRef, useMemo } from "react"
 import { motion } from "framer-motion"
-import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2 } from "lucide-react"
+import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2, Sparkles } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,11 +12,12 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
+import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, cmcOf, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/types"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 import { useRouter, useSearchParams } from "next/navigation"
+import { DeckAgentSidebar } from "@/components/agent/DeckAgentSidebar"
 import { DeckAnalytics } from "@/components/deck-analytics"
 import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
 import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
@@ -99,6 +100,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     router.replace(`${url.pathname}${url.search}`)
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [agentOpen, setAgentOpen] = useState(false)
   const [primerEditing, setPrimerEditing] = useState(false)
   const [primerMarkdown, setPrimerMarkdown] = useState("")
   const [cardsLoading, setCardsLoading] = useState(true)
@@ -194,8 +196,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const fetchDeck = async () => {
     const gen = ++fetchGenRef.current
 
-    const { data: { session } } = await supabase.auth.getSession()
-    const viewerId = session?.user.id ?? null
+    const { data: { user: viewer } } = await supabase.auth.getUser()
+    const viewerId = viewer?.id ?? null
 
     const { data: deckData, error: deckError } = await supabase
       .from('decks')
@@ -250,7 +252,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           image_url: effSf?.image_uris?.normal,
           type_line: effSf?.type_line || '',
           mana_cost: effSf?.mana_cost || '',
-          cmc: effSf?.cmc ?? (effSf ? calculateCmc(effSf.mana_cost) : 0),
+          cmc: cmcOf(effSf),
           colors: effSf?.colors ?? [],
           set_code: effSf?.set,
           collector_number: effSf?.collector_number,
@@ -285,17 +287,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         setCoverImageUrl(null)
       }
     }
-  }
-
-  const calculateCmc = (mana: string) => {
-    let cmc = 0
-    const matches = mana.match(/\{[^}]+\}/g)
-    if (!matches) return 0
-    for (const m of matches) {
-      const v = parseInt(m.replace(/[{}]/g, ''))
-      cmc += isNaN(v) ? 1 : v
-    }
-    return cmc
   }
 
   const addToDeck = async (card: ScryfallCard) => {
@@ -470,7 +461,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         image_url: effSf?.image_uris?.normal,
         type_line: effSf?.type_line || '',
         mana_cost: effSf?.mana_cost || '',
-        cmc: effSf?.cmc ?? (effSf ? calculateCmc(effSf.mana_cost) : 0),
+        cmc: cmcOf(effSf),
         colors: effSf?.colors ?? [],
         set_code: effSf?.set,
         collector_number: effSf?.collector_number,
@@ -835,6 +826,19 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               )}
               {isOwner && !viewing && (
                 <button
+                  onClick={() => setAgentOpen((o) => !o)}
+                  className={`h-8 w-8 inline-flex items-center justify-center rounded-md border text-foreground ${
+                    agentOpen
+                      ? 'bg-primary/15 border-primary/40 text-primary'
+                      : 'bg-card border-border hover:bg-accent'
+                  }`}
+                  title="Deck assistant"
+                >
+                  <Sparkles className="w-4 h-4" />
+                </button>
+              )}
+              {isOwner && !viewing && (
+                <button
                   onClick={() => setSettingsOpen(true)}
                   className="h-8 w-8 inline-flex items-center justify-center rounded-md bg-card border border-border hover:bg-accent text-foreground"
                   title="Deck settings"
@@ -1195,6 +1199,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           onSaved={(next) => setDeck({ ...deck, ...next })}
         />
       )}
+
+      <DeckAgentSidebar
+        deckId={deckId}
+        open={agentOpen && isOwner && !viewing}
+        onClose={() => setAgentOpen(false)}
+      />
 
       <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">

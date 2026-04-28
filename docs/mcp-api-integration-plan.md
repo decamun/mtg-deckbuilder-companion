@@ -1,7 +1,26 @@
 # MCP API Integration — Implementation Plan
 
-**Branch:** `claude/mcp-api-integration-Z77S6`  
-**Status:** Ready to implement — all planning complete, no code written yet.
+**Branch:** `claude/mcp-api-integration-Z77S6`
+**Status:** ✅ **Superseded — implemented on `claude/mcp-tech-debt-decks-VYAtJ`.**
+
+The implementation differs from the plan below in two ways worth flagging:
+
+1. **Transport.** The plan called for `SSEServerTransport` plus a separate
+   `messages` route. The shipped code uses
+   `WebStandardStreamableHTTPServerTransport` from
+   `@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js` on a single
+   `src/app/api/mcp/route.ts` handler (GET/POST/DELETE). It takes a Web
+   `Request` and returns a Web `Response` directly, so the `fakeRes` shim and
+   the `globalThis` session map are gone.
+2. **Tool surface.** The plan said 5 tools for "this phase"; the shipped code
+   ships 14, all routed through `src/lib/deck-service.ts`. See
+   `src/lib/mcp.ts` for the full list.
+
+---
+
+(Original plan retained below for historical reference.)
+
+---
 
 ## What This Is
 

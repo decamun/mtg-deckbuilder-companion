@@ -1,6 +1,6 @@
 # P2 · Add Server-Side Auth Middleware for `/decks` Routes
 
-**Status:** ⚠️ Partial — auth callback shipped; middleware and client-side cleanup still pending.
+**Status:** ✅ **Resolved on `claude/mcp-tech-debt-decks-VYAtJ`.** `src/middleware.ts` redirects unauthenticated `/decks/**` requests to `/login`; the `getSession()` calls in `DecksSection.tsx` and `decks/[id]/page.tsx` were swapped to `getUser()`.
 
 ## Background
 
