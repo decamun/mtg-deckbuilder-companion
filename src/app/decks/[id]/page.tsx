@@ -42,11 +42,22 @@ type ViewingSnapshotState = {
   coverImageUrl: string | null
 }
 
+type FloatingCardPreview = {
+  card: DeckCard
+  groupName: string
+  x: number
+  y: number
+}
+
 // Stack card width is w-44 (176px); height ≈ 176 * 1.4 = 246px
-const STACK_PEEK = 32
-const STACK_EXTRA_PEEK = 14
-const STACK_CARD_HEIGHT = 246
-const STACK_HOVER_SHIFT = 44
+const DEFAULT_CARD_SIZE = 176
+const MIN_CARD_SIZE = 132
+const MAX_CARD_SIZE = 240
+const STACK_PEEK_RATIO = 32 / DEFAULT_CARD_SIZE
+const STACK_EXTRA_PEEK_RATIO = 14 / DEFAULT_CARD_SIZE
+const STACK_CARD_HEIGHT_RATIO = 246 / DEFAULT_CARD_SIZE
+const STACK_HOVER_SHIFT_RATIO = 44 / DEFAULT_CARD_SIZE
+const HOVER_PREVIEW_DELAY_MS = 650
 
 const DEFAULT_TAGS = ['card advantage', 'interaction', 'wincon', 'combo piece']
 
@@ -72,6 +83,10 @@ function DraggableDeckCard({
   style,
   animate,
   transition,
+  onMouseEnter,
+  onMouseMove,
+  onMouseLeave,
+  onClick,
   children,
 }: {
   id: string
@@ -80,6 +95,10 @@ function DraggableDeckCard({
   style?: CSSProperties
   animate?: MotionProps["animate"]
   transition?: MotionProps["transition"]
+  onMouseEnter?: (event: React.MouseEvent<HTMLDivElement>) => void
+  onMouseMove?: (event: React.MouseEvent<HTMLDivElement>) => void
+  onMouseLeave?: (event: React.MouseEvent<HTMLDivElement>) => void
+  onClick?: (event: React.MouseEvent<HTMLDivElement>) => void
   children: ReactNode
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id, disabled })
@@ -97,6 +116,10 @@ function DraggableDeckCard({
       style={dragStyle}
       animate={animate}
       transition={transition}
+      onMouseEnter={onMouseEnter}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
+      onClick={onClick}
       {...(!disabled ? attributes : {})}
       {...(!disabled ? listeners : {})}
     >
@@ -140,6 +163,33 @@ function DroppableTagGroup({
   )
 }
 
+function CardArt({
+  card,
+  className,
+  imageClassName = "w-full rounded-xl border border-border/50 shadow-2xl",
+}: {
+  card: DeckCard
+  className?: string
+  imageClassName?: string
+}) {
+  return (
+    <div className={`relative ${className ?? ""}`}>
+      {card.image_url ? (
+        <>
+          <img src={card.image_url} alt={card.name} className={imageClassName} draggable={false} />
+          {(card.finish === 'foil' || card.finish === 'etched') && (
+            <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
+          )}
+        </>
+      ) : (
+        <div className="aspect-[5/7] w-full rounded-xl border border-border/40 bg-card/50 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/40" />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function DeckWorkspace({ params }: { params: Promise<{ id: string }> }) {
   const { id: deckId } = use(params)
   const router = useRouter()
@@ -166,6 +216,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [activeCardIdForTag, setActiveCardIdForTag] = useState<string | null>(null)
 
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
+  const [cardSize, setCardSize] = useState(DEFAULT_CARD_SIZE)
+  const [hoverPreview, setHoverPreview] = useState<FloatingCardPreview | null>(null)
+  const [hoverPreviewTimer, setHoverPreviewTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
+  const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
 
   // New: ownership, tabs, settings, primer, version-viewing
   const [isOwner, setIsOwner] = useState(false)
@@ -227,6 +281,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    return () => {
+      if (hoverPreviewTimer) clearTimeout(hoverPreviewTimer)
+    }
+  }, [hoverPreviewTimer])
 
   const fetchDeck = async () => {
     const gen = ++fetchGenRef.current
@@ -720,6 +780,43 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const groupedCards = getGroupedCards()
+  const commanderCards = displayedCommanderIds
+    .map(id => displayedCards.find(c => c.scryfall_id === id))
+    .filter((c): c is DeckCard => Boolean(c))
+  const stackPeek = Math.round(cardSize * STACK_PEEK_RATIO)
+  const stackExtraPeek = Math.round(cardSize * STACK_EXTRA_PEEK_RATIO)
+  const stackCardHeight = Math.round(cardSize * STACK_CARD_HEIGHT_RATIO)
+  const stackHoverShift = Math.round(cardSize * STACK_HOVER_SHIFT_RATIO)
+  const clearHoverPreview = () => {
+    if (hoverPreviewTimer) {
+      clearTimeout(hoverPreviewTimer)
+      setHoverPreviewTimer(null)
+    }
+    setHoverPreview(null)
+  }
+
+  const showClickedPreview = (card: DeckCard, groupName: string) => {
+    clearHoverPreview()
+    setClickedPreview({ card, groupName })
+    void ensurePrintingsLoaded(card)
+  }
+
+  const scheduleHoverPreview = (card: DeckCard, groupName: string, e: React.MouseEvent) => {
+    if (clickedPreview || !card.image_url) return
+    if (hoverPreviewTimer) clearTimeout(hoverPreviewTimer)
+    const x = e.clientX
+    const y = e.clientY
+    const timer = setTimeout(() => {
+      setHoverPreview({ card, groupName, x, y })
+      setHoverPreviewTimer(null)
+    }, HOVER_PREVIEW_DELAY_MS)
+    setHoverPreviewTimer(timer)
+  }
+
+  const moveHoverPreview = (card: DeckCard, groupName: string, e: React.MouseEvent) => {
+    clearHoverPreview()
+    scheduleHoverPreview(card, groupName, e)
+  }
 
   // Shared dropdown menu items rendered inside both ContextMenu and DropdownMenu
   const renderDropdownItems = (c: DeckCard, groupName: string) => {
@@ -980,27 +1077,71 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       {/* Workspace */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
       <div className="flex-1 overflow-y-auto bg-background/20 min-w-0">
-        <div className="p-6 max-w-6xl mx-auto space-y-8">
+        <div className="p-6 max-w-7xl mx-auto space-y-8">
         {tab === 'decklist' && (<>
-          <div className="flex items-center justify-end gap-2">
-            <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
-              <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
-                <SelectValue placeholder="Group by" />
-              </SelectTrigger>
-              <SelectContent className="bg-card border-border text-foreground">
-                <SelectItem value="none">No Grouping</SelectItem>
-                <SelectItem value="type">By Type</SelectItem>
-                <SelectItem value="mana">By Mana Cost</SelectItem>
-                <SelectItem value="tag">By Tags</SelectItem>
-              </SelectContent>
-            </Select>
-            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
-              <TabsList className="h-7 bg-transparent">
-                <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
-                <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
-                <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
-              </TabsList>
-            </Tabs>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            {commanderCards.length > 0 ? (
+              <div className="order-2 flex flex-wrap justify-end gap-3 lg:order-none">
+                {commanderCards.map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="group relative flex w-56 items-center gap-3 rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left shadow-lg transition hover:border-yellow-300"
+                    onClick={() => showClickedPreview(c, 'Commander')}
+                  >
+                    {c.image_url ? (
+                      <img src={c.image_url} alt={c.name} className="h-28 rounded-lg border border-border/60" draggable={false} />
+                    ) : (
+                      <div className="flex h-28 aspect-[5/7] items-center justify-center rounded-lg border border-border/40 bg-muted/40">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
+                        <Crown className="h-3 w-3" /> Commander
+                      </div>
+                      <div className="truncate text-sm font-semibold text-foreground">{c.name}</div>
+                      <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{c.type_line}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="hidden lg:block" />
+            )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">
+                Card size
+                <input
+                  type="range"
+                  min={MIN_CARD_SIZE}
+                  max={MAX_CARD_SIZE}
+                  step={4}
+                  value={cardSize}
+                  onChange={(e) => setCardSize(Number(e.target.value))}
+                  className="w-28 accent-primary"
+                />
+                <span className="w-8 text-right font-mono text-[11px]">{cardSize}</span>
+              </label>
+              <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
+                <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
+                  <SelectValue placeholder="Group by" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border text-foreground">
+                  <SelectItem value="none">No Grouping</SelectItem>
+                  <SelectItem value="type">By Type</SelectItem>
+                  <SelectItem value="mana">By Mana Cost</SelectItem>
+                  <SelectItem value="tag">By Tags</SelectItem>
+                </SelectContent>
+              </Select>
+              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
+                <TabsList className="h-7 bg-transparent">
+                  <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
+                  <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
+                  <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </div>
           {cardsLoading && cards.length === 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
@@ -1029,7 +1170,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
               {/* ── VISUAL VIEW ── */}
               {viewMode === 'visual' && (
-                <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
+                <div
+                  className="grid justify-start gap-4"
+                  style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, ${cardSize}px))` }}
+                >
                   {groupCards.map(c => (
                     <ContextMenu key={c.id}>
                       <ContextMenuTrigger>
@@ -1043,7 +1187,28 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 ? 'border-blue-400/80 ring-2 ring-blue-400/40 hover:border-blue-300'
                                 : 'border-border hover:border-primary/50'
                           }`}
+                          style={{ width: cardSize }}
                         >
+                          <div
+                            className="absolute inset-0 z-10 cursor-grab bg-transparent p-0 text-left active:cursor-grabbing"
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Preview ${c.name}`}
+                            onMouseEnter={(e) => scheduleHoverPreview(c, groupName, e)}
+                            onMouseMove={(e) => moveHoverPreview(c, groupName, e)}
+                            onMouseLeave={clearHoverPreview}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              showClickedPreview(c, groupName)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                showClickedPreview(c, groupName)
+                              }
+                            }}
+                            onContextMenu={clearHoverPreview}
+                          />
                           {c.image_url
                             ? <>
                                 <img src={c.image_url} alt={c.name} className="w-full h-full object-cover" />
@@ -1079,7 +1244,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                             </div>
                           )}
                           {/* Cost badge (bottom-right) */}
-                          <div className="absolute bottom-1 right-1 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
+                          <div className="absolute bottom-1 right-1 z-20 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
                             {formatPrice(c.price_usd)}
                           </div>
                           {/* Set/finish indicator (top-left under commander/cover badges) */}
@@ -1148,22 +1313,22 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                 )
 
                 return (
-                  <div className="flex gap-8 flex-wrap">
+                  <div className="flex flex-wrap gap-8">
                     {columns.map((colCards, colIdx) => {
                       // Compute static base top positions; card 0 at top (rearmost)
                       const basePositions: number[] = []
                       let accY = 0
                       colCards.forEach(card => {
                         basePositions.push(accY)
-                        accY += STACK_PEEK + (card.quantity > 1 ? STACK_EXTRA_PEEK : 0)
+                        accY += stackPeek + (card.quantity > 1 ? stackExtraPeek : 0)
                       })
-                      const colHeight = accY + STACK_CARD_HEIGHT + STACK_HOVER_SHIFT
+                      const colHeight = accY + stackCardHeight + stackHoverShift
 
                       return (
                         <div
                           key={colIdx}
-                          className="relative shrink-0 w-44"
-                          style={{ height: colHeight }}
+                          className="relative shrink-0"
+                          style={{ width: cardSize, height: colHeight }}
                           onMouseMove={(e) => {
                             // Determine active card from mouse Y within the column,
                             // bypassing z-index blocking on individual card elements.
@@ -1174,9 +1339,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                               if (mouseY >= basePositions[i]) activeIdx = i
                               else break
                             }
+                            const activeCard = colCards[activeIdx]
                             setHoveredStack({ groupName, colIdx, itemIdx: activeIdx })
+                            if (activeCard) moveHoverPreview(activeCard, groupName, e)
                           }}
-                          onMouseLeave={() => setHoveredStack(null)}
+                          onMouseLeave={() => {
+                            setHoveredStack(null)
+                            clearHoverPreview()
+                          }}
                         >
                           {colCards.map((card, itemIdx) => {
                             const isHovered = !!hoveredStack
@@ -1188,9 +1358,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                               && hoveredStack.colIdx === colIdx
                               && itemIdx > hoveredStack.itemIdx
 
-                            const dragStyle = {
+                            const dragStyle: CSSProperties = {
                               top: basePositions[itemIdx],
-                              // Higher index = more in front; card 0 is rearmost
                               zIndex: isHovered ? colCards.length + 10 : itemIdx + 1,
                             }
 
@@ -1203,12 +1372,26 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 style={dragStyle}
                               >
                                 <motion.div
+                                  className="relative"
                                   animate={{
-                                    y: isHovered ? -12 : isBelow ? STACK_HOVER_SHIFT : 0,
+                                    y: isHovered ? -12 : isBelow ? stackHoverShift : 0,
                                     scale: isHovered ? 1.05 : 1,
                                   }}
                                   transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.4 }}
                                 >
+                                <button
+                                  type="button"
+                                  className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
+                                  aria-label={`Preview ${card.name}`}
+                                  onMouseEnter={(e) => scheduleHoverPreview(card, groupName, e)}
+                                  onMouseMove={(e) => moveHoverPreview(card, groupName, e)}
+                                  onMouseLeave={clearHoverPreview}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    showClickedPreview(card, groupName)
+                                  }}
+                                  onContextMenu={clearHoverPreview}
+                                />
                                 {card.image_url
                                   ? <div className="relative w-full">
                                       <img src={card.image_url} alt={card.name} className="w-full rounded-xl border border-black/60 shadow-xl" draggable={false} />
@@ -1229,7 +1412,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                   </div>
                                 )}
                                 {/* Three-dot menu (top-right) */}
-                                <div className="absolute top-2 right-2 z-10">
+                                <div className="absolute top-2 right-2 z-20">
                                   {renderThreeDotMenu(card, groupName, 'end')}
                                 </div>
                                 {/* Cost (bottom-right) */}
@@ -1258,20 +1441,19 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       id={c.id}
                       disabled={interactionsLocked || grouping !== 'tag'}
                       className="flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing"
+                      onMouseEnter={(e) => scheduleHoverPreview(c, groupName, e)}
+                      onMouseMove={(e) => moveHoverPreview(c, groupName, e)}
+                      onMouseLeave={clearHoverPreview}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        showClickedPreview(c, groupName)
+                      }}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
                         <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
-                        <span className="font-medium cursor-pointer hover:text-primary transition-colors">{c.name}</span>
+                        {c.image_url && <img src={c.image_url} alt="" className="h-9 rounded border border-border/50" draggable={false} />}
+                        <span className="font-medium cursor-pointer hover:text-primary transition-colors truncate">{c.name}</span>
                         <span className="text-xs text-muted-foreground">{c.mana_cost}</span>
-                      </div>
-                      {/* Hover image preview */}
-                      <div className="hidden group-hover:block absolute left-1/3 top-0 -translate-y-1/2 z-50 pointer-events-none drop-shadow-2xl">
-                        <div className="relative">
-                          <img src={c.image_url} alt={c.name} className="w-48 rounded-xl border border-border/50" />
-                          {(c.finish === 'foil' || c.finish === 'etched') && (
-                            <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
-                          )}
-                        </div>
                       </div>
                       <div className="flex items-center gap-3 ml-auto">
                         <span className="text-xs font-mono text-muted-foreground tabular-nums w-16 text-right">
@@ -1351,6 +1533,34 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           }}
           onSaved={(next) => setDeck({ ...deck, ...next })}
         />
+      )}
+
+      {hoverPreview && !clickedPreview && (
+        <div
+          className="pointer-events-none fixed z-[70] drop-shadow-2xl"
+          style={{ left: hoverPreview.x, top: hoverPreview.y }}
+        >
+          <CardArt card={hoverPreview.card} imageClassName="w-64 rounded-xl border border-border/50 shadow-2xl" />
+        </div>
+      )}
+
+      {clickedPreview && (
+        <div
+          className="fixed inset-0 z-[80] bg-background/20 backdrop-blur-[1px]"
+          onMouseDown={() => setClickedPreview(null)}
+        >
+          <div
+            className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-start gap-3"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <CardArt card={clickedPreview.card} imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl" />
+            {isOwner && !viewing && (
+              <div className="w-56 rounded-lg border border-border bg-white p-1 text-foreground shadow-2xl">
+                {renderDropdownItems(clickedPreview.card, clickedPreview.groupName)}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       <Dialog open={revertConfirmOpen} onOpenChange={setRevertConfirmOpen}>
