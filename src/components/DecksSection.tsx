@@ -14,6 +14,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -45,6 +46,8 @@ export function DecksSection() {
   const [decklistText, setDecklistText] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [renameDeckId, setRenameDeckId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState("")
   const router = useRouter()
 
   useEffect(() => {
@@ -205,6 +208,107 @@ export function DecksSection() {
     }
   }
 
+  const openRenameDialog = (deck: Deck, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setRenameDeckId(deck.id)
+    setRenameValue(deck.name)
+  }
+
+  const closeRenameDialog = () => {
+    setRenameDeckId(null)
+    setRenameValue("")
+  }
+
+  const handleRename = async () => {
+    if (!renameDeckId) return
+    const nextName = renameValue.trim()
+    if (!nextName) return
+
+    const { error } = await supabase
+      .from("decks")
+      .update({ name: nextName })
+      .eq("id", renameDeckId)
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    setDecks((current) =>
+      current.map((deck) =>
+        deck.id === renameDeckId ? { ...deck, name: nextName } : deck
+      )
+    )
+    toast.success("Deck renamed")
+    closeRenameDialog()
+  }
+
+  const handleDuplicate = async (deckId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const original = decks.find((deck) => deck.id === deckId)
+    if (!original) return
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      toast.error("Log in to duplicate decks")
+      return
+    }
+
+    const { data: newDeck, error: deckError } = await supabase
+      .from("decks")
+      .insert({
+        name: `${original.name} (Copy)`,
+        user_id: user.id,
+        format: original.format,
+        commander_scryfall_ids: original.commander_scryfall_ids ?? [],
+        cover_image_scryfall_id: original.cover_image_scryfall_id,
+        description: original.description ?? null,
+        is_public: false,
+        primer_markdown: original.primer_markdown ?? "",
+      })
+      .select()
+      .single()
+
+    if (deckError) {
+      toast.error(deckError.message)
+      return
+    }
+
+    const { data: cards, error: cardsReadError } = await supabase
+      .from("deck_cards")
+      .select("scryfall_id, printing_scryfall_id, finish, oracle_id, name, quantity, zone, tags")
+      .eq("deck_id", deckId)
+
+    if (cardsReadError) {
+      toast.error(`Deck copied, but cards could not be read: ${cardsReadError.message}`)
+      await fetchDecks()
+      return
+    }
+
+    if (cards?.length) {
+      const inserts = cards.map((card) => ({
+        ...card,
+        deck_id: newDeck.id,
+        printing_scryfall_id: card.printing_scryfall_id ?? null,
+        finish: card.finish ?? "nonfoil",
+        oracle_id: card.oracle_id ?? null,
+        tags: card.tags ?? [],
+      }))
+
+      const { error: cardsError } = await supabase.from("deck_cards").insert(inserts)
+      if (cardsError) {
+        toast.error(`Deck copied, but cards could not be copied: ${cardsError.message}`)
+        await fetchDecks()
+        return
+      }
+    }
+
+    toast.success(`"${original.name}" duplicated`)
+    await fetchDecks()
+  }
+
   if (isAuthenticated === false) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
@@ -294,6 +398,47 @@ export function DecksSection() {
         </Dialog>
       </div>
 
+      <Dialog
+        open={!!renameDeckId}
+        onOpenChange={(open) => {
+          if (!open) closeRenameDialog()
+        }}
+      >
+        <DialogContent className="bg-card border-border text-foreground">
+          <DialogHeader>
+            <DialogTitle>Rename Deck</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleRename()
+              }}
+              className="bg-background/50 border-border"
+              placeholder="Deck name"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={closeRenameDialog}
+              className="hover:bg-accent hover:text-accent-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRename}
+              disabled={!renameValue.trim()}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {loading ? (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {[1, 2, 3].map((i) => (
@@ -347,16 +492,12 @@ export function DecksSection() {
                         className="bg-white border-border text-foreground"
                       >
                         <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation()
-                          }}
+                          onClick={(e) => openRenameDialog(deck, e)}
                         >
                           <Edit className="mr-2 h-4 w-4" /> Rename
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation()
-                          }}
+                          onClick={(e) => handleDuplicate(deck.id, e)}
                         >
                           <Copy className="mr-2 h-4 w-4" /> Duplicate
                         </DropdownMenuItem>
