@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getCard, type ScryfallCard } from './scryfall'
 
 /**
  * Deck mutation service.
@@ -41,9 +42,12 @@ export interface DeckCardRow {
 }
 
 class DeckServiceError extends Error {
-  constructor(message: string, public code: 'not_found' | 'forbidden' | 'invalid' | 'db_error') {
+  code: 'not_found' | 'forbidden' | 'invalid' | 'db_error'
+
+  constructor(message: string, code: 'not_found' | 'forbidden' | 'invalid' | 'db_error') {
     super(message)
     this.name = 'DeckServiceError'
+    this.code = code
   }
 }
 
@@ -203,6 +207,31 @@ export interface AddCardInput {
   finish?: Finish
 }
 
+async function resolveScryfallCard(id: string | null | undefined, field: string): Promise<ScryfallCard> {
+  const trimmed = id?.trim()
+  if (!trimmed) throw new DeckServiceError(`${field} is required`, 'invalid')
+
+  const card = await getCard(trimmed)
+  if (!card?.id || !card.name || !card.type_line) {
+    throw new DeckServiceError(`${field} ${trimmed} was not found on Scryfall`, 'invalid')
+  }
+  return card
+}
+
+function assertSameOracle(base: ScryfallCard, printing: ScryfallCard): void {
+  if (base.oracle_id && printing.oracle_id && base.oracle_id !== printing.oracle_id) {
+    throw new DeckServiceError(
+      `printing_scryfall_id ${printing.id} is not a printing of ${base.name}`,
+      'invalid'
+    )
+  }
+}
+
+async function resolveOptionalScryfallCard(id: string | null | undefined, field: string): Promise<ScryfallCard | null> {
+  if (id === null || id === undefined) return null
+  return resolveScryfallCard(id, field)
+}
+
 export async function addCard(
   supabase: SupabaseClient,
   userId: string,
@@ -213,12 +242,17 @@ export async function addCard(
   const quantity = input.quantity ?? 1
   if (quantity < 1) throw new DeckServiceError('quantity must be >= 1', 'invalid')
   const versionSince = new Date().toISOString()
+  const scryfallCard = await resolveScryfallCard(input.scryfall_id, 'scryfall_id')
+  const printingCard = input.printing_scryfall_id
+    ? await resolveScryfallCard(input.printing_scryfall_id, 'printing_scryfall_id')
+    : null
+  if (printingCard) assertSameOracle(scryfallCard, printingCard)
 
   const { data: existing, error: existingErr } = await supabase
     .from('deck_cards')
     .select('*')
     .eq('deck_id', deckId)
-    .eq('scryfall_id', input.scryfall_id)
+    .eq('scryfall_id', scryfallCard.id)
     .maybeSingle()
   if (existingErr) throw new DeckServiceError(existingErr.message, 'db_error')
 
@@ -244,17 +278,17 @@ export async function addCard(
     .from('deck_cards')
     .insert({
       deck_id: deckId,
-      scryfall_id: input.scryfall_id,
-      oracle_id: input.oracle_id ?? null,
-      printing_scryfall_id: input.printing_scryfall_id ?? null,
+      scryfall_id: scryfallCard.id,
+      oracle_id: scryfallCard.oracle_id ?? input.oracle_id ?? null,
+      printing_scryfall_id: printingCard?.id ?? null,
       finish: input.finish ?? 'nonfoil',
-      name: input.name,
+      name: scryfallCard.name,
       quantity,
     })
     .select()
     .single()
   if (error) throw new DeckServiceError(error.message, 'db_error')
-  await recordDeckVersion(supabase, userId, deckId, `Added ${input.name}`, versionSince)
+  await recordDeckVersion(supabase, userId, deckId, `Added ${scryfallCard.name}`, versionSince)
   return data as DeckCardRow
 }
 
@@ -353,10 +387,15 @@ export async function setCardPrinting(
   printingScryfallId: string | null
 ): Promise<DeckCardRow> {
   const { card } = await loadOwnedDeckCard(supabase, userId, deckCardId)
+  const printingCard = await resolveOptionalScryfallCard(printingScryfallId, 'printing_scryfall_id')
+  if (printingCard) {
+    const baseCard = await resolveScryfallCard(card.scryfall_id, 'scryfall_id')
+    assertSameOracle(baseCard, printingCard)
+  }
   const versionSince = new Date().toISOString()
   const { data, error } = await supabase
     .from('deck_cards')
-    .update({ printing_scryfall_id: printingScryfallId })
+    .update({ printing_scryfall_id: printingCard?.id ?? null })
     .eq('id', deckCardId)
     .select()
     .single()
@@ -365,7 +404,7 @@ export async function setCardPrinting(
     supabase,
     userId,
     card.deck_id,
-    printingScryfallId ? `Changed ${card.name} printing` : `Reset ${card.name} to default printing`,
+    printingCard ? `Changed ${card.name} printing` : `Reset ${card.name} to default printing`,
     versionSince
   )
   return data as DeckCardRow
@@ -400,7 +439,11 @@ export async function setCommanders(
   if (scryfallIds.length > 2) {
     throw new DeckServiceError('A deck can have at most 2 commanders', 'invalid')
   }
-  const dedup = Array.from(new Set(scryfallIds))
+  const uniqueCommanderIds = Array.from(new Set(scryfallIds))
+  const commanderCards = await Promise.all(
+    uniqueCommanderIds.map((id) => resolveScryfallCard(id, 'commander_scryfall_ids'))
+  )
+  const dedup = Array.from(new Set(commanderCards.map((card) => card.id)))
   const versionSince = new Date().toISOString()
   const { data, error } = await supabase
     .from('decks')
@@ -421,10 +464,11 @@ export async function setCoverImage(
   scryfallId: string | null
 ): Promise<DeckRow> {
   await loadOwnedDeck(supabase, userId, deckId)
+  const coverCard = await resolveOptionalScryfallCard(scryfallId, 'cover_image_scryfall_id')
   const versionSince = new Date().toISOString()
   const { data, error } = await supabase
     .from('decks')
-    .update({ cover_image_scryfall_id: scryfallId })
+    .update({ cover_image_scryfall_id: coverCard?.id ?? null })
     .eq('id', deckId)
     .eq('user_id', userId)
     .select()
@@ -434,7 +478,7 @@ export async function setCoverImage(
     supabase,
     userId,
     deckId,
-    scryfallId ? 'Updated cover image' : 'Removed cover image',
+    coverCard ? 'Updated cover image' : 'Removed cover image',
     versionSince
   )
   return data as DeckRow

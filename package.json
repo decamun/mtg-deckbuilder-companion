@@ -12,7 +12,8 @@
     "agent:port": "docker compose -f docker-compose.agent.yml port web 3000",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:deck-service": "node scripts/test-deck-service-validation.mjs"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^2.0.0",
