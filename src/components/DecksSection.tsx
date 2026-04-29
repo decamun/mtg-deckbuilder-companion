@@ -51,10 +51,10 @@ export function DecksSection() {
   const router = useRouter()
 
   useEffect(() => {
-    fetchDecks()
+    void fetchDecks()
   }, [])
 
-  const fetchDecks = async () => {
+  async function fetchDecks() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -464,6 +464,7 @@ export function DecksSection() {
                     <>
                       <img
                         src={deck.cover_url}
+                        alt=""
                         className="h-full w-full object-cover opacity-40 group-hover:opacity-60 transition-opacity"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
