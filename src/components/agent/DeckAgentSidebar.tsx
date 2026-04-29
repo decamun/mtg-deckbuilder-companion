@@ -257,12 +257,12 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault()
               handleSend()
             }
           }}
-          placeholder="Ask the agent… (Ctrl/⌘+Enter to send)"
+          placeholder="Ask the agent… (Shift+Enter for newline)"
           className="mb-2 min-h-[68px] resize-none text-sm"
           disabled={isStreaming}
         />
