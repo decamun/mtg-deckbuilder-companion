@@ -1081,7 +1081,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         {tab === 'decklist' && (<>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             {commanderCards.length > 0 ? (
-              <div className="order-2 flex flex-wrap justify-end gap-3 lg:order-none">
+              <div className="order-2 flex flex-wrap justify-end gap-3 lg:order-2">
                 {commanderCards.map(c => (
                   <button
                     key={c.id}
@@ -1109,7 +1109,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             ) : (
               <div className="hidden lg:block" />
             )}
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 lg:order-1">
               <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">
                 Card size
                 <input
