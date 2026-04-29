@@ -1599,11 +1599,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             onMouseDown={(e) => e.stopPropagation()}
           >
             <CardArt card={clickedPreview.card} imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl" />
-            {isOwner && !viewing && (
-              <div className="w-56 rounded-lg border border-border bg-white p-1 text-foreground shadow-2xl">
-                {renderDropdownItems(clickedPreview.card, clickedPreview.groupName)}
-              </div>
-            )}
+            {renderPreviewActionPanel(clickedPreview.card, clickedPreview.groupName)}
           </div>
         </div>
       )}
