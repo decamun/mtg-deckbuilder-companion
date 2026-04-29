@@ -6,23 +6,42 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Development Workflow Rules
 
-## Containerized Development
-Run the app with Docker Compose instead of host `npm run dev`.
+## Cursor Cloud specific instructions
 
-1. Copy `.env.example` to `.env` and fill in real secrets when needed.
-2. Start the frontend with `docker compose up -d --build`.
-3. Run project commands inside the container, for example `docker compose exec web npm run lint`, `docker compose exec web npx tsc --noEmit`, or `docker compose exec web npx shadcn add ...`.
-4. Use host `npm` only for repository maintenance commands that wrap Docker Compose, such as `npm run agent:port`.
+Host-based development is supported in Cursor Cloud. Do not require nested
+Docker unless a task specifically needs the local Supabase stack or Docker-only
+behavior.
 
-## Testing Backend Changes
+1. Install dependencies on the host with `npm ci` if `node_modules` is missing
+   or incomplete.
+2. Start the frontend with hosted Supabase settings:
+   `NEXT_PUBLIC_SUPABASE_URL=<url> NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable-key> npm run dev`.
+3. Open `http://localhost:3000/brew` for manual testing.
+4. If older Docker runs left root-owned artifacts, fix ownership before host
+   commands: `sudo chown -R ubuntu:ubuntu node_modules .next`.
 
-End-to-end backend testing (migrations, API routes that hit the DB, etc.) is only possible when the agent is running inside a cloud container that has been provisioned with the full local backend — i.e. a Docker daemon + the local Supabase stack + the `supabase` CLI. Most agent sessions are **not** in such an environment.
+## Hosted Supabase testing
 
-Before assuming you can test backend changes, sanity-check the environment:
-- `docker ps` succeeds (daemon is reachable)
-- `supabase --version` resolves
-- `curl -sf http://localhost:54321` reaches the local Supabase stack (Studio on 54323, app on 3000)
+Use the Supabase MCP tools to discover the active project, URL, and publishable
+key when `.env` only points at local Supabase. For deck editor testing:
 
-**If all three pass:** you're in a properly configured cloud container. Apply migrations with `supabase db push` (run on the host, not inside the container) and run all other commands via `docker compose exec web <cmd>`.
+1. Create a disposable email/password user through Supabase Auth or the Auth
+   REST signup endpoint.
+2. If the hosted project requires email confirmation, confirm only that
+   disposable user with SQL against `auth.users`.
+3. Log into the app through the user menu, then navigate to `/decks`.
+4. Create a deck and open `/decks/<id>` to exercise the editor.
+5. Add a card through the editor search box to verify auth, RLS, Scryfall
+   search, deck writes, and realtime/editor refresh behavior.
 
-**If any of them fail:** you cannot exercise backend changes end-to-end. Write the code and migrations, verify with type-checks / unit tests / `next build` where possible, and explicitly call out anything that needs to be validated by a human (or a properly-provisioned agent) running the full Docker + Supabase stack.
+## Local Docker development
+
+Docker Compose remains useful for local developer machines:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+If local Supabase is available, run `npx supabase start` and keep
+`NEXT_PUBLIC_SUPABASE_URL=http://host.docker.internal:54321` in `.env`.
