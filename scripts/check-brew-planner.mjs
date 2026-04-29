@@ -101,8 +101,8 @@ assert.equal(totalQuantity(missingResult.backfillInserts), 0)
 assert.equal(missingResult.missingNonLandSlots, 2)
 assert.equal(missingState.totalCost, 2)
 
-// When the budget is nearly exhausted, prefer cheap remaining nonlands over
-// reporting missing nonland slots that the UI would otherwise turn into lands.
+// When the budget is nearly exhausted, keep the fallback budget-aware; the
+// caller can only turn truly unavailable nonland slots into basics.
 const ratioState = { gameChangerCount: 0, totalCost: 95 }
 const ratioResult = pickNonLandRows({
   creatureRows: [
@@ -122,19 +122,44 @@ const ratioResult = pickNonLandRows({
   solRingInserted: false,
   state: ratioState,
   budgetUsd: 100,
+  budgetReservePerMissingSlot: 1,
   gameChangerLimit: 20,
   isGameChanger: (name) => name.startsWith("GC "),
 })
 
 assert.equal(totalQuantity(ratioResult.creatureInserts), 2)
 assert.equal(totalQuantity(ratioResult.spellInserts), 2)
-assert.equal(totalQuantity(ratioResult.backfillInserts), 2)
+assert.equal(totalQuantity(ratioResult.backfillInserts), 0)
+assert.equal(ratioResult.missingNonLandSlots, 2)
+assert.equal(ratioState.totalCost, 99)
+
+const reserveState = { gameChangerCount: 0, totalCost: 0 }
+const reserveResult = pickNonLandRows({
+  creatureRows: [
+    card("Too Costly Creature", 9),
+    card("Affordable Creature", 4),
+  ],
+  spellRows: [
+    card("Too Costly Spell", 9, "Instant"),
+    card("Affordable Spell", 4, "Sorcery"),
+  ],
+  creatureSlots: 1,
+  spellSlots: 1,
+  solRingInserted: false,
+  state: reserveState,
+  budgetUsd: 10,
+  budgetReservePerMissingSlot: 1,
+  gameChangerLimit: 20,
+  isGameChanger: (name) => name.startsWith("GC "),
+})
+
 assert.deepEqual(
-  ratioResult.backfillInserts.map((row) => row.name),
-  ["Costly Creature 1", "Costly Creature 2"]
+  [...reserveResult.creatureInserts, ...reserveResult.spellInserts].map(
+    (row) => row.name
+  ),
+  ["Affordable Creature", "Affordable Spell"]
 )
-assert.equal(ratioResult.missingNonLandSlots, 0)
-assert.equal(ratioState.totalCost, 112)
+assert.equal(reserveState.totalCost, 8)
 
 const merged = mergeInsertRows([
   { deck_id: "deck-1", scryfall_id: "swamp", name: "Swamp", quantity: 4 },

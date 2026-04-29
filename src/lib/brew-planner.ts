@@ -17,6 +17,7 @@ export type BrewPickState = {
 
 type TakeOptions = {
   budgetUsd: number | null
+  budgetReserve?: number
   gameChangerLimit: number
   isGameChanger: (name: string) => boolean
 }
@@ -31,10 +32,11 @@ function affordableQuantity(
   unitCost: number,
   desiredQuantity: number,
   state: BrewPickState,
-  budgetUsd: number | null
+  budgetUsd: number | null,
+  budgetReserve = 0
 ): number {
   if (budgetUsd === null || unitCost <= 0) return desiredQuantity
-  const remainingBudget = budgetUsd - state.totalCost
+  const remainingBudget = budgetUsd - state.totalCost - budgetReserve
   if (remainingBudget < unitCost) return 0
   return Math.min(desiredQuantity, Math.floor(remainingBudget / unitCost))
 }
@@ -48,8 +50,12 @@ export function takeRowsForSlots(
   const taken: BrewDeckRow[] = []
   const remaining: BrewDeckRow[] = []
   let used = 0
+  const rowsForPick =
+    opts.budgetUsd === null
+      ? rows
+      : [...rows].sort((a, b) => priceOf(a._card) - priceOf(b._card))
 
-  for (const row of rows) {
+  for (const row of rowsForPick) {
     if (used >= slotCap) {
       remaining.push(row)
       continue
@@ -66,7 +72,8 @@ export function takeRowsForSlots(
       priceOf(row._card),
       slotQuantity,
       state,
-      opts.budgetUsd
+      opts.budgetUsd,
+      opts.budgetReserve
     )
 
     if (qty <= 0) {
@@ -87,11 +94,11 @@ export function takeRowsForSlots(
   return { taken, remaining }
 }
 
-function takeCheapestRowsForSlots(
+export function takeCheapestRowsForSlots(
   rows: BrewDeckRow[],
   slotCap: number,
   state: BrewPickState,
-  opts: Pick<TakeOptions, "gameChangerLimit" | "isGameChanger">
+  opts: TakeOptions
 ): BrewDeckRow[] {
   const taken: BrewDeckRow[] = []
   let used = 0
@@ -105,7 +112,14 @@ function takeCheapestRowsForSlots(
     const isGc = opts.isGameChanger(row.name)
     if (isGc && state.gameChangerCount >= opts.gameChangerLimit) continue
 
-    const qty = Math.min(row.quantity, slotCap - used)
+    const slotQuantity = Math.min(row.quantity, slotCap - used)
+    const qty = affordableQuantity(
+      priceOf(row._card),
+      slotQuantity,
+      state,
+      opts.budgetUsd,
+      opts.budgetReserve
+    )
     if (qty <= 0) continue
 
     taken.push({ ...row, quantity: qty })
@@ -152,6 +166,7 @@ export function pickNonLandRows(params: {
   solRingInserted: boolean
   state: BrewPickState
   budgetUsd: number | null
+  budgetReserve?: number
   gameChangerLimit: number
   isGameChanger: (name: string) => boolean
 }): {
@@ -162,6 +177,7 @@ export function pickNonLandRows(params: {
 } {
   const takeOpts = {
     budgetUsd: params.budgetUsd,
+    budgetReserve: params.budgetReserve,
     gameChangerLimit: params.gameChangerLimit,
     isGameChanger: params.isGameChanger,
   }

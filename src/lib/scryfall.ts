@@ -34,9 +34,17 @@ export interface ScryfallPrinting extends ScryfallCard {
   finishes: string[]
 }
 
-export async function searchCards(query: string): Promise<ScryfallCard[]> {
+export async function searchCards(
+  query: string,
+  options: { unique?: string; order?: string; dir?: "auto" | "asc" | "desc" } = {}
+): Promise<ScryfallCard[]> {
   try {
-    const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}`)
+    const url = new URL("https://api.scryfall.com/cards/search")
+    url.searchParams.set("q", query)
+    if (options.unique) url.searchParams.set("unique", options.unique)
+    if (options.order) url.searchParams.set("order", options.order)
+    if (options.dir) url.searchParams.set("dir", options.dir)
+    const res = await fetch(url.toString())
     if (!res.ok) return []
     const json = await res.json()
     return json.data || []

@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Search, Loader2, ChevronDown, X } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsCollection, getCardByName, ScryfallCard } from "@/lib/scryfall"
+import {
+  searchCards,
+  getCardsCollection,
+  getCardByName,
+  ScryfallCard,
+} from "@/lib/scryfall"
 import { useDebounce } from "@/hooks/use-debounce"
 import {
   buildPartnerScryfallQuery,
@@ -39,6 +44,8 @@ type BrewOpts = {
   slots: { lands: number; creatures: number; spells: number }
 }
 
+const FALLBACK_MAX_PRICE_USD = 2
+
 function toEDHRECSlug(name: string): string {
   return name
     .toLowerCase()
@@ -46,6 +53,42 @@ function toEDHRECSlug(name: string): string {
     .replace(/\s+/g, "-")
     .replace(/-{2,}/g, "-")
     .replace(/^-|-$/g, "")
+}
+
+function colorIdentitySearch(colors: string[]): string {
+  const uniqueColors = [...new Set(colors)].join("").toLowerCase()
+  return uniqueColors ? `id<=${uniqueColors}` : "id=c"
+}
+
+function cardToBrewRow(deckId: string, card: ScryfallCard): BrewDeckRow {
+  return {
+    deck_id: deckId,
+    scryfall_id: card.id,
+    name: card.name,
+    quantity: 1,
+    _card: card,
+  }
+}
+
+async function fetchBudgetFallbackRows(params: {
+  deckId: string
+  query: string
+  excludeNames: Set<string>
+  limit: number
+}): Promise<BrewDeckRow[]> {
+  const cards = await searchCards(params.query, {
+    order: "usd",
+    unique: "cards",
+  })
+  const rows: BrewDeckRow[] = []
+  for (const fallbackCard of cards) {
+    if (rows.length >= params.limit) break
+    const nameKey = fallbackCard.name.toLowerCase()
+    if (params.excludeNames.has(nameKey)) continue
+    params.excludeNames.add(nameKey)
+    rows.push(cardToBrewRow(params.deckId, fallbackCard))
+  }
+  return rows
 }
 
 async function fetchEDHRECCards(
@@ -344,6 +387,14 @@ export function BrewSection() {
         ])
         const edhrecFiltered = edhrecRaw.filter((c) => !skipNames.has(c.name.toLowerCase()))
 
+        const basicScryfallCards = await getCardsCollection(basicLandNames)
+        const basicLandPrices = basicScryfallCards
+          .map(priceOf)
+          .filter((price) => price > 0)
+        const basicLandUnitCost =
+          basicLandPrices.length > 0 ? Math.min(...basicLandPrices) : 0
+        const nonLandBudgetReserve =
+          opts.budgetUsd === null ? 0 : LAND_COUNT * basicLandUnitCost
         const pickState = {
           gameChangerCount: gcCount,
           totalCost,
@@ -382,7 +433,7 @@ export function BrewSection() {
         }
 
         pushStatus("Filling out creatures and spells…")
-        const {
+        let {
           creatureInserts,
           spellInserts,
           backfillInserts,
@@ -395,9 +446,94 @@ export function BrewSection() {
           solRingInserted,
           state: pickState,
           budgetUsd: opts.budgetUsd,
+          budgetReserve: nonLandBudgetReserve,
           gameChangerLimit: gcLimit,
           isGameChanger,
         })
+
+        if (missingNonLandSlots > 0) {
+          pushStatus("Finding budget role fillers…")
+          const fallbackExcludes = new Set([
+            ...skipNames,
+            ...edhrecFiltered.map((c) => c.name.toLowerCase()),
+          ])
+          const colorQuery = colorIdentitySearch(combinedColors)
+          const fallbackSlotCount = Math.max(1, missingNonLandSlots)
+          const remainingBudget =
+            opts.budgetUsd === null
+              ? FALLBACK_MAX_PRICE_USD
+              : Math.max(
+                  0,
+                  (opts.budgetUsd - pickState.totalCost - nonLandBudgetReserve) /
+                    fallbackSlotCount
+                )
+          const fallbackMaxPrice = Math.min(
+            FALLBACK_MAX_PRICE_USD,
+            Math.max(0.01, remainingBudget)
+          )
+          const fallbackBase = [
+            colorQuery,
+            "legal:commander",
+            "-t:land",
+            `usd<=${fallbackMaxPrice}`,
+          ].join(" ")
+
+          const fallbackCreaturesNeeded = Math.max(
+            0,
+            opts.slots.creatures -
+              totalQuantity([...creatureInserts, ...backfillInserts])
+          )
+          const fallbackSpellsNeeded = Math.max(
+            0,
+            opts.slots.spells -
+              (solRingInserted ? 1 : 0) -
+              totalQuantity(spellInserts)
+          )
+          const fallbackCreatures =
+            fallbackCreaturesNeeded > 0
+              ? await fetchBudgetFallbackRows({
+                  deckId: deck.id,
+                  query: `${fallbackBase} t:creature`,
+                  excludeNames: fallbackExcludes,
+                  limit: fallbackCreaturesNeeded,
+                })
+              : []
+          const fallbackSpells =
+            fallbackSpellsNeeded > 0
+              ? await fetchBudgetFallbackRows({
+                  deckId: deck.id,
+                  query: `${fallbackBase} (-t:creature or t:artifact)`,
+                  excludeNames: fallbackExcludes,
+                  limit: fallbackSpellsNeeded,
+                })
+              : []
+          const fallbackPick = pickNonLandRows({
+            creatureRows: fallbackCreatures,
+            spellRows: fallbackSpells,
+            creatureSlots: fallbackCreaturesNeeded,
+            spellSlots: fallbackSpellsNeeded,
+            solRingInserted: false,
+            state: pickState,
+            budgetUsd: opts.budgetUsd,
+            budgetReserve: nonLandBudgetReserve,
+            gameChangerLimit: gcLimit,
+            isGameChanger,
+          })
+          creatureInserts = [...creatureInserts, ...fallbackPick.creatureInserts]
+          spellInserts = [...spellInserts, ...fallbackPick.spellInserts]
+          backfillInserts = [
+            ...backfillInserts,
+            ...fallbackPick.backfillInserts,
+          ]
+          missingNonLandSlots = Math.max(
+            0,
+            opts.slots.creatures +
+              Math.max(0, opts.slots.spells - (solRingInserted ? 1 : 0)) -
+              totalQuantity(creatureInserts) -
+              totalQuantity(spellInserts) -
+              totalQuantity(backfillInserts)
+          )
+        }
 
         pushStatus("Building your mana base…")
         const minBasicEach = Math.min(4, Math.floor(LAND_COUNT / Math.max(1, basicLandNames.length)))
@@ -421,7 +557,6 @@ export function BrewSection() {
           basicCounts[name] += extraPerBasic + (i < extraRemainder ? 1 : 0)
         })
 
-        const basicScryfallCards = await getCardsCollection(basicLandNames)
         const basicLandInserts = basicLandNames.flatMap((name) => {
           const sc = basicScryfallCards.find(
             (c) => c.name.toLowerCase() === name.toLowerCase()
