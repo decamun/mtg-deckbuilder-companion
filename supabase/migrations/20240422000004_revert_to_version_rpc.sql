@@ -9,6 +9,8 @@ AS $$
 DECLARE
   snap jsonb;
 BEGIN
+  PERFORM set_config('idlebrew.skip_deck_versions', 'on', true);
+
   SELECT snapshot INTO snap
     FROM public.deck_versions
    WHERE id = p_version_id AND deck_id = p_deck_id;

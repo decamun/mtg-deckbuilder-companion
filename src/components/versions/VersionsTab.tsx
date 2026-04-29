@@ -15,6 +15,7 @@ import { supabase } from "@/lib/supabase/client"
 import { VersionTimelineRow } from "./VersionTimelineRow"
 import { UnnamedVersionsGroup } from "./UnnamedVersionsGroup"
 import { AddNamedVersionDialog } from "./AddNamedVersionDialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface Props {
   deckId: string
@@ -27,6 +28,8 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
   const [rows, setRows] = useState<DeckVersionRow[]>([])
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
+  const [revertTargetId, setRevertTargetId] = useState<string | null>(null)
+  const [reverting, setReverting] = useState(false)
 
   const refresh = async () => {
     setLoading(true)
@@ -35,13 +38,15 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
   }
 
   useEffect(() => {
-    void refresh()
+    void Promise.resolve().then(refresh)
     const ch = supabase.channel(`deck-versions-${deckId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "deck_versions", filter: `deck_id=eq.${deckId}` }, () => {
         void refresh()
       })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
+    // refresh intentionally reads the current deck id; resubscribe only when it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deckId])
 
   const bookmarked = useMemo(() => rows.filter(r => r.is_bookmarked && r.name), [rows])
@@ -78,14 +83,17 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
     void refresh()
   }
 
-  const handleRevert = async (versionId: string) => {
-    if (!confirm("Revert deck to this version? Your current state will be saved as a new version first.")) return
-    const ok = await revertToVersion(deckId, versionId)
+  const performRevert = async () => {
+    if (!revertTargetId) return
+    setReverting(true)
+    const ok = await revertToVersion(deckId, revertTargetId)
+    setReverting(false)
     if (!ok) {
       toast.error("Revert failed")
       return
     }
     toast.success("Reverted")
+    setRevertTargetId(null)
     onReverted()
     void refresh()
   }
@@ -112,7 +120,7 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
                 isOwner={isOwner}
                 onView={() => onViewVersion(r.id)}
                 onToggleBookmark={() => handleToggleBookmark(r)}
-                onRevert={() => handleRevert(r.id)}
+                onRevert={() => setRevertTargetId(r.id)}
               />
             ))}
           </div>
@@ -136,7 +144,7 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
                 isOwner={isOwner}
                 onView={() => onViewVersion(g.row.id)}
                 onToggleBookmark={() => handleToggleBookmark(g.row)}
-                onRevert={() => handleRevert(g.row.id)}
+                onRevert={() => setRevertTargetId(g.row.id)}
               />
             ) : (
               <UnnamedVersionsGroup
@@ -145,7 +153,7 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
                 isOwner={isOwner}
                 onView={onViewVersion}
                 onToggleBookmark={handleToggleBookmark}
-                onRevert={handleRevert}
+                onRevert={setRevertTargetId}
               />
             )
           )}
@@ -153,6 +161,20 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
       </section>
 
       <AddNamedVersionDialog open={addOpen} onOpenChange={setAddOpen} onSubmit={handleAddNamed} />
+      <Dialog open={!!revertTargetId} onOpenChange={(open) => { if (!open && !reverting) setRevertTargetId(null) }}>
+        <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Revert deck?</DialogTitle>
+            <DialogDescription>
+              Your current deck state will be saved as a new version before this version is restored.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRevertTargetId(null)} disabled={reverting}>Cancel</Button>
+            <Button onClick={performRevert} disabled={reverting}>{reverting ? "Reverting..." : "Revert deck"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

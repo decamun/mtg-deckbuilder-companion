@@ -33,10 +33,13 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
 
   useEffect(() => {
     if (open) {
-      setName(initial.name)
-      setDescription(initial.description ?? "")
-      setFormat(initial.format ?? "edh")
-      setIsPublic(initial.is_public)
+      const timer = window.setTimeout(() => {
+        setName(initial.name)
+        setDescription(initial.description ?? "")
+        setFormat(initial.format ?? "edh")
+        setIsPublic(initial.is_public)
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
   }, [open, initial])
 
@@ -46,6 +49,7 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
       return
     }
     setSaving(true)
+    const versionSince = new Date().toISOString()
     const patch = {
       name: name.trim(),
       description: description.trim() || null,
@@ -64,7 +68,7 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
     if ((patch.description ?? "") !== (initial.description ?? "")) changes.push("updated description")
     if (patch.format !== initial.format) changes.push(`changed format to ${patch.format}`)
     if (patch.is_public !== initial.is_public) changes.push(patch.is_public ? "made public" : "made private")
-    if (changes.length > 0) recordVersion(deckId, changes.join("; "))
+    if (changes.length > 0) recordVersion(deckId, changes.join("; "), versionSince)
 
     onSaved(patch)
     onOpenChange(false)

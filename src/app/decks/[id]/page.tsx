@@ -1,7 +1,9 @@
 "use client"
 
-import { useState, useEffect, use, useRef, useMemo } from "react"
-import { motion } from "framer-motion"
+import { useState, useEffect, use, useRef, useMemo, type CSSProperties, type ReactNode } from "react"
+import { motion, type MotionProps } from "framer-motion"
+import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
+import { CSS } from "@dnd-kit/utilities"
 import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -10,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
 import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, cmcOf, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/types"
@@ -26,8 +28,10 @@ import { PrimerView } from "@/components/primer/PrimerView"
 import { PrimerEditor } from "@/components/primer/PrimerEditor"
 import { VersionsTab } from "@/components/versions/VersionsTab"
 import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner"
-import { recordVersion, getVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
+import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { formatPrice, pickPrice } from "@/lib/format"
+
+type DeckCardRow = Omit<DeckCard, "image_url" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
 
 type ViewingSnapshotState = {
   versionId: string
@@ -61,6 +65,81 @@ Welcome to the primer for **${deckName}**.
 - _What does an ideal opening hand look like?_
 `
 
+function DraggableDeckCard({
+  id,
+  disabled,
+  className,
+  style,
+  animate,
+  transition,
+  children,
+}: {
+  id: string
+  disabled: boolean
+  className?: string
+  style?: CSSProperties
+  animate?: MotionProps["animate"]
+  transition?: MotionProps["transition"]
+  children: ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id, disabled })
+  const dragStyle: CSSProperties = {
+    ...style,
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.7 : style?.opacity,
+    zIndex: isDragging ? 1000 : style?.zIndex,
+  }
+
+  return (
+    <motion.div
+      ref={setNodeRef}
+      className={className}
+      style={dragStyle}
+      animate={animate}
+      transition={transition}
+      {...(!disabled ? attributes : {})}
+      {...(!disabled ? listeners : {})}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+function mergeDeckCardRow(current: DeckCard, row: DeckCardRow): DeckCard {
+  return {
+    ...current,
+    ...row,
+    image_url: current.image_url,
+    type_line: current.type_line,
+    mana_cost: current.mana_cost,
+    cmc: current.cmc,
+    colors: current.colors,
+    set_code: current.set_code,
+    collector_number: current.collector_number,
+    available_finishes: current.available_finishes,
+    price_usd: current.price_usd,
+    effective_printing_id: current.effective_printing_id,
+  }
+}
+
+function DroppableTagGroup({
+  id,
+  enabled,
+  children,
+}: {
+  id: string
+  enabled: boolean
+  children: ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled: !enabled })
+
+  return (
+    <div ref={setNodeRef} className={isOver && enabled ? "rounded-lg ring-2 ring-primary/40 ring-offset-4 ring-offset-background" : undefined}>
+      {children}
+    </div>
+  )
+}
+
 export default function DeckWorkspace({ params }: { params: Promise<{ id: string }> }) {
   const { id: deckId } = use(params)
   const router = useRouter()
@@ -75,7 +154,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const [viewMode, setViewMode] = useState<ViewMode>('visual')
   const [grouping, setGrouping] = useState<GroupingMode>('type')
-  const [sorting, setSorting] = useState<SortingMode>('name')
+  const [sorting] = useState<SortingMode>('name')
   const debouncedQuery = useDebounce(query, 300)
 
   const [commanderIds, setCommanderIds] = useState<string[]>([])
@@ -107,39 +186,17 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [cardsLoading, setCardsLoading] = useState(true)
   const [printingsByCard, setPrintingsByCard] = useState<Record<string, ScryfallPrinting[]>>({})
   const [viewing, setViewing] = useState<ViewingSnapshotState | null>(null)
+  const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
+  const [reverting, setReverting] = useState(false)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
-  // Drag coordination. HTML5 drag is hostile to DOM mutations mid-drag —
-  // even an in-place re-render of the dragged element (e.g. swapping an img
-  // src) causes Chrome/Firefox to lose the drag source, leaving dragend
-  // unfired and isDragging stuck true forever. We defer ALL React state
-  // updates that originate inside fetchDeck until dragend fires:
-  //   - pendingFetch: a new fetchDeck() was requested while dragging
-  //   - pendingSetCards: fetchDeck completed but setCards was suppressed
   const fetchGenRef = useRef(0)
-  const isDragging = useRef(false)
-  const pendingDrop = useRef<{ cardId: string; tag: string } | null>(null)
-  const pendingFetch = useRef(false)
-  const pendingSetCards = useRef<DeckCard[] | null>(null)
-  const dragCallbacksRef = useRef<{
-    addTag: (cardId: string, tag: string) => Promise<void>
-    fetchDeck: () => Promise<void>
-  }>(null!)
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
-  useEffect(() => {
-    fetchDeck()
-    const channel = supabase.channel('schema-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'deck_cards', filter: `deck_id=eq.${deckId}` }, () => {
-        if (isDragging.current) {
-          pendingFetch.current = true
-        } else {
-          fetchDeck()
-        }
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [deckId])
+  const recordMutationVersion = (summary: string, sinceIso: string) => {
+    recordVersion(deckId, summary, sinceIso)
+  }
 
   useEffect(() => {
     if (tab === 'versions') void flushPendingVersion(deckId)
@@ -150,38 +207,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }, [deckId])
 
   useEffect(() => {
-    const onDragEnd = () => {
-      isDragging.current = false
-
-      // Flush any cards state that was suppressed while dragging.
-      // Apply before addTag/fetchDeck so the UI isn't blank.
-      const pendingCards = pendingSetCards.current
-      pendingSetCards.current = null
-      if (pendingCards) setCards(pendingCards)
-
-      const { addTag, fetchDeck } = dragCallbacksRef.current
-      const drop = pendingDrop.current
-      pendingDrop.current = null
-      if (drop) addTag(drop.cardId, drop.tag)
-      if (pendingFetch.current) {
-        pendingFetch.current = false
-        fetchDeck()
-      }
-    }
-    window.addEventListener('dragend', onDragEnd)
-    return () => window.removeEventListener('dragend', onDragEnd)
-  }, [])
-
-  useEffect(() => {
     if (debouncedQuery.length > 1) {
       searchCards(debouncedQuery).then(setResults)
     } else {
-      setResults([])
+      queueMicrotask(() => setResults([]))
     }
   }, [debouncedQuery])
 
   useEffect(() => {
-    setSelectedResultIdx(0)
+    queueMicrotask(() => setSelectedResultIdx(0))
   }, [results])
 
   useEffect(() => {
@@ -265,16 +299,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         }
       })
 
-      // Safely apply the hydrated cards array. If a drag is active we park the
-      // update in pendingSetCards — onDragEnd flushes it once the drag ends so
-      // React never mutates the dragged element's DOM mid-drag (which would
-      // cause the browser to lose the drag source and freeze dragend forever).
-      if (isDragging.current) {
-        pendingSetCards.current = hydrated
-      } else {
-        pendingSetCards.current = null
-        setCards(hydrated)
-      }
+      setCards(hydrated)
       setCardsLoading(false)
 
       // Cover image URL
@@ -292,13 +317,40 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     }
   }
 
+  useEffect(() => {
+    void Promise.resolve().then(fetchDeck)
+    const channel = supabase.channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'decks', filter: `id=eq.${deckId}` }, () => {
+        fetchDeck()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deck_cards', filter: `deck_id=eq.${deckId}` }, () => {
+        fetchDeck()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+    // fetchDeck intentionally reads latest component state through the current
+    // render; resubscribe only when the deck id changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deckId])
+
   const addToDeck = async (card: ScryfallCard) => {
     const existing = cards.find(c => c.scryfall_id === card.id)
+    const versionSince = new Date().toISOString()
     if (existing) {
-      await supabase.from('deck_cards').update({ quantity: existing.quantity + 1 }).eq('id', existing.id)
-      recordVersion(deckId, `Increased ${existing.name} to ${existing.quantity + 1}`)
+      const nextQuantity = existing.quantity + 1
+      setCards(prev => prev.map(c => c.id === existing.id ? { ...c, quantity: nextQuantity } : c))
+      const { data, error } = await supabase.from('deck_cards').update({ quantity: nextQuantity }).eq('id', existing.id).select().single()
+      if (error) {
+        setCards(prev => prev.map(c => c.id === existing.id ? { ...c, quantity: existing.quantity } : c))
+        toast.error(error.message)
+      } else if (data) {
+        setCards(prev => prev.map(c => c.id === existing.id ? mergeDeckCardRow(c, data as DeckCardRow) : c))
+        recordMutationVersion(`Increased ${existing.name} to ${nextQuantity}`, versionSince)
+      }
     } else {
-      await supabase.from('deck_cards').insert({
+      const optimisticId = `pending-${card.id}`
+      const optimisticCard: DeckCard = {
+        id: optimisticId,
         deck_id: deckId,
         scryfall_id: card.id,
         oracle_id: card.oracle_id ?? null,
@@ -306,8 +358,36 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         finish: 'nonfoil',
         name: card.name,
         quantity: 1,
-      })
-      recordVersion(deckId, `Added ${card.name}`)
+        zone: 'mainboard',
+        tags: [],
+        image_url: card.image_uris?.normal,
+        type_line: card.type_line || '',
+        mana_cost: card.mana_cost || '',
+        cmc: cmcOf(card),
+        colors: card.colors ?? [],
+        set_code: card.set,
+        collector_number: card.collector_number,
+        available_finishes: card.finishes,
+        price_usd: pickPrice(card.prices, 'nonfoil'),
+        effective_printing_id: card.id,
+      }
+      setCards(prev => [...prev, optimisticCard])
+      const { data, error } = await supabase.from('deck_cards').insert({
+        deck_id: deckId,
+        scryfall_id: card.id,
+        oracle_id: card.oracle_id ?? null,
+        printing_scryfall_id: null,
+        finish: 'nonfoil',
+        name: card.name,
+        quantity: 1,
+      }).select().single()
+      if (error) {
+        setCards(prev => prev.filter(c => c.id !== optimisticId))
+        toast.error(error.message)
+      } else if (data) {
+        setCards(prev => prev.map(c => c.id === optimisticId ? { ...optimisticCard, ...data } : c))
+        recordMutationVersion(`Added ${card.name}`, versionSince)
+      }
     }
   }
 
@@ -337,8 +417,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const deleteCard = async (id: string) => {
     const card = cards.find(c => c.id === id)
-    await supabase.from('deck_cards').delete().eq('id', id)
-    if (card) recordVersion(deckId, `Removed ${card.name}`)
+    if (!card) return
+    const versionSince = new Date().toISOString()
+    setCards(prev => prev.filter(c => c.id !== id))
+    const { error } = await supabase.from('deck_cards').delete().eq('id', id)
+    if (error) {
+      setCards(prev => [...prev, card])
+      toast.error(error.message)
+    } else {
+      recordMutationVersion(`Removed ${card.name}`, versionSince)
+    }
   }
 
   const setAsCommander = async (scryfallId: string) => {
@@ -351,26 +439,46 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     } else {
       newIds = [...commanderIds, scryfallId]
     }
+    const previousIds = commanderIds
+    const versionSince = new Date().toISOString()
     setCommanderIds(newIds)
-    await supabase.from('decks').update({ commander_scryfall_ids: newIds }).eq('id', deckId)
+    const { error } = await supabase.from('decks').update({ commander_scryfall_ids: newIds }).eq('id', deckId)
+    if (error) {
+      setCommanderIds(previousIds)
+      toast.error(error.message)
+      return
+    }
+    const becameCmd = newIds.includes(scryfallId)
     const card = cards.find(c => c.scryfall_id === scryfallId)
     const cardName = card?.name ?? 'card'
-    const becameCmd = newIds.includes(scryfallId)
-    recordVersion(deckId, becameCmd ? `Set ${cardName} as commander` : `Unset ${cardName} as commander`)
+    recordMutationVersion(becameCmd ? `Set ${cardName} as commander` : `Unset ${cardName} as commander`, versionSince)
     toast.success(becameCmd ? 'Set as commander!' : 'Removed as commander')
   }
 
   const setAsCoverImage = async (scryfallId: string) => {
+    const versionSince = new Date().toISOString()
     if (coverImageId === scryfallId) {
+      const previousId = coverImageId
       setCoverImageId(null)
-      await supabase.from('decks').update({ cover_image_scryfall_id: null }).eq('id', deckId)
-      recordVersion(deckId, 'Removed cover image')
+      const { error } = await supabase.from('decks').update({ cover_image_scryfall_id: null }).eq('id', deckId)
+      if (error) {
+        setCoverImageId(previousId)
+        toast.error(error.message)
+        return
+      }
+      recordMutationVersion('Removed cover image', versionSince)
       toast.success('Cover image removed')
     } else {
+      const previousId = coverImageId
       setCoverImageId(scryfallId)
-      await supabase.from('decks').update({ cover_image_scryfall_id: scryfallId }).eq('id', deckId)
+      const { error } = await supabase.from('decks').update({ cover_image_scryfall_id: scryfallId }).eq('id', deckId)
+      if (error) {
+        setCoverImageId(previousId)
+        toast.error(error.message)
+        return
+      }
       const card = cards.find(c => c.scryfall_id === scryfallId)
-      recordVersion(deckId, `Set cover image to ${card?.name ?? 'card'}`)
+      recordMutationVersion(`Set cover image to ${card?.name ?? 'card'}`, versionSince)
       toast.success('Set as cover image!')
     }
   }
@@ -382,34 +490,59 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const currentTags = card.tags || []
     if (currentTags.includes(tag)) return
     const newTags = [...currentTags, tag]
+    const versionSince = new Date().toISOString()
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: newTags } : c))
-    await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
-    recordVersion(deckId, `Tagged ${card.name} with "${tag}"`)
+    const { error } = await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
+    if (error) {
+      setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: currentTags } : c))
+      toast.error(error.message)
+    } else {
+      recordMutationVersion(`Tagged ${card.name} with "${tag}"`, versionSince)
+    }
   }
 
   const removeTag = async (cardId: string, tag: string) => {
     const card = cards.find(c => c.id === cardId)
     if (!card) return
-    const newTags = (card.tags || []).filter(t => t !== tag)
+    const currentTags = card.tags || []
+    const newTags = currentTags.filter(t => t !== tag)
+    const versionSince = new Date().toISOString()
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: newTags } : c))
-    await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
-    recordVersion(deckId, `Untagged ${card.name} from "${tag}"`)
+    const { error } = await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
+    if (error) {
+      setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: currentTags } : c))
+      toast.error(error.message)
+    } else {
+      recordMutationVersion(`Untagged ${card.name} from "${tag}"`, versionSince)
+    }
   }
 
   const setCardPrinting = async (cardId: string, printingId: string | null) => {
     const card = cards.find(c => c.id === cardId)
     if (!card) return
-    await supabase.from('deck_cards').update({ printing_scryfall_id: printingId }).eq('id', cardId)
-    recordVersion(deckId, printingId
-      ? `Changed ${card.name} printing`
-      : `Reset ${card.name} to default printing`)
+    const versionSince = new Date().toISOString()
+    setCards(prev => prev.map(c => c.id === cardId ? { ...c, printing_scryfall_id: printingId } : c))
+    const { error } = await supabase.from('deck_cards').update({ printing_scryfall_id: printingId }).eq('id', cardId)
+    if (error) {
+      setCards(prev => prev.map(c => c.id === cardId ? { ...c, printing_scryfall_id: card.printing_scryfall_id } : c))
+      toast.error(error.message)
+    } else {
+      recordMutationVersion(printingId ? `Changed ${card.name} printing` : `Reset ${card.name} to default printing`, versionSince)
+    }
   }
 
   const setCardFinish = async (cardId: string, finish: 'nonfoil' | 'foil' | 'etched') => {
     const card = cards.find(c => c.id === cardId)
     if (!card) return
-    await supabase.from('deck_cards').update({ finish }).eq('id', cardId)
-    recordVersion(deckId, `Changed ${card.name} finish to ${finish}`)
+    const versionSince = new Date().toISOString()
+    setCards(prev => prev.map(c => c.id === cardId ? { ...c, finish } : c))
+    const { error } = await supabase.from('deck_cards').update({ finish }).eq('id', cardId)
+    if (error) {
+      setCards(prev => prev.map(c => c.id === cardId ? { ...c, finish: card.finish } : c))
+      toast.error(error.message)
+    } else {
+      recordMutationVersion(`Changed ${card.name} finish to ${finish}`, versionSince)
+    }
   }
 
   const ensurePrintingsLoaded = async (card: DeckCard) => {
@@ -426,8 +559,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     setActiveCardIdForTag(null)
   }
 
-  // Keep latest addTag/fetchDeck reachable from the stable window dragend listener
-  dragCallbacksRef.current = { addTag, fetchDeck }
+  const handleTagDragEnd = (event: DragEndEvent) => {
+    const cardId = String(event.active.id)
+    const tag = event.over?.id ? String(event.over.id) : null
+    if (tag && grouping === 'tag' && tag !== 'Untagged') {
+      void addTag(cardId, tag)
+    }
+  }
 
   const allUniqueTags = Array.from(new Set([...DEFAULT_TAGS, ...cards.flatMap(c => c.tags || [])])).sort()
 
@@ -493,18 +631,21 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const handleRevertFromBanner = async () => {
     if (!viewing) return
-    if (!confirm("Revert deck to this version? Your current state will be saved as a new version first.")) return
+    setReverting(true)
     const ok = await revertToVersion(deckId, viewing.versionId)
+    setReverting(false)
     if (!ok) {
       toast.error('Revert failed')
       return
     }
     toast.success('Reverted')
+    setRevertConfirmOpen(false)
     setViewing(null)
     await fetchDeck()
   }
 
   const savePrimer = async (markdown: string) => {
+    const versionSince = new Date().toISOString()
     const { error } = await supabase.from('decks').update({ primer_markdown: markdown }).eq('id', deckId)
     if (error) {
       toast.error(error.message)
@@ -512,7 +653,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     }
     setPrimerMarkdown(markdown)
     setPrimerEditing(false)
-    recordVersion(deckId, 'Updated primer')
+    recordMutationVersion('Updated primer', versionSince)
     toast.success('Primer saved')
   }
 
@@ -534,7 +675,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }, [displayedCards])
 
   const getGroupedCards = () => {
-    let sorted = [...displayedCards].sort((a, b) => {
+    const sorted = [...displayedCards].sort((a, b) => {
       if (sorting === 'name') return a.name.localeCompare(b.name)
       if (sorting === 'mana') return (a.cmc || 0) - (b.cmc || 0)
       return 0
@@ -710,7 +851,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         <ViewingVersionBanner
           versionLabel={viewing.label}
           isOwner={isOwner}
-          onRevert={handleRevertFromBanner}
+          onRevert={() => setRevertConfirmOpen(true)}
           onBackToLatest={exitVersionView}
         />
       )}
@@ -786,6 +927,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         {card.image_uris && (
                           <img
                             src={card.image_uris.small ?? card.image_uris.normal}
+                            alt=""
                             className="w-7 h-auto rounded shrink-0"
                             draggable={false}
                           />
@@ -869,6 +1011,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               ))}
             </div>
           )}
+          <DndContext sensors={dndSensors} onDragEnd={handleTagDragEnd}>
           {Object.entries(groupedCards)
             .sort(([a], [b]) => {
               if (a === 'Untagged') return 1
@@ -876,15 +1019,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               return 0
             })
             .map(([groupName, groupCards]) => (
-            <div
-              key={groupName}
-              onDragOver={(e) => { if (grouping === 'tag') e.preventDefault() }}
-              onDrop={(e) => {
-                if (grouping === 'tag' && groupName !== 'Untagged') {
-                  pendingDrop.current = { cardId: e.dataTransfer.getData('cardId'), tag: groupName }
-                }
-              }}
-            >
+            <DroppableTagGroup key={groupName} id={groupName} enabled={!interactionsLocked && grouping === 'tag' && groupName !== 'Untagged'}>
               <h3 className="text-xl font-bold border-b border-border pb-2 mb-4 text-foreground">
                 {groupName}{' '}
                 <span className="text-sm font-normal text-muted-foreground ml-2">
@@ -898,7 +1033,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   {groupCards.map(c => (
                     <ContextMenu key={c.id}>
                       <ContextMenuTrigger>
-                        <div
+                        <DraggableDeckCard
+                          id={c.id}
+                          disabled={interactionsLocked || grouping !== 'tag'}
                           className={`relative rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing shadow-xl group aspect-[5/7] transition-all ${
                             commanderIds.includes(c.scryfall_id)
                               ? 'border-yellow-400/80 ring-2 ring-yellow-400/40 hover:border-yellow-300'
@@ -906,12 +1043,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 ? 'border-blue-400/80 ring-2 ring-blue-400/40 hover:border-blue-300'
                                 : 'border-border hover:border-primary/50'
                           }`}
-                          draggable
-                          onDragStart={(e) => { isDragging.current = true; e.dataTransfer.setData('cardId', c.id) }}
                         >
                           {c.image_url
                             ? <>
-                                <img src={c.image_url} className="w-full h-full object-cover" />
+                                <img src={c.image_url} alt={c.name} className="w-full h-full object-cover" />
                                 {(c.finish === 'foil' || c.finish === 'etched') && (
                                   <div className="absolute inset-0 pointer-events-none foil-overlay" />
                                 )}
@@ -957,7 +1092,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           <div className="absolute top-1.5 right-1.5 z-20">
                             {renderThreeDotMenu(c, groupName, 'end')}
                           </div>
-                        </div>
+                        </DraggableDeckCard>
                       </ContextMenuTrigger>
                       <ContextMenuContent className="w-48 bg-white border-border text-foreground">
                         <ContextMenuItem
@@ -1053,26 +1188,30 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                               && hoveredStack.colIdx === colIdx
                               && itemIdx > hoveredStack.itemIdx
 
+                            const dragStyle = {
+                              top: basePositions[itemIdx],
+                              // Higher index = more in front; card 0 is rearmost
+                              zIndex: isHovered ? colCards.length + 10 : itemIdx + 1,
+                            }
+
                             return (
-                              <motion.div
+                              <DraggableDeckCard
                                 key={card.id}
+                                id={card.id}
+                                disabled={interactionsLocked || grouping !== 'tag'}
                                 className="absolute w-full cursor-grab active:cursor-grabbing group"
-                                draggable
-                                onDragStartCapture={(e) => { isDragging.current = true; e.dataTransfer.setData('cardId', card.id) }}
-                                style={{
-                                  top: basePositions[itemIdx],
-                                  // Higher index = more in front; card 0 is rearmost
-                                  zIndex: isHovered ? colCards.length + 10 : itemIdx + 1,
-                                }}
-                                animate={{
-                                  y: isHovered ? -12 : isBelow ? STACK_HOVER_SHIFT : 0,
-                                  scale: isHovered ? 1.05 : 1,
-                                }}
-                                transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.4 }}
+                                style={dragStyle}
                               >
+                                <motion.div
+                                  animate={{
+                                    y: isHovered ? -12 : isBelow ? STACK_HOVER_SHIFT : 0,
+                                    scale: isHovered ? 1.05 : 1,
+                                  }}
+                                  transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.4 }}
+                                >
                                 {card.image_url
                                   ? <div className="relative w-full">
-                                      <img src={card.image_url} className="w-full rounded-xl border border-black/60 shadow-xl" draggable={false} />
+                                      <img src={card.image_url} alt={card.name} className="w-full rounded-xl border border-black/60 shadow-xl" draggable={false} />
                                       {(card.finish === 'foil' || card.finish === 'etched') && (
                                         <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
                                       )}
@@ -1099,7 +1238,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                     {formatPrice(card.price_usd)}
                                   </div>
                                 )}
-                              </motion.div>
+                                </motion.div>
+                              </DraggableDeckCard>
                             )
                           })}
                         </div>
@@ -1113,11 +1253,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               {viewMode === 'list' && (
                 <div className="bg-card/50 rounded-lg border border-border">
                   {groupCards.map(c => (
-                    <div
+                    <DraggableDeckCard
                       key={c.id}
+                      id={c.id}
+                      disabled={interactionsLocked || grouping !== 'tag'}
                       className="flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing"
-                      draggable
-                      onDragStart={(e) => { isDragging.current = true; e.dataTransfer.setData('cardId', c.id) }}
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
@@ -1127,7 +1267,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       {/* Hover image preview */}
                       <div className="hidden group-hover:block absolute left-1/3 top-0 -translate-y-1/2 z-50 pointer-events-none drop-shadow-2xl">
                         <div className="relative">
-                          <img src={c.image_url} className="w-48 rounded-xl border border-border/50" />
+                          <img src={c.image_url} alt={c.name} className="w-48 rounded-xl border border-border/50" />
                           {(c.finish === 'foil' || c.finish === 'etched') && (
                             <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
                           )}
@@ -1139,12 +1279,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         </span>
                         {renderThreeDotMenu(c, groupName, 'end')}
                       </div>
-                    </div>
+                    </DraggableDeckCard>
                   ))}
                 </div>
               )}
-            </div>
+            </DroppableTagGroup>
           ))}
+          </DndContext>
 
           {/* ── Analytics ── */}
           <div className="border-t border-border pt-8 mt-4">
@@ -1211,6 +1352,21 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           onSaved={(next) => setDeck({ ...deck, ...next })}
         />
       )}
+
+      <Dialog open={revertConfirmOpen} onOpenChange={setRevertConfirmOpen}>
+        <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Revert deck to this version?</DialogTitle>
+            <DialogDescription>
+              Your current deck state will be saved as a new version before reverting.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRevertConfirmOpen(false)} disabled={reverting} className="hover:bg-accent hover:text-accent-foreground">Cancel</Button>
+            <Button onClick={handleRevertFromBanner} disabled={reverting}>{reverting ? "Reverting..." : "Revert"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
