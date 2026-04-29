@@ -87,6 +87,36 @@ export function takeRowsForSlots(
   return { taken, remaining }
 }
 
+function takeCheapestRowsForSlots(
+  rows: BrewDeckRow[],
+  slotCap: number,
+  state: BrewPickState,
+  opts: Pick<TakeOptions, "gameChangerLimit" | "isGameChanger">
+): BrewDeckRow[] {
+  const taken: BrewDeckRow[] = []
+  let used = 0
+  const sortedRows = [...rows].sort(
+    (a, b) => priceOf(a._card) - priceOf(b._card)
+  )
+
+  for (const row of sortedRows) {
+    if (used >= slotCap) break
+
+    const isGc = opts.isGameChanger(row.name)
+    if (isGc && state.gameChangerCount >= opts.gameChangerLimit) continue
+
+    const qty = Math.min(row.quantity, slotCap - used)
+    if (qty <= 0) continue
+
+    taken.push({ ...row, quantity: qty })
+    used += qty
+    state.totalCost += priceOf(row._card) * qty
+    if (isGc) state.gameChangerCount += 1
+  }
+
+  return taken
+}
+
 export function stripBrewCard(row: BrewDeckRow): BrewInsertRow {
   return {
     deck_id: row.deck_id,
@@ -162,15 +192,25 @@ export function pickNonLandRows(params: {
     params.state,
     takeOpts
   )
-  const missingNonLandSlots = Math.max(
+  const overBudgetBackfillSlots = Math.max(
     0,
     backfillSlots - totalQuantity(backfillPick.taken)
+  )
+  const overBudgetBackfill = takeCheapestRowsForSlots(
+    backfillPick.remaining,
+    overBudgetBackfillSlots,
+    params.state,
+    takeOpts
+  )
+  const missingNonLandSlots = Math.max(
+    0,
+    overBudgetBackfillSlots - totalQuantity(overBudgetBackfill)
   )
 
   return {
     creatureInserts: creaturePick.taken,
     spellInserts: spellPick.taken,
-    backfillInserts: backfillPick.taken,
+    backfillInserts: [...backfillPick.taken, ...overBudgetBackfill],
     missingNonLandSlots,
   }
 }

@@ -381,6 +381,24 @@ export function BrewSection() {
           }
         }
 
+        pushStatus("Filling out creatures and spells…")
+        const {
+          creatureInserts,
+          spellInserts,
+          backfillInserts,
+          missingNonLandSlots,
+        } = pickNonLandRows({
+          creatureRows: edhrecCreatures,
+          spellRows: edhrecSpells,
+          creatureSlots: opts.slots.creatures,
+          spellSlots: opts.slots.spells,
+          solRingInserted,
+          state: pickState,
+          budgetUsd: opts.budgetUsd,
+          gameChangerLimit: gcLimit,
+          isGameChanger,
+        })
+
         pushStatus("Building your mana base…")
         const minBasicEach = Math.min(4, Math.floor(LAND_COUNT / Math.max(1, basicLandNames.length)))
         const minBasicsTotal = basicLandNames.length * minBasicEach
@@ -419,26 +437,8 @@ export function BrewSection() {
           ]
         })
 
-        pushStatus("Filling out creatures and spells…")
-        const {
-          creatureInserts,
-          spellInserts,
-          backfillInserts,
-          missingNonLandSlots,
-        } = pickNonLandRows({
-          creatureRows: edhrecCreatures,
-          spellRows: edhrecSpells,
-          creatureSlots: opts.slots.creatures,
-          spellSlots: opts.slots.spells,
-          solRingInserted,
-          state: pickState,
-          budgetUsd: opts.budgetUsd,
-          gameChangerLimit: gcLimit,
-          isGameChanger,
-        })
-
         if (missingNonLandSlots > 0 && basicLandInserts.length > 0) {
-          pushStatus("Padding with extra basics…")
+          pushStatus("Padding unavailable slots with basics…")
           basicLandInserts[0].quantity += missingNonLandSlots
         }
 

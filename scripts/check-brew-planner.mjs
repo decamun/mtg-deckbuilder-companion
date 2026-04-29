@@ -101,6 +101,41 @@ assert.equal(totalQuantity(missingResult.backfillInserts), 0)
 assert.equal(missingResult.missingNonLandSlots, 2)
 assert.equal(missingState.totalCost, 2)
 
+// When the budget is nearly exhausted, prefer cheap remaining nonlands over
+// reporting missing nonland slots that the UI would otherwise turn into lands.
+const ratioState = { gameChangerCount: 0, totalCost: 95 }
+const ratioResult = pickNonLandRows({
+  creatureRows: [
+    card("Costly Creature 1", 6),
+    card("Costly Creature 2", 7),
+    card("Cheap Creature 1", 1),
+    card("Cheap Creature 2", 1),
+  ],
+  spellRows: [
+    card("Costly Spell 1", 8, "Instant"),
+    card("Costly Spell 2", 9, "Sorcery"),
+    card("Cheap Spell 1", 1, "Instant"),
+    card("Cheap Spell 2", 1, "Artifact"),
+  ],
+  creatureSlots: 3,
+  spellSlots: 3,
+  solRingInserted: false,
+  state: ratioState,
+  budgetUsd: 100,
+  gameChangerLimit: 20,
+  isGameChanger: (name) => name.startsWith("GC "),
+})
+
+assert.equal(totalQuantity(ratioResult.creatureInserts), 2)
+assert.equal(totalQuantity(ratioResult.spellInserts), 2)
+assert.equal(totalQuantity(ratioResult.backfillInserts), 2)
+assert.deepEqual(
+  ratioResult.backfillInserts.map((row) => row.name),
+  ["Costly Creature 1", "Costly Creature 2"]
+)
+assert.equal(ratioResult.missingNonLandSlots, 0)
+assert.equal(ratioState.totalCost, 112)
+
 const merged = mergeInsertRows([
   { deck_id: "deck-1", scryfall_id: "swamp", name: "Swamp", quantity: 4 },
   { deck_id: "deck-1", scryfall_id: "forest", name: "Forest", quantity: 3 },
