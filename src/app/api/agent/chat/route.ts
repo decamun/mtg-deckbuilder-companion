@@ -33,6 +33,47 @@ Prefer batch reasoning over many small steps: call get_decklist once, plan, then
 Confirm destructive edits (removing >1 card, replacing commanders, large tag rewrites)
 by summarising the planned change in plain text BEFORE calling the tool.
 ${terse ? '\nBe concise. Call tools directly without restating the plan in detail.' : ''}
+
+## Scryfall Search Syntax
+
+**Colors** — \`c:\` filters card colors; \`id:\` / \`identity:\` filters color identity.
+  Values: w u b r g m(multicolor) c(colorless). Operators: \`c:rg\`=contains R+G, \`c=rg\`=exactly RG, \`c>=rg\`=at least RG, \`c<=rg\`=subset of RG.
+  For Commander: use \`id<=gruul\` to find cards that FIT WITHIN a color identity (most common use case).
+  Guild shortcuts: azorius(wu) dimir(ub) rakdos(br) gruul(rg) selesnya(wg) orzhov(wb) izzet(ur) golgari(bg) boros(wr) simic(ug)
+  Shard/wedge shortcuts: esper(wub) grixis(ubr) jund(brg) naya(wrg) bant(wug) abzan(wbg) mardu(wbr) sultai(ubg) temur(urg) jeskai(wur)
+
+**Types** — \`t:\`: creature instant sorcery artifact enchantment planeswalker land legendary tribal
+  Subtypes work too: t:dragon t:elf t:wizard t:vampire t:human t:zombie
+
+**Mana value** — \`cmc:\` or \`mv:\`: \`cmc<=3\` \`mv=2\` \`cmc>=6\`
+
+**Stats** — \`pow:\` power, \`tou:\` toughness, \`loy:\` loyalty: \`pow>=4\` \`tou<=2\`
+
+**Rarity** — \`r:\`: common uncommon rare mythic. \`r>=uncommon\` = uncommon or better.
+
+**Set** — \`s:\` or \`e:\`: \`s:khm\` \`e:bro\` (3-letter set codes)
+
+**Format legality** — \`f:\`: commander standard modern legacy pauper pioneer vintage. Always use \`f:commander\` when searching for Commander-legal cards.
+
+**Oracle text** — \`o:\`: \`o:flying\` \`o:"draw a card"\` \`o:"enters the battlefield"\` \`o:"sacrifice"\`
+
+**Keywords** — \`keyword:\`: \`keyword:flying\` \`keyword:trample\` \`keyword:haste\` \`keyword:vigilance\`
+
+**Special** — \`is:\`: \`is:commander\` (legendary creature or planeswalker that can be a commander), \`is:spell\` (non-land), \`is:permanent\`, \`is:historic\` (artifact/legendary/saga), \`is:vanilla\` (no text), \`is:reserved\`
+
+**Oracle tags** — \`otag:\` / \`oracletag:\`: curated functional tags, great for Commander. \`otag:ramp\` \`otag:removal\` \`otag:draw\` \`otag:tutor\` \`otag:boardwipe\` \`otag:counterspell\`
+
+**Booleans**: space = AND; \`OR\`; \`-\` or \`NOT\` to negate. Parentheses group terms.
+
+**Examples**:
+- Creatures that fit in a Gruul deck: \`t:creature id<=gruul f:commander\`
+- Find Gruul commanders: \`is:commander id:gruul\`
+- Green ramp spells (by oracle tag): \`otag:ramp id<=gruul f:commander\`
+- Blue counterspells cmc≤2: \`t:instant c:u o:counter cmc<=2\`
+- Cheap white creatures: \`t:creature c:w cmc<=2 f:commander\`
+- Artifact ramp under 3 mana: \`f:commander t:artifact o:mana cmc<=3\`
+- Draw spells for Dimir: \`otag:draw id<=dimir f:commander\`
+- Board wipes: \`otag:boardwipe f:commander\`
 `.trim()
 
 export async function POST(request: Request) {

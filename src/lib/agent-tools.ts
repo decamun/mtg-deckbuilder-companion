@@ -25,7 +25,9 @@ export function buildDeckAgentTools(
   return {
     search_scryfall: tool({
       description:
-        'Search Scryfall using their full search syntax (e.g. "t:creature c:wu cmc<=3"). Returns up to `limit` card objects with image URLs.',
+        'Search Scryfall using their full search syntax. Returns up to `limit` card objects with image URLs.' +
+        ' Key filters: t:(type) c:(colors) id<=gruul (color identity fits within) cmc<=/>=N pow:/tou: r:(rarity) f:(format) o:(oracle text) keyword:(ability) is:commander otag:(ramp|removal|draw|tutor|boardwipe|counterspell).' +
+        ' Examples: "t:creature id<=gruul f:commander" | "is:commander id:gruul" | "otag:ramp id<=temur f:commander" | "(t:instant OR t:sorcery) c:u o:counter cmc<=2"',
       inputSchema: z.object({
         query: z.string().min(1),
         limit: z.number().int().min(1).max(50).default(10),
