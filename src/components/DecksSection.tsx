@@ -37,6 +37,10 @@ import type { Deck } from "@/lib/types"
 import Link from "next/link"
 
 export function DecksSection() {
+  return <DecksSectionContent />
+}
+
+function DecksSectionContent() {
   const [decks, setDecks] = useState<Deck[]>([])
   const [loading, setLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
@@ -47,11 +51,7 @@ export function DecksSection() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const router = useRouter()
 
-  useEffect(() => {
-    fetchDecks()
-  }, [])
-
-  const fetchDecks = async () => {
+  async function fetchDecks() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -87,6 +87,12 @@ export function DecksSection() {
     setDecks(populatedDecks)
     setLoading(false)
   }
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchDecks()
+    })
+  }, [])
 
   const handleCreateDeck = async () => {
     if (!newDeckName) return
@@ -319,6 +325,7 @@ export function DecksSection() {
                     <>
                       <img
                         src={deck.cover_url}
+                        alt=""
                         className="h-full w-full object-cover opacity-40 group-hover:opacity-60 transition-opacity"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />

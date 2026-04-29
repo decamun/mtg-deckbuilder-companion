@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,20 +17,24 @@ export function AddNamedVersionDialog({ open, onOpenChange, onSubmit }: Props) {
   const [bookmarked, setBookmarked] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (open) { setName(""); setBookmarked(false) }
-  }, [open])
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setName("")
+      setBookmarked(false)
+    }
+    onOpenChange(nextOpen)
+  }
 
   const submit = async () => {
     if (!name.trim()) return
     setSaving(true)
     await onSubmit(name.trim(), bookmarked)
     setSaving(false)
-    onOpenChange(false)
+    handleOpenChange(false)
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="bg-card border border-border text-foreground sm:max-w-[420px]">
         <DialogHeader>
           <DialogTitle>Add named version</DialogTitle>
@@ -59,7 +63,7 @@ export function AddNamedVersionDialog({ open, onOpenChange, onSubmit }: Props) {
           </label>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+          <Button variant="ghost" onClick={() => handleOpenChange(false)} disabled={saving}>Cancel</Button>
           <Button onClick={submit} disabled={saving || !name.trim()}>{saving ? "Saving…" : "Save"}</Button>
         </DialogFooter>
       </DialogContent>

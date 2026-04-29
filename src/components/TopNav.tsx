@@ -31,17 +31,15 @@ export function TopNav() {
   const pathname = usePathname()
   const router = useRouter()
   const [user, setUser] = useState<SupabaseUser | null>(null)
-  const [activePath, setActivePath] = useState(pathname ?? "")
+  const currentPath = pathname ?? ""
+  const [visiblePath, setVisiblePath] = useState<string | null>(null)
+  const activePath = visiblePath ?? currentPath
   const [loginOpen, setLoginOpen] = useState(false)
-
-  useEffect(() => {
-    setActivePath(pathname ?? "")
-  }, [pathname])
 
   useEffect(() => {
     const handler = (e: Event) => {
       const { path } = (e as CustomEvent<{ path: string }>).detail
-      setActivePath(path)
+      setVisiblePath(path)
     }
     window.addEventListener("sectionchange", handler)
     return () => window.removeEventListener("sectionchange", handler)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Shuffle, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -899,20 +899,16 @@ function HandGenerator({ cards }: { cards: AnalyticsCard[] }) {
     return out
   }, [cards])
 
-  const [drawn, setDrawn] = useState<AnalyticsCard[]>([])
-  const [deck, setDeck] = useState<AnalyticsCard[]>([])
-  const [initialized, setInitialized] = useState(false)
-
-  // Auto-shuffle once when cards finish loading. After that, the user controls
-  // reshuffles manually so adding/removing a card mid-test doesn't wipe their hand.
-  useEffect(() => {
-    if (!initialized && library.length > 0) {
-      const s = shuffle(library)
-      setDrawn(s.slice(0, 7))
-      setDeck(s.slice(7))
-      setInitialized(true)
+  const initialHand = useMemo(() => {
+    const s = shuffle(library)
+    return {
+      drawn: s.slice(0, 7),
+      deck: s.slice(7),
     }
-  }, [library, initialized])
+  }, [library])
+
+  const [drawn, setDrawn] = useState<AnalyticsCard[]>(initialHand.drawn)
+  const [deck, setDeck] = useState<AnalyticsCard[]>(initialHand.deck)
 
   const reshuffle = () => {
     const s = shuffle(library)
@@ -989,7 +985,7 @@ export function DeckAnalytics({
       <ManaCurve cards={cards} />
       <ProbabilityTable cards={cards} commanders={commanders} />
       <ColorSpider cards={cards} />
-      <HandGenerator cards={cards} />
+      <HandGenerator key={cards.map((card) => `${card.id}:${card.quantity}`).join("|")} cards={cards} />
     </div>
   )
 }

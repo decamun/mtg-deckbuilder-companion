@@ -6,22 +6,24 @@ import { getCard, type ScryfallCard } from "@/lib/scryfall"
 const cache = new Map<string, ScryfallCard>()
 
 export function CardEmbed({ printingScryfallId }: { printingScryfallId: string }) {
-  const [card, setCard] = useState<ScryfallCard | null>(cache.get(printingScryfallId) ?? null)
+  const cachedCard = cache.get(printingScryfallId) ?? null
+  const [fetchedCard, setFetchedCard] = useState<ScryfallCard | null>(null)
   const [enlarged, setEnlarged] = useState(false)
 
   useEffect(() => {
     if (cache.has(printingScryfallId)) {
-      setCard(cache.get(printingScryfallId)!)
       return
     }
     let alive = true
     void getCard(printingScryfallId).then(c => {
       if (!alive || !c) return
       cache.set(printingScryfallId, c)
-      setCard(c)
+      setFetchedCard(c)
     })
     return () => { alive = false }
   }, [printingScryfallId])
+
+  const card = cachedCard ?? fetchedCard
 
   if (!card) {
     return (

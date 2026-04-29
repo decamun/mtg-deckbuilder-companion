@@ -150,7 +150,6 @@ export default function ProfilePage() {
           <CardContent className="flex flex-col items-center gap-5 py-8 sm:flex-row sm:items-center sm:gap-6">
             <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full ring-1 ring-border bg-muted">
               {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={avatarUrl}
                   alt={displayName || user.email || "Avatar"}
