@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 interface ScryfallNamedResult {
   id: string
@@ -65,8 +65,17 @@ export function CardNameTooltip({ name }: { name: string }) {
   const [visible, setVisible] = useState(false)
   const [enlarged, setEnlarged] = useState(false)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimer.current) clearTimeout(hoverTimer.current)
+      if (hideTimer.current) clearTimeout(hideTimer.current)
+    }
+  }, [])
 
   const handleMouseEnter = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current)
     hoverTimer.current = setTimeout(async () => {
       const result = await fetchCardByName(name)
       setEntry(result)
@@ -76,14 +85,16 @@ export function CardNameTooltip({ name }: { name: string }) {
 
   const handleMouseLeave = () => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current)
-    setVisible(false)
+    hideTimer.current = setTimeout(() => setVisible(false), 150)
   }
 
   return (
-    <span className="relative inline-block">
+    <span
+      className="relative inline-block"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       <strong
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
         className={
           entry?.found
             ? "cursor-pointer text-primary underline decoration-dotted underline-offset-2 hover:text-primary/80"
@@ -95,8 +106,10 @@ export function CardNameTooltip({ name }: { name: string }) {
 
       {visible && entry?.found && (
         <span
-          className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2"
+          className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2"
           style={{ width: 200 }}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
         >
           <img
             src={entry.imageUrl}
