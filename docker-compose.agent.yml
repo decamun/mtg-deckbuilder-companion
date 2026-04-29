@@ -3,17 +3,20 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    env_file:
+      - .env
     # Using a single string like "3000" (instead of "3000:3000") tells Docker 
     # to map port 3000 to a random available port on the host.
     ports:
       - "3000"
     environment:
       - NODE_ENV=development
-      # Connects to the Supabase instance running from the main directory
-      - NEXT_PUBLIC_SUPABASE_URL=http://host.docker.internal:54321
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-http://host.docker.internal:54321}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
       - VERCEL_AI_GATEWAY_KEY=${VERCEL_AI_GATEWAY_KEY:-}
+      - AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY:-}
+      - NEXT_PUBLIC_IDLEBREW_HOSTS=${NEXT_PUBLIC_IDLEBREW_HOSTS:-localhost:3000,127.0.0.1:3000,idlebrew.app,www.idlebrew.app,*.decamuns-projects.vercel.app}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
