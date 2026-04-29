@@ -447,10 +447,13 @@ function buildProbabilityRows(
         label: `Cast ${cmd.name}`,
         hint: 'with ramp',
         cells: PROB_TURNS.map((T, i) => {
-          if (T < cmc) return null
           // Ramp spells cast by turn T-1 effectively add to mana-source pool.
           // Cap at total non-land cards to keep K <= N - lands sane.
           const ramp = Math.min(rampCount(T), deckSize - lands)
+          // Use T + ramp as the effective mana ceiling: each ramp spell
+          // contributes +1 net mana (e.g. Sol Ring costs 1, produces 2).
+          // Only skip turns where even maximum ramp can't reach the CMC.
+          if (T + ramp < cmc) return null
           const pool = Math.min(deckSize, lands + ramp)
           return hypergeomAtLeast(deckSize, pool, cardsSeen[i], cmc)
         }),
