@@ -6,11 +6,13 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Development Workflow Rules
 
-## Containerization Requirement
-**CRITICAL RULE:** All development on this project MUST be containerized. 
-1. Always use Docker and `docker-compose`. 
-2. Do not run `npm run dev` or other node scripts directly on the host machine. Instead, use `docker-compose up` or execute commands inside the container.
-3. If you need to run specific tools (like adding a Shadcn UI component), do it by prefixing with the appropriate docker-compose command, e.g., `docker-compose exec web npx shadcn add ...`.
+## Containerized Development
+Run the app with Docker Compose instead of host `npm run dev`.
+
+1. Copy `.env.example` to `.env` and fill in real secrets when needed.
+2. Start the frontend with `docker compose up -d --build`.
+3. Run project commands inside the container, for example `docker compose exec web npm run lint`, `docker compose exec web npx tsc --noEmit`, or `docker compose exec web npx shadcn add ...`.
+4. Use host `npm` only for repository maintenance commands that wrap Docker Compose, such as `npm run agent:port`.
 
 ## Testing Backend Changes
 
