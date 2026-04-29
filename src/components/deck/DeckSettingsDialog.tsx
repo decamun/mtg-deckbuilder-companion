@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase/client"
+import { recordVersion } from "@/lib/versions"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -48,6 +49,7 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
       return
     }
     setSaving(true)
+    const versionSince = new Date().toISOString()
     const patch = {
       name: name.trim(),
       description: description.trim() || null,
@@ -60,6 +62,13 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
       toast.error(error.message)
       return
     }
+
+    const changes: string[] = []
+    if (patch.name !== initial.name) changes.push(`renamed to "${patch.name}"`)
+    if ((patch.description ?? "") !== (initial.description ?? "")) changes.push("updated description")
+    if (patch.format !== initial.format) changes.push(`changed format to ${patch.format}`)
+    if (patch.is_public !== initial.is_public) changes.push(patch.is_public ? "made public" : "made private")
+    if (changes.length > 0) recordVersion(deckId, changes.join("; "), versionSince)
 
     onSaved(patch)
     onOpenChange(false)

@@ -28,7 +28,7 @@ import { PrimerView } from "@/components/primer/PrimerView"
 import { PrimerEditor } from "@/components/primer/PrimerEditor"
 import { VersionsTab } from "@/components/versions/VersionsTab"
 import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner"
-import { getVersion, revertToVersion, type DeckVersionRow } from "@/lib/versions"
+import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { formatPrice, pickPrice } from "@/lib/format"
 
 type DeckCardRow = Omit<DeckCard, "image_url" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
@@ -192,6 +192,18 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const fetchGenRef = useRef(0)
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
+  const recordMutationVersion = (summary: string, sinceIso: string) => {
+    recordVersion(deckId, summary, sinceIso)
+  }
+
+  useEffect(() => {
+    if (tab === 'versions') void flushPendingVersion(deckId)
+  }, [tab, deckId])
+
+  useEffect(() => {
+    return () => { void flushPendingVersion(deckId) }
+  }, [deckId])
+
   useEffect(() => {
     if (debouncedQuery.length > 1) {
       searchCards(debouncedQuery).then(setResults)
@@ -319,6 +331,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const addToDeck = async (card: ScryfallCard) => {
     const existing = cards.find(c => c.scryfall_id === card.id)
+    const versionSince = new Date().toISOString()
     if (existing) {
       const nextQuantity = existing.quantity + 1
       setCards(prev => prev.map(c => c.id === existing.id ? { ...c, quantity: nextQuantity } : c))
@@ -328,6 +341,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         toast.error(error.message)
       } else if (data) {
         setCards(prev => prev.map(c => c.id === existing.id ? mergeDeckCardRow(c, data as DeckCardRow) : c))
+        recordMutationVersion(`Increased ${existing.name} to ${nextQuantity}`, versionSince)
       }
     } else {
       const optimisticId = `pending-${card.id}`
@@ -368,6 +382,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         toast.error(error.message)
       } else if (data) {
         setCards(prev => prev.map(c => c.id === optimisticId ? { ...optimisticCard, ...data } : c))
+        recordMutationVersion(`Added ${card.name}`, versionSince)
       }
     }
   }
@@ -399,11 +414,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const deleteCard = async (id: string) => {
     const card = cards.find(c => c.id === id)
     if (!card) return
+    const versionSince = new Date().toISOString()
     setCards(prev => prev.filter(c => c.id !== id))
     const { error } = await supabase.from('deck_cards').delete().eq('id', id)
     if (error) {
       setCards(prev => [...prev, card])
       toast.error(error.message)
+    } else {
+      recordMutationVersion(`Removed ${card.name}`, versionSince)
     }
   }
 
@@ -418,6 +436,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       newIds = [...commanderIds, scryfallId]
     }
     const previousIds = commanderIds
+    const versionSince = new Date().toISOString()
     setCommanderIds(newIds)
     const { error } = await supabase.from('decks').update({ commander_scryfall_ids: newIds }).eq('id', deckId)
     if (error) {
@@ -426,10 +445,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       return
     }
     const becameCmd = newIds.includes(scryfallId)
+    const card = cards.find(c => c.scryfall_id === scryfallId)
+    const cardName = card?.name ?? 'card'
+    recordMutationVersion(becameCmd ? `Set ${cardName} as commander` : `Unset ${cardName} as commander`, versionSince)
     toast.success(becameCmd ? 'Set as commander!' : 'Removed as commander')
   }
 
   const setAsCoverImage = async (scryfallId: string) => {
+    const versionSince = new Date().toISOString()
     if (coverImageId === scryfallId) {
       const previousId = coverImageId
       setCoverImageId(null)
@@ -439,6 +462,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         toast.error(error.message)
         return
       }
+      recordMutationVersion('Removed cover image', versionSince)
       toast.success('Cover image removed')
     } else {
       const previousId = coverImageId
@@ -449,6 +473,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         toast.error(error.message)
         return
       }
+      const card = cards.find(c => c.scryfall_id === scryfallId)
+      recordMutationVersion(`Set cover image to ${card?.name ?? 'card'}`, versionSince)
       toast.success('Set as cover image!')
     }
   }
@@ -460,11 +486,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const currentTags = card.tags || []
     if (currentTags.includes(tag)) return
     const newTags = [...currentTags, tag]
+    const versionSince = new Date().toISOString()
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: newTags } : c))
     const { error } = await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
     if (error) {
       setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: currentTags } : c))
       toast.error(error.message)
+    } else {
+      recordMutationVersion(`Tagged ${card.name} with "${tag}"`, versionSince)
     }
   }
 
@@ -473,33 +502,42 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     if (!card) return
     const currentTags = card.tags || []
     const newTags = currentTags.filter(t => t !== tag)
+    const versionSince = new Date().toISOString()
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: newTags } : c))
     const { error } = await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
     if (error) {
       setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: currentTags } : c))
       toast.error(error.message)
+    } else {
+      recordMutationVersion(`Untagged ${card.name} from "${tag}"`, versionSince)
     }
   }
 
   const setCardPrinting = async (cardId: string, printingId: string | null) => {
     const card = cards.find(c => c.id === cardId)
     if (!card) return
+    const versionSince = new Date().toISOString()
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, printing_scryfall_id: printingId } : c))
     const { error } = await supabase.from('deck_cards').update({ printing_scryfall_id: printingId }).eq('id', cardId)
     if (error) {
       setCards(prev => prev.map(c => c.id === cardId ? { ...c, printing_scryfall_id: card.printing_scryfall_id } : c))
       toast.error(error.message)
+    } else {
+      recordMutationVersion(printingId ? `Changed ${card.name} printing` : `Reset ${card.name} to default printing`, versionSince)
     }
   }
 
   const setCardFinish = async (cardId: string, finish: 'nonfoil' | 'foil' | 'etched') => {
     const card = cards.find(c => c.id === cardId)
     if (!card) return
+    const versionSince = new Date().toISOString()
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, finish } : c))
     const { error } = await supabase.from('deck_cards').update({ finish }).eq('id', cardId)
     if (error) {
       setCards(prev => prev.map(c => c.id === cardId ? { ...c, finish: card.finish } : c))
       toast.error(error.message)
+    } else {
+      recordMutationVersion(`Changed ${card.name} finish to ${finish}`, versionSince)
     }
   }
 
@@ -599,6 +637,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const savePrimer = async (markdown: string) => {
+    const versionSince = new Date().toISOString()
     const { error } = await supabase.from('decks').update({ primer_markdown: markdown }).eq('id', deckId)
     if (error) {
       toast.error(error.message)
@@ -606,6 +645,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     }
     setPrimerMarkdown(markdown)
     setPrimerEditing(false)
+    recordMutationVersion('Updated primer', versionSince)
     toast.success('Primer saved')
   }
 
