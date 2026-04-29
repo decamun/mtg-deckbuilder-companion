@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { toast } from "sonner"
-import { Send, Square, X, Trash2, Sparkles, Brain } from "lucide-react"
+import { Send, Square, Trash2, Sparkles, Brain, PanelRightClose, PanelRightOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ToolChip } from "./ToolChip"
@@ -22,6 +22,7 @@ interface Props {
   deckId: string
   open: boolean
   onClose: () => void
+  onOpen: () => void
 }
 
 interface LimitsResponse {
@@ -60,12 +61,43 @@ function summariseOutput(toolName: string, output: unknown): string | undefined 
   return undefined
 }
 
-export function DeckAgentSidebar({ deckId, open, onClose }: Props) {
+const MIN_WIDTH = 240
+const MAX_WIDTH = 720
+const DEFAULT_WIDTH = 320
+
+export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
   const [model, setModel] = useState<ModelId>(DEFAULT_MODEL)
   const [reasoning, setReasoning] = useState(false)
   const [draft, setDraft] = useState("")
   const [limits, setLimits] = useState<LimitsResponse | null>(null)
+  const [width, setWidth] = useState(DEFAULT_WIDTH)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const isResizing = useRef(false)
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    // Resize only on md+ screens (≥768px)
+    if (window.innerWidth < 768) return
+    e.preventDefault()
+    isResizing.current = true
+    const startX = e.clientX
+    const startWidth = width
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return
+      setWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + startX - ev.clientX)))
+    }
+    const onMouseUp = () => {
+      isResizing.current = false
+      document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("mouseup", onMouseUp)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+    document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("mouseup", onMouseUp)
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }
 
   const transport = useMemo(
     () =>
@@ -120,13 +152,40 @@ export function DeckAgentSidebar({ deckId, open, onClose }: Props) {
     setMessages([])
   }
 
-  if (!open) return null
+  if (!open) {
+    return (
+      <aside className="flex w-10 shrink-0 flex-col items-center border-l border-border bg-card/50 py-3 gap-4">
+        <button
+          onClick={onOpen}
+          className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          title="Open Deck assistant"
+        >
+          <PanelRightOpen className="h-4 w-4" />
+        </button>
+        <span
+          className="text-[10px] font-medium text-muted-foreground select-none"
+          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+        >
+          Deck assistant
+        </span>
+      </aside>
+    )
+  }
 
   const modelDesc = MODEL_DESCRIPTORS[model]
   const reasoningAvailable = modelDesc.reasoning
 
   return (
-    <aside className="fixed right-0 top-14 bottom-0 z-50 flex w-full max-w-md flex-col border-l border-border bg-card/95 shadow-2xl backdrop-blur-xl">
+    <aside
+      className="relative flex shrink-0 flex-col border-l border-border bg-card/95 shadow-xl"
+      style={{ width }}
+    >
+      {/* Drag handle — desktop only */}
+      <div
+        className="absolute left-0 top-0 bottom-0 z-10 w-1 hidden md:block cursor-col-resize hover:bg-primary/40 active:bg-primary/60 transition-colors"
+        onMouseDown={handleResizeStart}
+      />
+
       <header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <Sparkles className="h-4 w-4 text-primary" />
         <span className="text-sm font-semibold">Deck assistant</span>
@@ -140,8 +199,8 @@ export function DeckAgentSidebar({ deckId, open, onClose }: Props) {
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClose} title="Close">
-            <X className="h-4 w-4" />
+          <Button variant="ghost" size="sm" onClick={onClose} title="Collapse sidebar">
+            <PanelRightClose className="h-4 w-4" />
           </Button>
         </div>
       </header>
@@ -198,12 +257,12 @@ export function DeckAgentSidebar({ deckId, open, onClose }: Props) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault()
               handleSend()
             }
           }}
-          placeholder="Ask the agent… (Ctrl/⌘+Enter to send)"
+          placeholder="Ask the agent… (Shift+Enter for newline)"
           className="mb-2 min-h-[68px] resize-none text-sm"
           disabled={isStreaming}
         />

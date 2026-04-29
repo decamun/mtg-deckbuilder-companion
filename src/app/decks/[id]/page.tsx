@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use, useRef, useMemo } from "react"
 import { motion } from "framer-motion"
-import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2, Sparkles } from "lucide-react"
+import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -101,7 +101,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     router.replace(`${url.pathname}${url.search}`)
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [agentOpen, setAgentOpen] = useState(false)
+  const [agentOpen, setAgentOpen] = useState(true)
   const [primerEditing, setPrimerEditing] = useState(false)
   const [primerMarkdown, setPrimerMarkdown] = useState("")
   const [cardsLoading, setCardsLoading] = useState(true)
@@ -805,19 +805,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             <div className="flex items-center gap-2 shrink-0">
               {isOwner && !viewing && (
                 <button
-                  onClick={() => setAgentOpen((o) => !o)}
-                  className={`h-8 w-8 inline-flex items-center justify-center rounded-md border text-foreground ${
-                    agentOpen
-                      ? 'bg-primary/15 border-primary/40 text-primary'
-                      : 'bg-card border-border hover:bg-accent'
-                  }`}
-                  title="Deck assistant"
-                >
-                  <Sparkles className="w-4 h-4" />
-                </button>
-              )}
-              {isOwner && !viewing && (
-                <button
                   onClick={() => setSettingsOpen(true)}
                   className="h-8 w-8 inline-flex items-center justify-center rounded-md bg-card border border-border hover:bg-accent text-foreground"
                   title="Deck settings"
@@ -845,7 +832,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       <DeckTabs tab={tab} onChange={setTab} />
 
       {/* Workspace */}
-      <div className="flex-1 overflow-y-auto bg-background/20">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+      <div className="flex-1 overflow-y-auto bg-background/20 min-w-0">
         <div className="p-6 max-w-6xl mx-auto space-y-8">
         {tab === 'decklist' && (<>
           <div className="flex items-center justify-end gap-2">
@@ -1195,6 +1183,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
+      {isOwner && !viewing && (
+        <DeckAgentSidebar
+          deckId={deckId}
+          open={agentOpen}
+          onClose={() => setAgentOpen(false)}
+          onOpen={() => setAgentOpen(true)}
+        />
+      )}
+      </div>
+
       {deck && (
         <DeckSettingsDialog
           deckId={deckId}
@@ -1209,12 +1207,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           onSaved={(next) => setDeck({ ...deck, ...next })}
         />
       )}
-
-      <DeckAgentSidebar
-        deckId={deckId}
-        open={agentOpen && isOwner && !viewing}
-        onClose={() => setAgentOpen(false)}
-      />
 
       <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
