@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
 import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, cmcOf, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/types"
@@ -186,6 +186,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [cardsLoading, setCardsLoading] = useState(true)
   const [printingsByCard, setPrintingsByCard] = useState<Record<string, ScryfallPrinting[]>>({})
   const [viewing, setViewing] = useState<ViewingSnapshotState | null>(null)
+  const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
+  const [reverting, setReverting] = useState(false)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
@@ -625,13 +627,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const handleRevertFromBanner = async () => {
     if (!viewing) return
-    if (!confirm("Revert deck to this version? Your current state will be saved as a new version first.")) return
+    setReverting(true)
     const ok = await revertToVersion(deckId, viewing.versionId)
+    setReverting(false)
     if (!ok) {
       toast.error('Revert failed')
       return
     }
     toast.success('Reverted')
+    setRevertConfirmOpen(false)
     setViewing(null)
     await fetchDeck()
   }
@@ -843,7 +847,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         <ViewingVersionBanner
           versionLabel={viewing.label}
           isOwner={isOwner}
-          onRevert={handleRevertFromBanner}
+          onRevert={() => setRevertConfirmOpen(true)}
           onBackToLatest={exitVersionView}
         />
       )}
@@ -1344,6 +1348,21 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           onSaved={(next) => setDeck({ ...deck, ...next })}
         />
       )}
+
+      <Dialog open={revertConfirmOpen} onOpenChange={setRevertConfirmOpen}>
+        <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Revert deck to this version?</DialogTitle>
+            <DialogDescription>
+              Your current deck state will be saved as a new version before reverting.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRevertConfirmOpen(false)} disabled={reverting} className="hover:bg-accent hover:text-accent-foreground">Cancel</Button>
+            <Button onClick={handleRevertFromBanner} disabled={reverting}>{reverting ? "Reverting..." : "Revert"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">

@@ -79,6 +79,86 @@ async function loadOwnedDeckCard(
   return { card: card as DeckCardRow, deck }
 }
 
+async function getLatestVersionId(
+  supabase: SupabaseClient,
+  deckId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('deck_versions')
+    .select('id')
+    .eq('deck_id', deckId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data?.id ?? null
+}
+
+async function hasVersionSince(
+  supabase: SupabaseClient,
+  deckId: string,
+  sinceIso: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('deck_versions')
+    .select('id')
+    .eq('deck_id', deckId)
+    .gte('created_at', sinceIso)
+    .limit(1)
+    .maybeSingle()
+  return !!data?.id
+}
+
+async function recordDeckVersion(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  summary: string,
+  sinceIso: string
+): Promise<void> {
+  if (await hasVersionSince(supabase, deckId, sinceIso)) return
+
+  const deck = await loadOwnedDeck(supabase, userId, deckId)
+  const { data: cards, error: cardsErr } = await supabase
+    .from('deck_cards')
+    .select('scryfall_id, printing_scryfall_id, finish, oracle_id, name, quantity, zone, tags')
+    .eq('deck_id', deckId)
+  if (cardsErr) return
+
+  const snapshot = {
+    version: 1,
+    deck: {
+      name: deck.name,
+      description: deck.description ?? null,
+      format: deck.format ?? null,
+      commanders: deck.commander_scryfall_ids ?? [],
+      cover_image_scryfall_id: deck.cover_image_scryfall_id ?? null,
+      is_public: !!deck.is_public,
+    },
+    cards: (cards ?? []).map((c) => ({
+      scryfall_id: c.scryfall_id,
+      printing_scryfall_id: c.printing_scryfall_id ?? null,
+      finish: c.finish ?? 'nonfoil',
+      oracle_id: c.oracle_id ?? null,
+      name: c.name,
+      quantity: c.quantity,
+      zone: c.zone ?? 'mainboard',
+      tags: c.tags ?? [],
+    })),
+    primer_markdown: deck.primer_markdown ?? '',
+  }
+
+  const { error } = await supabase.from('deck_versions').insert({
+    deck_id: deckId,
+    parent_id: await getLatestVersionId(supabase, deckId),
+    name: null,
+    is_bookmarked: false,
+    change_summary: summary,
+    snapshot,
+    created_by: userId,
+  })
+  if (error) console.warn('Failed to record deck version:', error.message)
+}
+
 export async function listDecks(
   supabase: SupabaseClient,
   userId: string
@@ -132,6 +212,7 @@ export async function addCard(
   await loadOwnedDeck(supabase, userId, deckId)
   const quantity = input.quantity ?? 1
   if (quantity < 1) throw new DeckServiceError('quantity must be >= 1', 'invalid')
+  const versionSince = new Date().toISOString()
 
   const { data: existing, error: existingErr } = await supabase
     .from('deck_cards')
@@ -149,6 +230,13 @@ export async function addCard(
       .select()
       .single()
     if (error) throw new DeckServiceError(error.message, 'db_error')
+    await recordDeckVersion(
+      supabase,
+      userId,
+      deckId,
+      `Increased ${(existing as DeckCardRow).name} to ${(existing as DeckCardRow).quantity + quantity}`,
+      versionSince
+    )
     return data as DeckCardRow
   }
 
@@ -166,6 +254,7 @@ export async function addCard(
     .select()
     .single()
   if (error) throw new DeckServiceError(error.message, 'db_error')
+  await recordDeckVersion(supabase, userId, deckId, `Added ${input.name}`, versionSince)
   return data as DeckCardRow
 }
 
@@ -174,9 +263,11 @@ export async function removeCard(
   userId: string,
   deckCardId: string
 ): Promise<void> {
-  await loadOwnedDeckCard(supabase, userId, deckCardId)
+  const { card } = await loadOwnedDeckCard(supabase, userId, deckCardId)
+  const versionSince = new Date().toISOString()
   const { error } = await supabase.from('deck_cards').delete().eq('id', deckCardId)
   if (error) throw new DeckServiceError(error.message, 'db_error')
+  await recordDeckVersion(supabase, userId, card.deck_id, `Removed ${card.name}`, versionSince)
 }
 
 export async function setCardQuantity(
@@ -185,11 +276,13 @@ export async function setCardQuantity(
   deckCardId: string,
   quantity: number
 ): Promise<DeckCardRow | null> {
-  await loadOwnedDeckCard(supabase, userId, deckCardId)
+  const { card } = await loadOwnedDeckCard(supabase, userId, deckCardId)
   if (quantity < 0) throw new DeckServiceError('quantity must be >= 0', 'invalid')
+  const versionSince = new Date().toISOString()
   if (quantity === 0) {
     const { error } = await supabase.from('deck_cards').delete().eq('id', deckCardId)
     if (error) throw new DeckServiceError(error.message, 'db_error')
+    await recordDeckVersion(supabase, userId, card.deck_id, `Removed ${card.name}`, versionSince)
     return null
   }
   const { data, error } = await supabase
@@ -199,6 +292,7 @@ export async function setCardQuantity(
     .select()
     .single()
   if (error) throw new DeckServiceError(error.message, 'db_error')
+  await recordDeckVersion(supabase, userId, card.deck_id, `Changed ${card.name} quantity to ${quantity}`, versionSince)
   return data as DeckCardRow
 }
 
@@ -208,10 +302,11 @@ export async function setCardTags(
   deckCardId: string,
   tags: string[]
 ): Promise<DeckCardRow> {
-  await loadOwnedDeckCard(supabase, userId, deckCardId)
+  const { card } = await loadOwnedDeckCard(supabase, userId, deckCardId)
   const cleanTags = Array.from(
     new Set(tags.map((t) => t.trim()).filter((t) => t.length > 0))
   )
+  const versionSince = new Date().toISOString()
   const { data, error } = await supabase
     .from('deck_cards')
     .update({ tags: cleanTags })
@@ -219,6 +314,7 @@ export async function setCardTags(
     .select()
     .single()
   if (error) throw new DeckServiceError(error.message, 'db_error')
+  await recordDeckVersion(supabase, userId, card.deck_id, `Updated tags for ${card.name}`, versionSince)
   return data as DeckCardRow
 }
 
@@ -256,7 +352,8 @@ export async function setCardPrinting(
   deckCardId: string,
   printingScryfallId: string | null
 ): Promise<DeckCardRow> {
-  await loadOwnedDeckCard(supabase, userId, deckCardId)
+  const { card } = await loadOwnedDeckCard(supabase, userId, deckCardId)
+  const versionSince = new Date().toISOString()
   const { data, error } = await supabase
     .from('deck_cards')
     .update({ printing_scryfall_id: printingScryfallId })
@@ -264,6 +361,13 @@ export async function setCardPrinting(
     .select()
     .single()
   if (error) throw new DeckServiceError(error.message, 'db_error')
+  await recordDeckVersion(
+    supabase,
+    userId,
+    card.deck_id,
+    printingScryfallId ? `Changed ${card.name} printing` : `Reset ${card.name} to default printing`,
+    versionSince
+  )
   return data as DeckCardRow
 }
 
@@ -273,7 +377,8 @@ export async function setCardFinish(
   deckCardId: string,
   finish: Finish
 ): Promise<DeckCardRow> {
-  await loadOwnedDeckCard(supabase, userId, deckCardId)
+  const { card } = await loadOwnedDeckCard(supabase, userId, deckCardId)
+  const versionSince = new Date().toISOString()
   const { data, error } = await supabase
     .from('deck_cards')
     .update({ finish })
@@ -281,6 +386,7 @@ export async function setCardFinish(
     .select()
     .single()
   if (error) throw new DeckServiceError(error.message, 'db_error')
+  await recordDeckVersion(supabase, userId, card.deck_id, `Changed ${card.name} finish to ${finish}`, versionSince)
   return data as DeckCardRow
 }
 
@@ -295,6 +401,7 @@ export async function setCommanders(
     throw new DeckServiceError('A deck can have at most 2 commanders', 'invalid')
   }
   const dedup = Array.from(new Set(scryfallIds))
+  const versionSince = new Date().toISOString()
   const { data, error } = await supabase
     .from('decks')
     .update({ commander_scryfall_ids: dedup })
@@ -303,6 +410,7 @@ export async function setCommanders(
     .select()
     .single()
   if (error) throw new DeckServiceError(error.message, 'db_error')
+  await recordDeckVersion(supabase, userId, deckId, 'Updated commanders', versionSince)
   return data as DeckRow
 }
 
@@ -313,6 +421,7 @@ export async function setCoverImage(
   scryfallId: string | null
 ): Promise<DeckRow> {
   await loadOwnedDeck(supabase, userId, deckId)
+  const versionSince = new Date().toISOString()
   const { data, error } = await supabase
     .from('decks')
     .update({ cover_image_scryfall_id: scryfallId })
@@ -321,6 +430,13 @@ export async function setCoverImage(
     .select()
     .single()
   if (error) throw new DeckServiceError(error.message, 'db_error')
+  await recordDeckVersion(
+    supabase,
+    userId,
+    deckId,
+    scryfallId ? 'Updated cover image' : 'Removed cover image',
+    versionSince
+  )
   return data as DeckRow
 }
 
