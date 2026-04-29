@@ -929,6 +929,51 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     )
   }
 
+  const renderPreviewActionPanel = (c: DeckCard, groupName: string) => {
+    if (!isOwner || viewing) return null
+    const menuButtonClass = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+    const destructiveButtonClass = `${menuButtonClass} text-destructive hover:bg-destructive/10 hover:text-destructive`
+    return (
+      <div className="w-56 rounded-lg border border-border bg-white p-1 text-foreground shadow-2xl">
+        <button
+          type="button"
+          className={`${menuButtonClass} ${commanderIds.includes(c.scryfall_id) ? 'text-yellow-500' : ''}`}
+          onClick={() => setAsCommander(c.scryfall_id)}
+        >
+          <Crown className="h-3.5 w-3.5" />
+          {commanderIds.includes(c.scryfall_id) ? 'Remove as Commander' : 'Set as Commander'}
+        </button>
+        <button
+          type="button"
+          className={`${menuButtonClass} ${coverImageId === c.scryfall_id ? 'text-blue-500' : ''}`}
+          onClick={() => setAsCoverImage(c.scryfall_id)}
+        >
+          <ImageIcon className="h-3.5 w-3.5" />
+          {coverImageId === c.scryfall_id ? 'Remove Cover Image' : 'Set as Cover Image'}
+        </button>
+        <div className="-mx-1 my-1 h-px bg-border" />
+        <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Tags</div>
+        <div className="flex flex-wrap gap-1 px-2 pb-1">
+          {(c.tags?.length ? c.tags : ['No tags']).map(tag => (
+            <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>
+          ))}
+        </div>
+        {grouping === 'tag' && groupName !== 'Untagged' && (
+          <>
+            <div className="-mx-1 my-1 h-px bg-border" />
+            <button type="button" className="flex w-full rounded-md px-2 py-1.5 text-left text-sm text-orange-500 hover:bg-orange-400/10" onClick={() => removeTag(c.id, groupName)}>
+              Remove from &apos;{groupName}&apos;
+            </button>
+          </>
+        )}
+        <div className="-mx-1 my-1 h-px bg-border" />
+        <button type="button" className={destructiveButtonClass} onClick={() => deleteCard(c.id)}>
+          Remove from Deck
+        </button>
+      </div>
+    )
+  }
+
   if (accessDenied) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
