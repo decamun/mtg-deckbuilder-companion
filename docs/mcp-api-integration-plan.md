@@ -32,15 +32,21 @@ This work also resolves three pre-existing bugs documented in `tech-debt/P2-mcp-
 
 ## Environment Setup for Testing
 
-This work is designed for the **custom Docker + Supabase cloud environment**. When your session starts, the setup script will have already:
-- Started the Docker daemon
-- Run `supabase start` (local Supabase on port 54321, Studio on 54323)
-- Run `docker compose up -d` (Next.js app on port 3000)
+Cursor Cloud agents can test this app without nested Docker. Prefer a host
+Next.js process pointed at the hosted Supabase project:
 
-All commands in this doc assume that environment. Key endpoints:
-- App: `http://localhost:3000`
-- Supabase API: `http://localhost:54321`
-- Supabase Studio: `http://localhost:54323`
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co \
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable-key> \
+npm run dev
+```
+
+Use the Supabase MCP tools to discover the active project URL and publishable
+key. If a test needs authenticated data, create a disposable email/password user
+and confirm only that disposable user in `auth.users`.
+
+Local developer machines can still use `npx supabase start` plus
+`docker compose up -d --build` when a local Supabase stack is desired.
 
 ---
 
