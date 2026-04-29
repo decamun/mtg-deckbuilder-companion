@@ -21,6 +21,7 @@ import {
 } from "@/lib/game-changers"
 import {
   BrewDeckRow,
+  mergeInsertRows,
   pickNonLandRows,
   priceOf,
   stripBrewCard,
@@ -418,11 +419,6 @@ export function BrewSection() {
           ]
         })
 
-        const allLandInserts = [...basicLandInserts, ...edhrecLandInserts.map(stripBrewCard)]
-        if (allLandInserts.length > 0) {
-          await supabase.from("deck_cards").insert(allLandInserts)
-        }
-
         pushStatus("Filling out creatures and spells…")
         const {
           creatureInserts,
@@ -444,18 +440,21 @@ export function BrewSection() {
         if (missingNonLandSlots > 0 && basicLandInserts.length > 0) {
           pushStatus("Padding with extra basics…")
           basicLandInserts[0].quantity += missingNonLandSlots
-          await supabase
-            .from("deck_cards")
-            .update({ quantity: basicLandInserts[0].quantity })
-            .eq("deck_id", deck.id)
-            .eq("scryfall_id", basicLandInserts[0].scryfall_id)
         }
 
-        const nonLandInserts = [
+        const allLandInserts = mergeInsertRows([
+          ...basicLandInserts,
+          ...edhrecLandInserts.map(stripBrewCard),
+        ])
+        if (allLandInserts.length > 0) {
+          await supabase.from("deck_cards").insert(allLandInserts)
+        }
+
+        const nonLandInserts = mergeInsertRows([
           ...creatureInserts,
           ...spellInserts,
           ...backfillInserts,
-        ].map(stripBrewCard)
+        ].map(stripBrewCard))
         const totalNonLandTaken =
           totalQuantity(creatureInserts) +
           totalQuantity(spellInserts) +

@@ -34,6 +34,7 @@ execFileSync(
 )
 
 const {
+  mergeInsertRows,
   pickNonLandRows,
   totalQuantity,
 } = await import(`file://${outputPath}`)
@@ -99,5 +100,16 @@ assert.equal(totalQuantity(missingResult.spellInserts), 1)
 assert.equal(totalQuantity(missingResult.backfillInserts), 0)
 assert.equal(missingResult.missingNonLandSlots, 2)
 assert.equal(missingState.totalCost, 2)
+
+const merged = mergeInsertRows([
+  { deck_id: "deck-1", scryfall_id: "swamp", name: "Swamp", quantity: 4 },
+  { deck_id: "deck-1", scryfall_id: "forest", name: "Forest", quantity: 3 },
+  { deck_id: "deck-1", scryfall_id: "swamp", name: "Swamp", quantity: 2 },
+])
+
+assert.deepEqual(merged, [
+  { deck_id: "deck-1", scryfall_id: "swamp", name: "Swamp", quantity: 6 },
+  { deck_id: "deck-1", scryfall_id: "forest", name: "Forest", quantity: 3 },
+])
 
 console.log("brew planner checks passed")

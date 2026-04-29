@@ -96,6 +96,20 @@ export function stripBrewCard(row: BrewDeckRow): BrewInsertRow {
   }
 }
 
+export function mergeInsertRows(rows: BrewInsertRow[]): BrewInsertRow[] {
+  const merged = new Map<string, BrewInsertRow>()
+  for (const row of rows) {
+    const key = `${row.deck_id}:${row.scryfall_id}`
+    const existing = merged.get(key)
+    if (existing) {
+      existing.quantity += row.quantity
+    } else {
+      merged.set(key, { ...row })
+    }
+  }
+  return [...merged.values()]
+}
+
 export function totalQuantity(rows: { quantity: number }[]): number {
   return rows.reduce((sum, row) => sum + row.quantity, 0)
 }
