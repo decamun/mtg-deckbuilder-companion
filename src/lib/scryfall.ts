@@ -18,6 +18,8 @@ export interface ScryfallCard {
   released_at?: string
   finishes?: string[]
   keywords?: string[]
+  /** Colors a card can produce mana of, e.g. ["W","U"]. Includes "C" for colorless. */
+  produced_mana?: string[]
   prices?: {
     usd?: string | null
     usd_foil?: string | null
