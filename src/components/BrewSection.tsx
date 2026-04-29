@@ -19,6 +19,14 @@ import {
   bracketHelperText,
   isGameChanger,
 } from "@/lib/game-changers"
+import {
+  BrewDeckRow,
+  pickNonLandRows,
+  priceOf,
+  stripBrewCard,
+  takeRowsForSlots,
+  totalQuantity,
+} from "@/lib/brew-planner"
 import { toast } from "sonner"
 
 const PENDING_COMMANDER_KEY = "idlebrew:pendingCommander"
@@ -261,10 +269,6 @@ export function BrewSection() {
         const gcLimit = BRACKET_GC_LIMIT[opts.bracket]
         let gcCount = 0
         let totalCost = 0
-        const priceOf = (c: ScryfallCard | null | undefined): number => {
-          const usd = c?.prices?.usd
-          return usd ? parseFloat(usd) : 0
-        }
         const wouldExceedBudget = (cost: number): boolean =>
           opts.budgetUsd !== null && totalCost + cost > opts.budgetUsd
 
@@ -339,16 +343,18 @@ export function BrewSection() {
         ])
         const edhrecFiltered = edhrecRaw.filter((c) => !skipNames.has(c.name.toLowerCase()))
 
-        type DeckRow = {
-          deck_id: string
-          scryfall_id: string
-          name: string
-          quantity: number
-          _card: ScryfallCard
+        const pickState = {
+          gameChangerCount: gcCount,
+          totalCost,
         }
-        const edhrecLands: DeckRow[] = []
-        const edhrecCreatures: DeckRow[] = []
-        const edhrecSpells: DeckRow[] = []
+        const pickOpts = {
+          budgetUsd: opts.budgetUsd,
+          gameChangerLimit: gcLimit,
+          isGameChanger,
+        }
+        const edhrecLands: BrewDeckRow[] = []
+        const edhrecCreatures: BrewDeckRow[] = []
+        const edhrecSpells: BrewDeckRow[] = []
         if (edhrecFiltered.length > 0) {
           pushStatus("Looking up cards on Scryfall…")
           const scryfallCards = await getCardsCollection(
@@ -360,7 +366,7 @@ export function BrewSection() {
               (s) => s.name.toLowerCase() === ec.name.toLowerCase()
             )
             if (!sc) continue
-            const row: DeckRow = {
+            const row: BrewDeckRow = {
               deck_id: deck.id,
               scryfall_id: sc.id,
               name: sc.name,
@@ -374,31 +380,17 @@ export function BrewSection() {
           }
         }
 
-        const takeForRole = (rows: DeckRow[], slotCap: number): DeckRow[] => {
-          const taken: DeckRow[] = []
-          let used = 0
-          for (const row of rows) {
-            if (used >= slotCap) break
-            const cardCost = priceOf(row._card) * row.quantity
-            if (wouldExceedBudget(cardCost)) continue
-            const isGc = isGameChanger(row.name)
-            if (isGc && gcCount >= gcLimit) continue
-            const remaining = slotCap - used
-            const qty = Math.min(row.quantity, remaining)
-            taken.push({ ...row, quantity: qty })
-            used += qty
-            totalCost += priceOf(row._card) * qty
-            if (isGc) gcCount += 1
-          }
-          return taken
-        }
-
         pushStatus("Building your mana base…")
         const minBasicEach = Math.min(4, Math.floor(LAND_COUNT / Math.max(1, basicLandNames.length)))
         const minBasicsTotal = basicLandNames.length * minBasicEach
         const edhrecLandSlots = Math.max(0, LAND_COUNT - minBasicsTotal)
-        const edhrecLandInserts = takeForRole(edhrecLands, edhrecLandSlots)
-        const edhrecLandsTaken = edhrecLandInserts.reduce((s, r) => s + r.quantity, 0)
+        const { taken: edhrecLandInserts } = takeRowsForSlots(
+          edhrecLands,
+          edhrecLandSlots,
+          pickState,
+          pickOpts
+        )
+        const edhrecLandsTaken = totalQuantity(edhrecLandInserts)
         const unfilledSlots = edhrecLandSlots - edhrecLandsTaken
 
         const basicCounts: Record<string, number> = Object.fromEntries(
@@ -426,19 +418,48 @@ export function BrewSection() {
           ]
         })
 
-        const stripCard = ({ _card: _, ...row }: DeckRow) => row
-        const allLandInserts = [...basicLandInserts, ...edhrecLandInserts.map(stripCard)]
+        const allLandInserts = [...basicLandInserts, ...edhrecLandInserts.map(stripBrewCard)]
         if (allLandInserts.length > 0) {
           await supabase.from("deck_cards").insert(allLandInserts)
         }
 
         pushStatus("Filling out creatures and spells…")
-        const creatureInserts = takeForRole(edhrecCreatures, opts.slots.creatures)
-        const spellSlotsRemaining = Math.max(0, opts.slots.spells - (solRingInserted ? 1 : 0))
-        const spellInserts = takeForRole(edhrecSpells, spellSlotsRemaining)
+        const {
+          creatureInserts,
+          spellInserts,
+          backfillInserts,
+          missingNonLandSlots,
+        } = pickNonLandRows({
+          creatureRows: edhrecCreatures,
+          spellRows: edhrecSpells,
+          creatureSlots: opts.slots.creatures,
+          spellSlots: opts.slots.spells,
+          solRingInserted,
+          state: pickState,
+          budgetUsd: opts.budgetUsd,
+          gameChangerLimit: gcLimit,
+          isGameChanger,
+        })
 
-        const nonLandInserts = [...creatureInserts, ...spellInserts].map(stripCard)
-        const totalNonLandTaken = creatureInserts.reduce((s, r) => s + r.quantity, 0) + spellInserts.reduce((s, r) => s + r.quantity, 0)
+        if (missingNonLandSlots > 0 && basicLandInserts.length > 0) {
+          pushStatus("Padding with extra basics…")
+          basicLandInserts[0].quantity += missingNonLandSlots
+          await supabase
+            .from("deck_cards")
+            .update({ quantity: basicLandInserts[0].quantity })
+            .eq("deck_id", deck.id)
+            .eq("scryfall_id", basicLandInserts[0].scryfall_id)
+        }
+
+        const nonLandInserts = [
+          ...creatureInserts,
+          ...spellInserts,
+          ...backfillInserts,
+        ].map(stripBrewCard)
+        const totalNonLandTaken =
+          totalQuantity(creatureInserts) +
+          totalQuantity(spellInserts) +
+          totalQuantity(backfillInserts)
         if (nonLandInserts.length > 0) {
           await supabase.from("deck_cards").insert(nonLandInserts)
           toast.success(
