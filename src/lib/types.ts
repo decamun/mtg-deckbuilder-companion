@@ -34,6 +34,8 @@ export interface DeckCard {
   mana_cost?: string
   cmc?: number
   colors?: string[]
+  oracle_text?: string
+  produced_mana?: string[]
   set_code?: string
   collector_number?: string
   available_finishes?: string[]
