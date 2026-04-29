@@ -288,6 +288,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     }
   }, [hoverPreviewTimer])
 
+  useEffect(() => {
+    if (!clickedPreview) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setClickedPreview(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [clickedPreview])
+
   const fetchDeck = async () => {
     const gen = ++fetchGenRef.current
 
@@ -1592,11 +1601,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       {clickedPreview && (
         <div
           className="fixed inset-0 z-[80] bg-background/20 backdrop-blur-[1px]"
-          onMouseDown={() => setClickedPreview(null)}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setClickedPreview(null)
+          }}
         >
           <div
             className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-start gap-3"
-            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <CardArt card={clickedPreview.card} imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl" />
             {renderPreviewActionPanel(clickedPreview.card, clickedPreview.groupName)}
