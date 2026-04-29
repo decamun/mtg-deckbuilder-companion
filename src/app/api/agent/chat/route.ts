@@ -13,6 +13,7 @@ import {
 import { resolveModel, reasoningProviderOptions } from '@/lib/agent-models'
 import { buildDeckAgentTools } from '@/lib/agent-tools'
 import * as deckService from '@/lib/deck-service'
+import { getCardsByIds, type ScryfallCard } from '@/lib/scryfall'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,7 +26,46 @@ interface ChatRequestBody {
   enableReasoning?: boolean
 }
 
-const SYSTEM_PROMPT = (deckName: string, deckId: string, terse: boolean) => `
+function buildDeckContext(
+  format: string | null,
+  commanderCards: ScryfallCard[]
+): string {
+  const fmt = format ?? 'commander'
+
+  if (commanderCards.length === 0) {
+    return `Format: ${fmt}. No commanders set — search without color-identity constraints until the user specifies one.`
+  }
+
+  const combinedIdentity = [
+    ...new Set(commanderCards.flatMap(c => c.color_identity ?? [])),
+  ]
+    .sort()
+    .join('')
+    .toLowerCase() || 'c'
+
+  const commanderLines = commanderCards
+    .map(c => {
+      const ci = (c.color_identity ?? []).join('').toLowerCase() || 'c'
+      const text = c.oracle_text?.replace(/\n/g, ' ') ?? ''
+      return `  - ${c.name} [${ci}] — ${text}`
+    })
+    .join('\n')
+
+  return `Format: ${fmt}
+Commanders:
+${commanderLines}
+Combined color identity: ${combinedIdentity}
+
+Default search behavior: always include \`id<=${combinedIdentity} f:${fmt}\` unless the user explicitly asks for off-identity or off-format cards.
+Card evaluation: when suggesting adds or cuts, assess synergy with the commander(s) above — prefer cards that advance or enable their strategies.`
+}
+
+const SYSTEM_PROMPT = (
+  deckName: string,
+  deckId: string,
+  terse: boolean,
+  deckContext: string
+) => `
 You are an MTG deck-building assistant operating on the deck "${deckName}" (id: ${deckId}).
 
 Use the provided tools to search Scryfall, inspect this deck's cards, and apply edits.
@@ -33,6 +73,51 @@ Prefer batch reasoning over many small steps: call get_decklist once, plan, then
 Confirm destructive edits (removing >1 card, replacing commanders, large tag rewrites)
 by summarising the planned change in plain text BEFORE calling the tool.
 ${terse ? '\nBe concise. Call tools directly without restating the plan in detail.' : ''}
+
+## This Deck
+
+${deckContext}
+
+## Scryfall Search Syntax
+
+**Colors** — \`c:\` filters card colors; \`id:\` / \`identity:\` filters color identity.
+  Values: w u b r g m(multicolor) c(colorless). Operators: \`c:rg\`=contains R+G, \`c=rg\`=exactly RG, \`c>=rg\`=at least RG, \`c<=rg\`=subset of RG.
+  For Commander: use \`id<=gruul\` to find cards that FIT WITHIN a color identity (most common use case).
+  Guild shortcuts: azorius(wu) dimir(ub) rakdos(br) gruul(rg) selesnya(wg) orzhov(wb) izzet(ur) golgari(bg) boros(wr) simic(ug)
+  Shard/wedge shortcuts: esper(wub) grixis(ubr) jund(brg) naya(wrg) bant(wug) abzan(wbg) mardu(wbr) sultai(ubg) temur(urg) jeskai(wur)
+
+**Types** — \`t:\`: creature instant sorcery artifact enchantment planeswalker land legendary tribal
+  Subtypes work too: t:dragon t:elf t:wizard t:vampire t:human t:zombie
+
+**Mana value** — \`cmc:\` or \`mv:\`: \`cmc<=3\` \`mv=2\` \`cmc>=6\`
+
+**Stats** — \`pow:\` power, \`tou:\` toughness, \`loy:\` loyalty: \`pow>=4\` \`tou<=2\`
+
+**Rarity** — \`r:\`: common uncommon rare mythic. \`r>=uncommon\` = uncommon or better.
+
+**Set** — \`s:\` or \`e:\`: \`s:khm\` \`e:bro\` (3-letter set codes)
+
+**Format legality** — \`f:\`: commander standard modern legacy pauper pioneer vintage. Always use \`f:commander\` when searching for Commander-legal cards.
+
+**Oracle text** — \`o:\`: \`o:flying\` \`o:"draw a card"\` \`o:"enters the battlefield"\` \`o:"sacrifice"\`
+
+**Keywords** — \`keyword:\`: \`keyword:flying\` \`keyword:trample\` \`keyword:haste\` \`keyword:vigilance\`
+
+**Special** — \`is:\`: \`is:commander\` (legendary creature or planeswalker that can be a commander), \`is:spell\` (non-land), \`is:permanent\`, \`is:historic\` (artifact/legendary/saga), \`is:vanilla\` (no text), \`is:reserved\`
+
+**Oracle tags** — \`otag:\` / \`oracletag:\`: curated functional tags, great for Commander. \`otag:ramp\` \`otag:removal\` \`otag:draw\` \`otag:tutor\` \`otag:boardwipe\` \`otag:counterspell\`
+
+**Booleans**: space = AND; \`OR\`; \`-\` or \`NOT\` to negate. Parentheses group terms.
+
+**Examples**:
+- Creatures that fit in a Gruul deck: \`t:creature id<=gruul f:commander\`
+- Find Gruul commanders: \`is:commander id:gruul\`
+- Green ramp spells (by oracle tag): \`otag:ramp id<=gruul f:commander\`
+- Blue counterspells cmc≤2: \`t:instant c:u o:counter cmc<=2\`
+- Cheap white creatures: \`t:creature c:w cmc<=2 f:commander\`
+- Artifact ramp under 3 mana: \`f:commander t:artifact o:mana cmc<=3\`
+- Draw spells for Dimir: \`otag:draw id<=dimir f:commander\`
+- Board wipes: \`otag:boardwipe f:commander\`
 `.trim()
 
 export async function POST(request: Request) {
@@ -101,15 +186,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: msg }, { status: 404 })
   }
 
-  // Quota gate passed — record the call now so concurrent requests can't slip in.
-  await recordCall(supabase, user.id, modelId)
+  // Record quota and fetch commander cards in parallel — both are independent of each other.
+  const [, commanderCards] = await Promise.all([
+    recordCall(supabase, user.id, modelId),
+    deck.commander_scryfall_ids.length > 0
+      ? getCardsByIds(deck.commander_scryfall_ids)
+      : Promise.resolve([] as ScryfallCard[]),
+  ])
 
   const tools = buildDeckAgentTools(supabase, user.id, body.deckId)
   const isHaiku = modelId === 'anthropic/claude-haiku-4.5'
+  const deckContext = buildDeckContext(deck.format, commanderCards)
 
   const result = streamText({
     model: resolveModel(modelId),
-    system: SYSTEM_PROMPT(deck.name, deck.id, isHaiku),
+    system: SYSTEM_PROMPT(deck.name, deck.id, isHaiku, deckContext),
     messages: convertToModelMessages(body.messages),
     tools,
     stopWhen: stepCountIs(tier.maxStepsPerCall),

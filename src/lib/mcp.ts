@@ -33,7 +33,9 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
 
   server.tool(
     'search_scryfall',
-    'Search Scryfall using their full search syntax (e.g. "t:creature c:wu cmc<=3"). Returns structured card objects.',
+    'Search Scryfall using their full search syntax. Returns structured card objects.' +
+      ' Key filters: t:(type) c:(colors) id<=gruul (color identity fits within) cmc<=/>=N pow:/tou: r:(rarity) f:(format) o:(oracle text) keyword:(ability) is:commander otag:(ramp|removal|draw|tutor|boardwipe|counterspell).' +
+      ' Examples: "t:creature id<=gruul f:commander" | "is:commander id:gruul" | "otag:ramp id<=temur f:commander" | "(t:instant OR t:sorcery) c:u o:counter cmc<=2"',
     {
       query: z.string().min(1).describe('Scryfall search syntax'),
       limit: z
