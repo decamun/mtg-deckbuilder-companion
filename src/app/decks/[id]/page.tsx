@@ -58,6 +58,7 @@ const STACK_EXTRA_PEEK_RATIO = 14 / DEFAULT_CARD_SIZE
 const STACK_CARD_HEIGHT_RATIO = 246 / DEFAULT_CARD_SIZE
 const STACK_HOVER_SHIFT_RATIO = 44 / DEFAULT_CARD_SIZE
 const HOVER_PREVIEW_DELAY_MS = 650
+const HOVER_PREVIEW_MAX_VISIBLE_MS = 10_000
 
 const DEFAULT_TAGS = ['card advantage', 'interaction', 'wincon', 'combo piece']
 
@@ -287,6 +288,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       if (hoverPreviewTimer) clearTimeout(hoverPreviewTimer)
     }
   }, [hoverPreviewTimer])
+
+  useEffect(() => {
+    if (!hoverPreview) return
+    const timer = setTimeout(() => setHoverPreview(null), HOVER_PREVIEW_MAX_VISIBLE_MS)
+    return () => clearTimeout(timer)
+  }, [hoverPreview])
 
   useEffect(() => {
     if (!clickedPreview) return
