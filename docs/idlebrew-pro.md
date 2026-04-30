@@ -34,3 +34,9 @@ RLS lets users read their own flags and set notification interest, but prevents 
 - Add real checkout and billing webhooks.
 - Move subscription changes through a trusted server/admin path that sets `idlebrew_pro_subscribed`.
 - Expand subscribed mode beyond model access as product behavior is defined.
+
+## Agent test accounts
+
+Agents that need to test subscribed mode should use the secure provisioning flow in
+[agent-pro-test-accounts.md](agent-pro-test-accounts.md). Do not set
+`idlebrew_pro_subscribed` on real user accounts for testing.
