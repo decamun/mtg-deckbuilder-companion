@@ -12,6 +12,11 @@ Host-based development is supported in Cursor Cloud. Do not require nested
 Docker unless a task specifically needs the local Supabase stack or Docker-only
 behavior.
 
+Avoid creating video demo artifacts for feature work unless the user explicitly
+asks for one or you determine a video is necessary to verify functionality.
+Prefer lower-cost evidence such as automated test output, logs, or screenshots
+when they are sufficient.
+
 1. Install dependencies on the host with `npm ci` if `node_modules` is missing
    or incomplete.
 2. Start the frontend with hosted Supabase settings:
