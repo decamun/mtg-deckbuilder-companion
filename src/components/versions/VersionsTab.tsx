@@ -1,13 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Plus } from "lucide-react"
+import { GitCompare, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import {
   createNamedVersion,
   getVersions,
   setVersionBookmark,
+  setVersionTags,
   revertToVersion,
   type DeckVersionRow,
 } from "@/lib/versions"
@@ -16,19 +17,30 @@ import { VersionTimelineRow } from "./VersionTimelineRow"
 import { UnnamedVersionsGroup } from "./UnnamedVersionsGroup"
 import { AddNamedVersionDialog } from "./AddNamedVersionDialog"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 interface Props {
   deckId: string
   isOwner: boolean
   onViewVersion: (versionId: string) => void
+  onDiffWithVersion: (versionId: string, label: string) => void
   onReverted: () => void
 }
 
-export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Props) {
+const BUILT_IN_VERSION_TAGS = ["paper-build"]
+
+const tagLabel = (tag: string) => tag === "paper-build" ? "Paper build" : tag
+
+export function VersionsTab({ deckId, isOwner, onViewVersion, onDiffWithVersion, onReverted }: Props) {
   const [rows, setRows] = useState<DeckVersionRow[]>([])
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
   const [revertTargetId, setRevertTargetId] = useState<string | null>(null)
+  const [tagTarget, setTagTarget] = useState<DeckVersionRow | null>(null)
+  const [customTag, setCustomTag] = useState("")
+  const [savingTag, setSavingTag] = useState(false)
   const [reverting, setReverting] = useState(false)
 
   const refresh = async () => {
@@ -50,6 +62,24 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
   }, [deckId])
 
   const bookmarked = useMemo(() => rows.filter(r => r.is_bookmarked && r.name), [rows])
+  const knownTags = useMemo(() => {
+    const tags = new Set(BUILT_IN_VERSION_TAGS)
+    rows.forEach(row => (row.tags ?? []).forEach(tag => tags.add(tag)))
+    return Array.from(tags).sort((a, b) => {
+      if (a === "paper-build") return -1
+      if (b === "paper-build") return 1
+      return a.localeCompare(b)
+    })
+  }, [rows])
+  const latestByTag = useMemo(() => {
+    const byTag = new Map<string, DeckVersionRow>()
+    for (const row of rows) {
+      for (const tag of row.tags ?? []) {
+        if (!byTag.has(tag)) byTag.set(tag, row)
+      }
+    }
+    return byTag
+  }, [rows])
 
   // Build timeline groups: named versions are top-level rows; unnamed rows
   // between two named anchors are bucketed into a collapsed group.
@@ -83,6 +113,27 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
     void refresh()
   }
 
+  const handleToggleTag = async (row: DeckVersionRow, tag: string) => {
+    const tags = row.tags ?? []
+    const next = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag]
+    await setVersionTags(row.id, next)
+    toast.success(tags.includes(tag) ? `Removed ${tagLabel(tag)}` : `Marked as ${tagLabel(tag)}`)
+    void refresh()
+  }
+
+  const submitCustomTag = async () => {
+    if (!tagTarget) return
+    const tag = customTag.trim()
+    if (!tag) return
+    setSavingTag(true)
+    await setVersionTags(tagTarget.id, [...(tagTarget.tags ?? []), tag])
+    setSavingTag(false)
+    toast.success(`Marked as ${tagLabel(tag)}`)
+    setTagTarget(null)
+    setCustomTag("")
+    void refresh()
+  }
+
   const performRevert = async () => {
     if (!revertTargetId) return
     setReverting(true)
@@ -100,13 +151,48 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold">Versions</h2>
-        {isOwner && (
-          <Button size="sm" onClick={() => setAddOpen(true)}>
-            <Plus className="w-3.5 h-3.5 mr-1.5" /> Add named version
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button size="sm" variant="outline" disabled={knownTags.every(tag => !latestByTag.has(tag))} />}>
+              <GitCompare className="w-3.5 h-3.5 mr-1.5" /> View diff with...
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 bg-popover border-border text-foreground">
+              <DropdownMenuItem
+                disabled={!latestByTag.get("paper-build")}
+                onClick={() => {
+                  const row = latestByTag.get("paper-build")
+                  if (row) onDiffWithVersion(row.id, `Latest ${tagLabel("paper-build")}`)
+                }}
+              >
+                Latest paper-build
+              </DropdownMenuItem>
+              {knownTags.filter(tag => tag !== "paper-build").length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  {knownTags.filter(tag => tag !== "paper-build").map(tag => {
+                    const row = latestByTag.get(tag)
+                    return (
+                      <DropdownMenuItem
+                        key={tag}
+                        disabled={!row}
+                        onClick={() => { if (row) onDiffWithVersion(row.id, `Latest ${tagLabel(tag)}`) }}
+                      >
+                        Latest {tagLabel(tag)}
+                      </DropdownMenuItem>
+                    )
+                  })}
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {isOwner && (
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> Add named version
+            </Button>
+          )}
+        </div>
       </div>
 
       {bookmarked.length > 0 && (
@@ -118,8 +204,11 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
                 key={r.id}
                 row={r}
                 isOwner={isOwner}
+                knownTags={knownTags}
                 onView={() => onViewVersion(r.id)}
                 onToggleBookmark={() => handleToggleBookmark(r)}
+                onToggleTag={(tag) => handleToggleTag(r, tag)}
+                onAddTag={() => setTagTarget(r)}
                 onRevert={() => setRevertTargetId(r.id)}
               />
             ))}
@@ -142,8 +231,11 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
                 key={g.row.id}
                 row={g.row}
                 isOwner={isOwner}
+                knownTags={knownTags}
                 onView={() => onViewVersion(g.row.id)}
                 onToggleBookmark={() => handleToggleBookmark(g.row)}
+                onToggleTag={(tag) => handleToggleTag(g.row, tag)}
+                onAddTag={() => setTagTarget(g.row)}
                 onRevert={() => setRevertTargetId(g.row.id)}
               />
             ) : (
@@ -151,8 +243,11 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
                 key={`u-${i}`}
                 rows={g.rows}
                 isOwner={isOwner}
+                knownTags={knownTags}
                 onView={onViewVersion}
                 onToggleBookmark={handleToggleBookmark}
+                onToggleTag={handleToggleTag}
+                onAddTag={(row) => setTagTarget(row)}
                 onRevert={setRevertTargetId}
               />
             )
@@ -161,6 +256,32 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onReverted }: Prop
       </section>
 
       <AddNamedVersionDialog open={addOpen} onOpenChange={setAddOpen} onSubmit={handleAddNamed} />
+      <Dialog open={!!tagTarget} onOpenChange={(open) => { if (!open && !savingTag) { setTagTarget(null); setCustomTag("") } }}>
+        <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add version tag</DialogTitle>
+            <DialogDescription>
+              Tags can identify paper builds, playtest snapshots, or other version milestones.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="version-tag">Tag</Label>
+            <Input
+              id="version-tag"
+              value={customTag}
+              onChange={(event) => setCustomTag(event.target.value)}
+              placeholder="e.g. tournament-list"
+              className="bg-background/50 border-border"
+              onKeyDown={(event) => { if (event.key === "Enter") void submitCustomTag() }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setTagTarget(null); setCustomTag("") }} disabled={savingTag}>Cancel</Button>
+            <Button onClick={submitCustomTag} disabled={savingTag || !customTag.trim()}>{savingTag ? "Saving..." : "Save tag"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!revertTargetId} onOpenChange={(open) => { if (!open && !reverting) setRevertTargetId(null) }}>
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
           <DialogHeader>

@@ -31,6 +31,7 @@ export interface DeckVersionRow {
   parent_id: string | null
   name: string | null
   is_bookmarked: boolean
+  tags: string[]
   change_summary: string
   snapshot: VersionSnapshot
   created_at: string
@@ -115,6 +116,7 @@ async function insertSnapshotVersion(
       parent_id: parentId ?? (await getLatestVersionId(deckId)),
       name,
       is_bookmarked: bookmarked,
+      tags: [],
       change_summary: summary,
       snapshot,
       created_by: user?.id ?? null,
@@ -203,7 +205,7 @@ export async function getVersions(deckId: string): Promise<DeckVersionRow[]> {
     .select("*")
     .eq("deck_id", deckId)
     .order("created_at", { ascending: false })
-  return (data ?? []) as DeckVersionRow[]
+  return ((data ?? []) as DeckVersionRow[]).map(row => ({ ...row, tags: row.tags ?? [] }))
 }
 
 export async function getVersion(versionId: string): Promise<DeckVersionRow | null> {
@@ -212,11 +214,18 @@ export async function getVersion(versionId: string): Promise<DeckVersionRow | nu
     .select("*")
     .eq("id", versionId)
     .maybeSingle()
-  return (data ?? null) as DeckVersionRow | null
+  if (!data) return null
+  const row = data as DeckVersionRow
+  return { ...row, tags: row.tags ?? [] }
 }
 
 export async function setVersionBookmark(versionId: string, bookmarked: boolean) {
   await supabase.from("deck_versions").update({ is_bookmarked: bookmarked }).eq("id", versionId)
+}
+
+export async function setVersionTags(versionId: string, tags: string[]) {
+  const normalized = Array.from(new Set(tags.map(tag => tag.trim()).filter(Boolean)))
+  await supabase.from("deck_versions").update({ tags: normalized }).eq("id", versionId)
 }
 
 export async function renameVersion(versionId: string, name: string | null) {

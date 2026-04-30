@@ -23,6 +23,7 @@ import { DeckAgentSidebar } from "@/components/agent/DeckAgentSidebar"
 import { DeckAnalytics } from "@/components/deck-analytics"
 import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
 import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
+import { DeckDiffView } from "@/components/deck/DeckDiffView"
 import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
 import { PrimerView } from "@/components/primer/PrimerView"
 import { PrimerEditor } from "@/components/primer/PrimerEditor"
@@ -30,6 +31,7 @@ import { VersionsTab } from "@/components/versions/VersionsTab"
 import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner"
 import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { formatPrice, pickPrice } from "@/lib/format"
+import { ManaText } from "@/components/mana/ManaText"
 
 type DeckCardRow = Omit<DeckCard, "image_url" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
 
@@ -43,6 +45,11 @@ type ViewingSnapshotState = {
 }
 
 type CardInteractionPhase = 'loading' | 'settling' | 'ready'
+
+type DiffTargetState = {
+  label: string
+  cards: DeckCard[]
+}
 
 // Stack card width is w-44 (176px); height ≈ 176 * 1.4 = 246px
 const DEFAULT_CARD_SIZE = 176
@@ -225,6 +232,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [cardsLoading, setCardsLoading] = useState(true)
   const [printingsByCard, setPrintingsByCard] = useState<Record<string, ScryfallPrinting[]>>({})
   const [viewing, setViewing] = useState<ViewingSnapshotState | null>(null)
+  const [diffTarget, setDiffTarget] = useState<DiffTargetState | null>(null)
+  const [diffOpen, setDiffOpen] = useState(false)
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
   const [reverting, setReverting] = useState(false)
 
@@ -617,12 +626,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const allUniqueTags = Array.from(new Set([...DEFAULT_TAGS, ...cards.flatMap(c => c.tags || [])])).sort()
 
-  const enterVersionView = async (versionId: string) => {
-    const row: DeckVersionRow | null = await getVersion(versionId)
-    if (!row) {
-      toast.error('Version not found')
-      return
-    }
+  const hydrateVersionSnapshot = async (row: DeckVersionRow): Promise<ViewingSnapshotState> => {
     const snap = row.snapshot
     const ids = new Set<string>()
     for (const c of snap.cards) ids.add(c.printing_scryfall_id || c.scryfall_id)
@@ -665,17 +669,48 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const coverId = snap.deck.cover_image_scryfall_id
     const coverImageUrlSnap = coverId ? (sfMap.get(coverId)?.image_uris?.normal ?? null) : null
 
-    setViewing({
+    return {
       versionId: row.id,
       label: row.name ?? new Date(row.created_at).toLocaleString(),
       cards: hydrated,
       deckMeta: snap.deck,
       primerMarkdown: snap.primer_markdown,
       coverImageUrl: coverImageUrlSnap,
-    })
+    }
   }
 
-  const exitVersionView = () => setViewing(null)
+  const enterVersionView = async (versionId: string) => {
+    const row: DeckVersionRow | null = await getVersion(versionId)
+    if (!row) {
+      toast.error('Version not found')
+      return
+    }
+
+    setViewing(await hydrateVersionSnapshot(row))
+  }
+
+  const openDiffWithVersion = async (versionId: string, label: string) => {
+    const row = await getVersion(versionId)
+    if (!row) {
+      toast.error('Version not found')
+      return
+    }
+    const hydrated = await hydrateVersionSnapshot(row)
+    setDiffTarget({ label: label || hydrated.label, cards: hydrated.cards })
+    setDiffOpen(true)
+  }
+
+  const openViewingDiffWithLatest = () => {
+    if (!viewing) return
+    setDiffTarget({ label: viewing.label, cards: viewing.cards })
+    setDiffOpen(true)
+  }
+
+  const exitVersionView = () => {
+    setDiffOpen(false)
+    setDiffTarget(null)
+    setViewing(null)
+  }
 
   const handleRevertFromBanner = async () => {
     if (!viewing) return
@@ -978,15 +1013,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   return (
     <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
 
-      {viewing && (
-        <ViewingVersionBanner
-          versionLabel={viewing.label}
-          isOwner={isOwner}
-          onRevert={() => setRevertConfirmOpen(true)}
-          onBackToLatest={exitVersionView}
-        />
-      )}
-
       {/* Combined toolbar: title | search | controls — banner with cover image background */}
       <header className="border-b border-border h-28 shrink-0 relative z-40">
         {/* Background: cover image with gradient overlay (clipped to banner), or fallback */}
@@ -1067,7 +1093,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           <div className="text-sm font-medium truncate">{card.name}</div>
                           <div className="text-xs text-muted-foreground truncate">{card.type_line}</div>
                         </div>
-                        <div className="text-xs text-muted-foreground shrink-0 ml-2">{card.mana_cost}</div>
+                        <ManaText text={card.mana_cost} className="text-xs text-muted-foreground shrink-0 ml-2" />
                       </div>
                     ))}
                   </div>
@@ -1106,7 +1132,19 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         </div>
       </header>
 
-      <DeckTabs tab={tab} onChange={setTab} />
+      <DeckTabs
+        tab={tab}
+        onChange={setTab}
+        afterTabs={viewing && (
+          <ViewingVersionBanner
+            versionLabel={viewing.label}
+            isOwner={isOwner}
+            onCompareLatest={openViewingDiffWithLatest}
+            onRevert={() => setRevertConfirmOpen(true)}
+            onBackToLatest={exitVersionView}
+          />
+        )}
+      />
 
       {/* Workspace */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
@@ -1134,7 +1172,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
                         <Crown className="h-3 w-3" /> Commander
                       </div>
-                      <div className="truncate text-sm font-semibold text-foreground">{c.name}</div>
+                      <ManaText text={c.name} className="truncate text-sm font-semibold text-foreground" />
                       <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{c.type_line}</div>
                     </div>
                   </button>
@@ -1472,8 +1510,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       <div className="flex min-w-0 items-center gap-3">
                         <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
                         {c.image_url && <img src={c.image_url} alt="" className="h-9 rounded border border-border/50" draggable={false} />}
-                        <span className="font-medium cursor-pointer hover:text-primary transition-colors truncate">{c.name}</span>
-                        <span className="text-xs text-muted-foreground">{c.mana_cost}</span>
+                        <ManaText text={c.name} className="font-medium cursor-pointer hover:text-primary transition-colors truncate" />
+                        <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
                       </div>
                       <div className="flex items-center gap-3 ml-auto">
                         <span className="text-xs font-mono text-muted-foreground tabular-nums w-16 text-right">
@@ -1524,6 +1562,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             deckId={deckId}
             isOwner={isOwner}
             onViewVersion={(id) => { setTab('decklist'); void enterVersionView(id) }}
+            onDiffWithVersion={(id, label) => { void openDiffWithVersion(id, label) }}
             onReverted={() => { setViewing(null); void fetchDeck() }}
           />
         )}
@@ -1554,6 +1593,25 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           onSaved={(next) => setDeck({ ...deck, ...next })}
         />
       )}
+
+
+      <Dialog open={diffOpen && !!diffTarget} onOpenChange={(open) => { setDiffOpen(open); if (!open) setDiffTarget(null) }}>
+        <DialogContent overlayClassName="bg-background/95 supports-backdrop-filter:backdrop-blur-none" className="max-h-[88vh] overflow-y-auto border border-border bg-background text-foreground shadow-2xl sm:max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>Diff with latest</DialogTitle>
+            <DialogDescription>
+              Compare a saved version against the current latest decklist.
+            </DialogDescription>
+          </DialogHeader>
+          {diffTarget && (
+            <DeckDiffView
+              before={{ label: diffTarget.label, cards: diffTarget.cards }}
+              after={{ label: "Latest", cards }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
 
       {clickedPreview && (
         <div

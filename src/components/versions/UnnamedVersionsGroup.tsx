@@ -8,12 +8,15 @@ import { VersionTimelineRow } from "./VersionTimelineRow"
 interface Props {
   rows: DeckVersionRow[]
   isOwner: boolean
+  knownTags: string[]
   onView: (id: string) => void
   onToggleBookmark: (row: DeckVersionRow) => void
+  onToggleTag: (row: DeckVersionRow, tag: string) => void
+  onAddTag: (row: DeckVersionRow) => void
   onRevert: (id: string) => void
 }
 
-export function UnnamedVersionsGroup({ rows, isOwner, onView, onToggleBookmark, onRevert }: Props) {
+export function UnnamedVersionsGroup({ rows, isOwner, knownTags, onView, onToggleBookmark, onToggleTag, onAddTag, onRevert }: Props) {
   const [open, setOpen] = useState(false)
   if (rows.length === 0) return null
 
@@ -40,8 +43,11 @@ export function UnnamedVersionsGroup({ rows, isOwner, onView, onToggleBookmark, 
               key={r.id}
               row={r}
               isOwner={isOwner}
+              knownTags={knownTags}
               onView={() => onView(r.id)}
               onToggleBookmark={() => onToggleBookmark(r)}
+              onToggleTag={(tag) => onToggleTag(r, tag)}
+              onAddTag={() => onAddTag(r)}
               onRevert={() => onRevert(r.id)}
             />
           ))}
