@@ -23,6 +23,7 @@ import { DeckAgentSidebar } from "@/components/agent/DeckAgentSidebar"
 import { DeckAnalytics } from "@/components/deck-analytics"
 import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
 import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
+import { DeckDiffView } from "@/components/deck/DeckDiffView"
 import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
 import { PrimerView } from "@/components/primer/PrimerView"
 import { PrimerEditor } from "@/components/primer/PrimerEditor"
@@ -241,6 +242,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [cardsLoading, setCardsLoading] = useState(true)
   const [printingsByCard, setPrintingsByCard] = useState<Record<string, ScryfallPrinting[]>>({})
   const [viewing, setViewing] = useState<ViewingSnapshotState | null>(null)
+  const [diffOpen, setDiffOpen] = useState(false)
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
   const [reverting, setReverting] = useState(false)
 
@@ -703,7 +705,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     })
   }
 
-  const exitVersionView = () => setViewing(null)
+  const exitVersionView = () => {
+    setDiffOpen(false)
+    setViewing(null)
+  }
 
   const handleRevertFromBanner = async () => {
     if (!viewing) return
@@ -1009,6 +1014,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         <ViewingVersionBanner
           versionLabel={viewing.label}
           isOwner={isOwner}
+          onCompareLatest={() => setDiffOpen(true)}
           onRevert={() => setRevertConfirmOpen(true)}
           onBackToLatest={exitVersionView}
         />
@@ -1595,6 +1601,23 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           onSaved={(next) => setDeck({ ...deck, ...next })}
         />
       )}
+
+      <Dialog open={diffOpen && !!viewing} onOpenChange={setDiffOpen}>
+        <DialogContent className="max-h-[88vh] overflow-y-auto bg-card border border-border text-foreground sm:max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>Diff with latest version</DialogTitle>
+            <DialogDescription>
+              Compare the viewed version against the current latest decklist.
+            </DialogDescription>
+          </DialogHeader>
+          {viewing && (
+            <DeckDiffView
+              before={{ label: viewing.label, cards: viewing.cards }}
+              after={{ label: "Latest", cards }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {hoverPreview && !clickedPreview && (
         <div

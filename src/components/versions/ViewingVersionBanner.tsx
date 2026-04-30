@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button"
 interface Props {
   versionLabel: string
   isOwner: boolean
+  onCompareLatest: () => void
   onRevert: () => void
   onBackToLatest: () => void
 }
 
-export function ViewingVersionBanner({ versionLabel, isOwner, onRevert, onBackToLatest }: Props) {
+export function ViewingVersionBanner({ versionLabel, isOwner, onCompareLatest, onRevert, onBackToLatest }: Props) {
   return (
     <div className="sticky top-0 z-50 bg-amber-500/95 text-amber-950 border-b border-amber-700 shadow">
       <div className="container mx-auto px-4 py-2 flex flex-wrap items-center gap-3 text-sm">
@@ -18,6 +19,9 @@ export function ViewingVersionBanner({ versionLabel, isOwner, onRevert, onBackTo
         </span>
         <span className="opacity-80 hidden sm:inline">— this is read-only.</span>
         <div className="ml-auto flex gap-2">
+          <Button size="sm" variant="ghost" onClick={onCompareLatest} className="text-amber-950 hover:bg-amber-400">
+            Diff with latest
+          </Button>
           {isOwner && (
             <Button size="sm" variant="default" onClick={onRevert} className="bg-amber-900 text-amber-50 hover:bg-amber-800">
               Revert to this version
