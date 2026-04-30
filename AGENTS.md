@@ -20,7 +20,32 @@ behavior.
 4. If older Docker runs left root-owned artifacts, fix ownership before host
    commands: `sudo chown -R ubuntu:ubuntu node_modules .next`.
 
-## Hosted Supabase testing
+## Supabase branch-aware testing
+
+When a PR touches files under `supabase/`, the GitHub integration automatically
+creates an isolated preview database branch. Agents **must** test against that
+branch rather than the shared production database.
+
+Full workflow: `docs/supabase-branch-testing.md`
+
+Short version:
+1. Call the Supabase MCP `list_branches` with project_id `ejnnjdvgrwsjfgafxtvk`
+   and find the entry whose `git_branch` matches your branch name.
+2. Wait for `status == ACTIVE_HEALTHY` (poll every ~15 s, give up after ~5 min).
+3. Use `get_project_url` and `get_publishable_keys` with the branch's
+   `project_ref` to get its URL and anon key.
+4. Retrieve the branch service_role key via the Management API using
+   `SUPABASE_ACCESS_TOKEN` (see `docs/supabase-branch-testing.md` for the curl
+   command). If `SUPABASE_ACCESS_TOKEN` is not set, note this in your response
+   and fall back to the production service_role key for non-schema tasks only.
+5. Start the dev server and run all tests using the branch credentials.
+6. Pass `--create` to `provision-agent-pro-account.mjs` — preview branches
+   start empty, no production accounts carry over.
+
+If the PR has no `supabase/` changes, skip to the standard hosted testing
+instructions below.
+
+## Hosted Supabase testing (no supabase/ changes)
 
 Use the Supabase MCP tools to discover the active project, URL, and publishable
 key when `.env` only points at local Supabase. For deck editor testing:
