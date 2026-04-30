@@ -37,6 +37,6 @@ RLS lets users read their own flags and set notification interest, but prevents 
 
 ## Agent test accounts
 
-Agents that need to test subscribed mode should use the secure provisioning flow in
-[agent-pro-test-accounts.md](agent-pro-test-accounts.md). Do not set
-`idlebrew_pro_subscribed` on real user accounts for testing.
+Agents that need to test free and subscribed modes should use the secure
+provisioning flow in [agent-pro-test-accounts.md](agent-pro-test-accounts.md).
+Do not set `idlebrew_pro_subscribed` on real user accounts for testing.

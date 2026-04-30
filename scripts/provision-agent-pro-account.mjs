@@ -8,9 +8,15 @@ const TEST_EMAIL_PATTERN =
 function usage() {
   console.log(`
 Usage:
-  node scripts/provision-agent-pro-account.mjs --email cursor-agent@example.com --yes
-  node scripts/provision-agent-pro-account.mjs --user-id <uuid> --email cursor-agent@example.com --yes
-  node scripts/provision-agent-pro-account.mjs --email cursor-agent@example.com --disable --yes
+  npm run agent:pro-account -- --email cursor-agent@example.com --create --tier pro --password <password> --yes
+  npm run agent:pro-account -- --email cursor-agent@example.com --create --tier free --password <password> --yes
+  npm run agent:pro-account -- --email cursor-agent@example.com --tier pro --yes
+  npm run agent:pro-account -- --email cursor-agent@example.com --tier free --yes
+  npm run agent:pro-account -- --user-id <uuid> --email cursor-agent@example.com --tier pro --yes
+
+Aliases:
+  --enable   same as --tier pro
+  --disable  same as --tier free
 
 Requires:
   NEXT_PUBLIC_SUPABASE_URL
@@ -19,6 +25,7 @@ Requires:
 Safety:
   - Mutations require --yes.
   - Email must look disposable/test-only by default.
+  - Account creation requires --create and --password.
   - Set ALLOW_NON_TEST_PRO_ACCOUNT=1 only for an intentional break-glass run.
 `.trim())
 }
@@ -27,7 +34,9 @@ function parseArgs(argv) {
   const args = {
     email: null,
     userId: null,
-    enable: true,
+    password: null,
+    tier: 'pro',
+    create: false,
     yes: false,
     help: false,
   }
@@ -41,11 +50,25 @@ function parseArgs(argv) {
       case '--user-id':
         args.userId = argv[++i] ?? null
         break
+      case '--password':
+        args.password = argv[++i] ?? null
+        break
+      case '--tier': {
+        const tier = argv[++i]
+        if (tier !== 'pro' && tier !== 'free') {
+          throw new Error('--tier must be "pro" or "free".')
+        }
+        args.tier = tier
+        break
+      }
+      case '--create':
+        args.create = true
+        break
       case '--enable':
-        args.enable = true
+        args.tier = 'pro'
         break
       case '--disable':
-        args.enable = false
+        args.tier = 'free'
         break
       case '--yes':
         args.yes = true
@@ -79,7 +102,16 @@ function assertTestEmail(email) {
   )
 }
 
-async function findUserIdByEmail(supabase, email) {
+function assertPassword(password) {
+  if (!password) {
+    throw new Error('--password is required when --create is used.')
+  }
+  if (password.length < 12) {
+    throw new Error('--password must be at least 12 characters.')
+  }
+}
+
+async function findUserByEmail(supabase, email) {
   let page = 1
   const perPage = 1000
 
@@ -88,11 +120,23 @@ async function findUserIdByEmail(supabase, email) {
     if (error) throw new Error(error.message)
 
     const user = data.users.find((candidate) => candidate.email?.toLowerCase() === email.toLowerCase())
-    if (user) return user.id
+    if (user) return user
 
     if (data.users.length < perPage) return null
     page += 1
   }
+}
+
+async function createUser(supabase, email, password) {
+  const { data, error } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { created_by: 'agent-pro-account-helper' },
+  })
+  if (error) throw new Error(error.message)
+  if (!data.user) throw new Error(`Supabase did not return a user for ${email}.`)
+  return data.user
 }
 
 async function main() {
@@ -108,6 +152,10 @@ async function main() {
     throw new Error('Refusing to mutate account flags without --yes.')
   }
 
+  if (args.create) {
+    assertPassword(args.password)
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl) throw new Error('NEXT_PUBLIC_SUPABASE_URL is not set.')
@@ -117,9 +165,23 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const userId = args.userId ?? (await findUserIdByEmail(supabase, args.email))
+  let created = false
+  let userId = args.userId
   if (!userId) {
-    throw new Error(`No Supabase auth user found for ${args.email}. Create and confirm the test user first.`)
+    const existingUser = await findUserByEmail(supabase, args.email)
+    if (existingUser) {
+      userId = existingUser.id
+    } else if (args.create) {
+      const createdUser = await createUser(supabase, args.email, args.password)
+      userId = createdUser.id
+      created = true
+    }
+  }
+
+  if (!userId) {
+    throw new Error(
+      `No Supabase auth user found for ${args.email}. Add --create --password <password> to create one.`
+    )
   }
 
   const { data, error } = await supabase
@@ -127,7 +189,7 @@ async function main() {
     .upsert(
       {
         user_id: userId,
-        idlebrew_pro_subscribed: args.enable,
+        idlebrew_pro_subscribed: args.tier === 'pro',
       },
       { onConflict: 'user_id' }
     )
@@ -141,6 +203,8 @@ async function main() {
       {
         email: args.email,
         userId: data.user_id,
+        created,
+        tier: data.idlebrew_pro_subscribed ? 'pro' : 'free',
         idlebrewProSubscribed: data.idlebrew_pro_subscribed,
         idlebrewProNotifyMe: data.idlebrew_pro_notify_me,
         updatedAt: data.updated_at,

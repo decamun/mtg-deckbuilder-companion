@@ -1,24 +1,43 @@
-# Agent pro test accounts
+# Agent subscription test accounts
 
-Agents can provision disposable Supabase test accounts with idlebrew pro for
-manual verification of subscription-gated UI.
+Agents can provision disposable Supabase test accounts as either `pro` or `free`
+for manual verification of subscription-gated UI.
 
 ## Use the helper script
 
-Create and confirm a disposable Supabase Auth user first. Then run:
+Create a confirmed pro test account:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
-npm run agent:pro-account -- --email cursor-<task>@example.com --yes
+npm run agent:pro-account -- \
+  --email cursor-<task>-pro@example.com \
+  --create \
+  --tier pro \
+  --password '<strong-test-password>' \
+  --yes
 ```
 
-To remove the pro flag after testing:
+Create a confirmed non-pro test account:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
-npm run agent:pro-account -- --email cursor-<task>@example.com --disable --yes
+npm run agent:pro-account -- \
+  --email cursor-<task>-free@example.com \
+  --create \
+  --tier free \
+  --password '<strong-test-password>' \
+  --yes
+```
+
+To change an existing disposable account's tier:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
+npm run agent:pro-account -- --email cursor-<task>@example.com --tier pro --yes
+npm run agent:pro-account -- --email cursor-<task>@example.com --tier free --yes
 ```
 
 ## Safety rules
@@ -28,6 +47,7 @@ npm run agent:pro-account -- --email cursor-<task>@example.com --disable --yes
 - Mutations require `--yes`.
 - `--email` is required even when `--user-id` is supplied, so the target remains
   auditable in logs.
+- Account creation requires `--create` and a password of at least 12 characters.
 - By default, emails must start with `cursor`, `agent`, `test`, `e2e`, `qa`, or
   `ci`, and must use `example.com`, `test.com`, or `idlebrew.test`.
 - For intentional one-off admin use only, set `ALLOW_NON_TEST_PRO_ACCOUNT=1` to
@@ -35,6 +55,10 @@ npm run agent:pro-account -- --email cursor-<task>@example.com --disable --yes
 
 ## What it changes
 
-The helper upserts `public.user_account_flags` for the target auth user and sets
-`idlebrew_pro_subscribed` to `true` or `false`. It does not create auth users,
-confirm emails, or alter billing state.
+With `--create`, the helper creates a confirmed Supabase Auth user with
+`user_metadata.created_by = "agent-pro-account-helper"`. It then upserts
+`public.user_account_flags` for the target user and sets
+`idlebrew_pro_subscribed` from `--tier`.
+
+The helper does not alter billing state. It only prepares test accounts for
+manual agent verification.
