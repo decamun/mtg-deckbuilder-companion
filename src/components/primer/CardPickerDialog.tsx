@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { ManaText } from "@/components/mana/ManaText"
 import { useDebounce } from "@/hooks/use-debounce"
 import { searchCards, getPrintingsByOracleId, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 
@@ -76,7 +77,7 @@ function CardPickerDialogContent({ onOpenChange, onPicked }: Omit<Props, "open">
                     <img src={c.image_uris.small} alt="" className="w-7 rounded" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{c.name}</div>
+                    <ManaText text={c.name} className="text-sm font-medium truncate" />
                     <div className="text-xs text-muted-foreground truncate">{c.type_line}</div>
                   </div>
                 </button>
