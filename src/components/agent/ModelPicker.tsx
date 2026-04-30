@@ -8,11 +8,22 @@ interface Props {
   value: ModelId
   onChange: (m: ModelId) => void
   allowedModels: ReadonlyArray<ModelId>
+  onLockedModelClick: () => void
 }
 
-export function ModelPicker({ value, onChange, allowedModels }: Props) {
+export function ModelPicker({ value, onChange, allowedModels, onLockedModelClick }: Props) {
   return (
-    <Select value={value} onValueChange={(v) => onChange(v as ModelId)}>
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        const next = v as ModelId
+        if (!allowedModels.includes(next)) {
+          onLockedModelClick()
+          return
+        }
+        onChange(next)
+      }}
+    >
       <SelectTrigger className="h-8 text-xs">
         <SelectValue />
       </SelectTrigger>
@@ -21,7 +32,11 @@ export function ModelPicker({ value, onChange, allowedModels }: Props) {
           const desc = MODEL_DESCRIPTORS[id]
           const allowed = allowedModels.includes(id)
           return (
-            <SelectItem key={id} value={id} disabled={!allowed} className="text-xs">
+            <SelectItem
+              key={id}
+              value={id}
+              className={`text-xs ${allowed ? "" : "opacity-50"}`}
+            >
               <span className="flex items-center gap-2">
                 {desc.label}
                 {!allowed && (
