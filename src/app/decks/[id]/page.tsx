@@ -42,13 +42,6 @@ type ViewingSnapshotState = {
   coverImageUrl: string | null
 }
 
-type FloatingCardPreview = {
-  card: DeckCard
-  groupName: string
-  x: number
-  y: number
-}
-
 // Stack card width is w-44 (176px); height ≈ 176 * 1.4 = 246px
 const DEFAULT_CARD_SIZE = 176
 const MIN_CARD_SIZE = 132
@@ -57,8 +50,6 @@ const STACK_PEEK_RATIO = 32 / DEFAULT_CARD_SIZE
 const STACK_EXTRA_PEEK_RATIO = 14 / DEFAULT_CARD_SIZE
 const STACK_CARD_HEIGHT_RATIO = 246 / DEFAULT_CARD_SIZE
 const STACK_HOVER_SHIFT_RATIO = 44 / DEFAULT_CARD_SIZE
-const HOVER_PREVIEW_DELAY_MS = 750
-const HOVER_PREVIEW_MAX_VISIBLE_MS = 30_000
 
 const DEFAULT_TAGS = ['card advantage', 'interaction', 'wincon', 'combo piece']
 
@@ -84,9 +75,6 @@ function DraggableDeckCard({
   style,
   animate,
   transition,
-  onMouseEnter,
-  onMouseMove,
-  onMouseLeave,
   onClick,
   children,
 }: {
@@ -96,9 +84,6 @@ function DraggableDeckCard({
   style?: CSSProperties
   animate?: MotionProps["animate"]
   transition?: MotionProps["transition"]
-  onMouseEnter?: (event: React.MouseEvent<HTMLDivElement>) => void
-  onMouseMove?: (event: React.MouseEvent<HTMLDivElement>) => void
-  onMouseLeave?: (event: React.MouseEvent<HTMLDivElement>) => void
   onClick?: (event: React.MouseEvent<HTMLDivElement>) => void
   children: ReactNode
 }) {
@@ -117,9 +102,6 @@ function DraggableDeckCard({
       style={dragStyle}
       animate={animate}
       transition={transition}
-      onMouseEnter={onMouseEnter}
-      onMouseMove={onMouseMove}
-      onMouseLeave={onMouseLeave}
       onClick={onClick}
       {...(!disabled ? attributes : {})}
       {...(!disabled ? listeners : {})}
@@ -218,8 +200,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
   const [cardSize, setCardSize] = useState(DEFAULT_CARD_SIZE)
-  const [hoverPreview, setHoverPreview] = useState<FloatingCardPreview | null>(null)
-  const [hoverPreviewTimer, setHoverPreviewTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
 
   // New: ownership, tabs, settings, primer, version-viewing
@@ -282,18 +262,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
-
-  useEffect(() => {
-    return () => {
-      if (hoverPreviewTimer) clearTimeout(hoverPreviewTimer)
-    }
-  }, [hoverPreviewTimer])
-
-  useEffect(() => {
-    if (!hoverPreview) return
-    const timer = setTimeout(() => setHoverPreview(null), HOVER_PREVIEW_MAX_VISIBLE_MS)
-    return () => clearTimeout(timer)
-  }, [hoverPreview])
 
   useEffect(() => {
     if (!clickedPreview) return
@@ -803,35 +771,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const stackExtraPeek = Math.round(cardSize * STACK_EXTRA_PEEK_RATIO)
   const stackCardHeight = Math.round(cardSize * STACK_CARD_HEIGHT_RATIO)
   const stackHoverShift = Math.round(cardSize * STACK_HOVER_SHIFT_RATIO)
-  const clearHoverPreview = () => {
-    if (hoverPreviewTimer) {
-      clearTimeout(hoverPreviewTimer)
-      setHoverPreviewTimer(null)
-    }
-    setHoverPreview(null)
-  }
 
   const showClickedPreview = (card: DeckCard, groupName: string) => {
-    clearHoverPreview()
     setClickedPreview({ card, groupName })
     void ensurePrintingsLoaded(card)
-  }
-
-  const scheduleHoverPreview = (card: DeckCard, groupName: string, e: React.MouseEvent) => {
-    if (clickedPreview || !card.image_url) return
-    if (hoverPreviewTimer) clearTimeout(hoverPreviewTimer)
-    const x = e.clientX
-    const y = e.clientY
-    const timer = setTimeout(() => {
-      setHoverPreview({ card, groupName, x, y })
-      setHoverPreviewTimer(null)
-    }, HOVER_PREVIEW_DELAY_MS)
-    setHoverPreviewTimer(timer)
-  }
-
-  const moveHoverPreview = (card: DeckCard, groupName: string, e: React.MouseEvent) => {
-    clearHoverPreview()
-    scheduleHoverPreview(card, groupName, e)
   }
 
   // Shared dropdown menu items rendered inside both ContextMenu and DropdownMenu
@@ -932,7 +875,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     return (
       <DropdownMenu onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(c) }}>
         <DropdownMenuTrigger
-          className="h-7 w-7 flex items-center justify-center bg-background/75 hover:bg-background/95 rounded-full border border-border/50 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+          aria-label={`Open options for ${c.name}`}
+          className="h-7 w-7 flex items-center justify-center bg-background/75 hover:bg-background/95 rounded-full border border-border/50 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 data-[popup-open]:opacity-100 transition-opacity"
+          onPointerDown={(e: React.PointerEvent) => e.stopPropagation()}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           onContextMenu={(e: React.MouseEvent) => e.stopPropagation()}
         >
@@ -1255,9 +1200,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                             role="button"
                             tabIndex={0}
                             aria-label={`Preview ${c.name}`}
-                            onMouseEnter={(e) => scheduleHoverPreview(c, groupName, e)}
-                            onMouseMove={(e) => moveHoverPreview(c, groupName, e)}
-                            onMouseLeave={clearHoverPreview}
                             onClick={(e) => {
                               e.stopPropagation()
                               showClickedPreview(c, groupName)
@@ -1268,7 +1210,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 showClickedPreview(c, groupName)
                               }
                             }}
-                            onContextMenu={clearHoverPreview}
                           />
                           {c.image_url
                             ? <>
@@ -1400,13 +1341,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                               if (mouseY >= basePositions[i]) activeIdx = i
                               else break
                             }
-                            const activeCard = colCards[activeIdx]
                             setHoveredStack({ groupName, colIdx, itemIdx: activeIdx })
-                            if (activeCard) moveHoverPreview(activeCard, groupName, e)
                           }}
                           onMouseLeave={() => {
                             setHoveredStack(null)
-                            clearHoverPreview()
                           }}
                         >
                           {colCards.map((card, itemIdx) => {
@@ -1444,14 +1382,10 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                   type="button"
                                   className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
                                   aria-label={`Preview ${card.name}`}
-                                  onMouseEnter={(e) => scheduleHoverPreview(card, groupName, e)}
-                                  onMouseMove={(e) => moveHoverPreview(card, groupName, e)}
-                                  onMouseLeave={clearHoverPreview}
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     showClickedPreview(card, groupName)
                                   }}
-                                  onContextMenu={clearHoverPreview}
                                 />
                                 {card.image_url
                                   ? <div className="relative w-full">
@@ -1502,9 +1436,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       id={c.id}
                       disabled={interactionsLocked || grouping !== 'tag'}
                       className="flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing"
-                      onMouseEnter={(e) => scheduleHoverPreview(c, groupName, e)}
-                      onMouseMove={(e) => moveHoverPreview(c, groupName, e)}
-                      onMouseLeave={clearHoverPreview}
                       onClick={(e) => {
                         e.stopPropagation()
                         showClickedPreview(c, groupName)
@@ -1594,15 +1525,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           }}
           onSaved={(next) => setDeck({ ...deck, ...next })}
         />
-      )}
-
-      {hoverPreview && !clickedPreview && (
-        <div
-          className="pointer-events-none fixed z-[70] drop-shadow-2xl"
-          style={{ left: hoverPreview.x, top: hoverPreview.y, transform: 'translate(-50%, -50%)' }}
-        >
-          <CardArt card={hoverPreview.card} imageClassName="w-64 rounded-xl border border-border/50 shadow-2xl" />
-        </div>
       )}
 
       {clickedPreview && (
