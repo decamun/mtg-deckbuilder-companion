@@ -131,4 +131,31 @@
     );
     mix-blend-mode: screen;
   }
+
+  .mana-symbol {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.2em;
+    height: 1.2em;
+    margin-inline: 0.08em;
+    border-radius: 9999px;
+    border: 1px solid hsl(0deg 0% 0% / 18%);
+    box-shadow: inset 0 1px 0 hsl(0deg 0% 100% / 45%);
+    color: hsl(0deg 0% 10%);
+    font-family: var(--font-sans);
+    font-size: 0.85em;
+    font-weight: 700;
+    line-height: 1;
+    vertical-align: -0.12em;
+  }
+
+  .mana-symbol-w { background: #f4ead0; }
+  .mana-symbol-u { background: #9ac9e8; }
+  .mana-symbol-b { background: #c9c0bb; color: #171312; }
+  .mana-symbol-r { background: #e89a76; }
+  .mana-symbol-g { background: #8fca9a; }
+  .mana-symbol-c,
+  .mana-symbol-s,
+  .mana-symbol-generic { background: #d7d7d7; }
 }

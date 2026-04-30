@@ -31,6 +31,7 @@ import { VersionsTab } from "@/components/versions/VersionsTab"
 import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner"
 import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { formatPrice, pickPrice } from "@/lib/format"
+import { ManaText } from "@/components/mana/ManaText"
 
 type DeckCardRow = Omit<DeckCard, "image_url" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
 
@@ -1119,7 +1120,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           <div className="text-sm font-medium truncate">{card.name}</div>
                           <div className="text-xs text-muted-foreground truncate">{card.type_line}</div>
                         </div>
-                        <div className="text-xs text-muted-foreground shrink-0 ml-2">{card.mana_cost}</div>
+                        <ManaText text={card.mana_cost} className="text-xs text-muted-foreground shrink-0 ml-2" />
                       </div>
                     ))}
                   </div>
@@ -1198,7 +1199,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
                         <Crown className="h-3 w-3" /> Commander
                       </div>
-                      <div className="truncate text-sm font-semibold text-foreground">{c.name}</div>
+                      <ManaText text={c.name} className="truncate text-sm font-semibold text-foreground" />
                       <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{c.type_line}</div>
                     </div>
                   </button>
@@ -1550,8 +1551,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       <div className="flex min-w-0 items-center gap-3">
                         <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
                         {c.image_url && <img src={c.image_url} alt="" className="h-9 rounded border border-border/50" draggable={false} />}
-                        <span className="font-medium cursor-pointer hover:text-primary transition-colors truncate">{c.name}</span>
-                        <span className="text-xs text-muted-foreground">{c.mana_cost}</span>
+                        <ManaText text={c.name} className="font-medium cursor-pointer hover:text-primary transition-colors truncate" />
+                        <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
                       </div>
                       <div className="flex items-center gap-3 ml-auto">
                         <span className="text-xs font-mono text-muted-foreground tabular-nums w-16 text-right">

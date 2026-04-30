@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { Shuffle, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ManaText } from "@/components/mana/ManaText"
 
 export interface AnalyticsCard {
   id: string
@@ -324,9 +325,7 @@ function StatsLine({
               <span className="tabular-nums font-semibold">
                 {(c.probability * 100).toFixed(1)}%
               </span>
-              <span className="text-xs text-muted-foreground truncate" title={c.name}>
-                T{c.cmc} · {c.name}
-              </span>
+              <ManaText text={`T${c.cmc} · ${c.name}`} className="text-xs text-muted-foreground truncate" />
             </div>
           ))}
         </div>

@@ -33,6 +33,7 @@ import {
   takeRowsForSlots,
   totalQuantity,
 } from "@/lib/brew-planner"
+import { ManaText } from "@/components/mana/ManaText"
 import { toast } from "sonner"
 
 const PENDING_COMMANDER_KEY = "idlebrew:pendingCommander"
@@ -760,9 +761,7 @@ export function BrewSection() {
                       />
                     )}
                     <div className="min-w-0 text-left">
-                      <p className="truncate font-semibold text-foreground">
-                        {card.name}
-                      </p>
+                      <ManaText text={card.name} className="truncate font-semibold text-foreground" />
                       <p className="truncate text-xs text-muted-foreground">
                         {card.type_line}
                       </p>
@@ -869,9 +868,7 @@ export function BrewSection() {
                                 />
                               )}
                               <div className="min-w-0 text-left">
-                                <p className="truncate text-sm font-semibold text-foreground">
-                                  {card.name}
-                                </p>
+                                <ManaText text={card.name} className="truncate text-sm font-semibold text-foreground" />
                                 <p className="truncate text-xs text-muted-foreground">
                                   {card.type_line}
                                 </p>

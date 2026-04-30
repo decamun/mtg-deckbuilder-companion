@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { Badge } from "@/components/ui/badge"
+import { ManaText } from "@/components/mana/ManaText"
 import type { DeckCard } from "@/lib/types"
 
 type DiffSide = {
@@ -222,8 +223,8 @@ function CardCell({
       )}
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-medium">{card.name}</span>
-          {card.mana_cost && <span className="shrink-0 text-xs text-muted-foreground">{card.mana_cost}</span>}
+          <ManaText text={card.name} className="truncate text-sm font-medium" />
+          <ManaText text={card.mana_cost} className="shrink-0 text-xs text-muted-foreground" />
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-1">
           <Badge variant="outline" className="px-1.5 py-0 text-[10px] uppercase">
