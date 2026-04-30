@@ -4,6 +4,8 @@ export interface Deck {
   id: string
   name: string
   format: string | null
+  budget_usd: number | string | null
+  bracket: number | null
   cover_image_scryfall_id: string | null
   commander_scryfall_ids: string[]
   user_id: string
