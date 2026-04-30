@@ -64,6 +64,7 @@ In constrained cloud VMs, the frontend can still run without Supabase; database-
 ## Product notes
 
 - [idlebrew pro](docs/idlebrew-pro.md) tracks the staged subscription flags and current deck-assistant gating behavior.
+- [Social launch security plan](docs/social-launch-security-plan.md) tracks the P0/P1 remediation work before advertising to a wider audience.
 
 ## Common commands
 
