@@ -44,6 +44,17 @@ type BrewOpts = {
   slots: { lands: number; creatures: number; spells: number }
 }
 
+function normalizeSlots(
+  prev: { lands: number; creatures: number; spells: number },
+  nextSecondCommander: ScryfallCard | null
+) {
+  const target = 99 - (nextSecondCommander ? 1 : 0)
+  const sum = prev.lands + prev.creatures + prev.spells
+  if (sum === target) return prev
+  const diff = target - sum
+  return { ...prev, spells: Math.max(0, prev.spells + diff) }
+}
+
 const FALLBACK_MAX_PRICE_USD = 2
 
 function toEDHRECSlug(name: string): string {
@@ -158,14 +169,11 @@ export function BrewSection() {
   const slotTotal = 99 - (secondCommander ? 1 : 0)
   const partnerKind = primaryCommander ? getPartnerKind(primaryCommander) : null
   const secondCommanderEnabled = !!partnerKind
-
   useEffect(() => {
     if (!debouncedQuery.trim()) {
-      setResults([])
-      setShowResults(false)
       return
     }
-    setSearching(true)
+    queueMicrotask(() => setSearching(true))
     searchCards(`is:commander ${debouncedQuery}`)
       .then((cards) => {
         setResults(cards.slice(0, 8))
@@ -195,18 +203,14 @@ export function BrewSection() {
 
   useEffect(() => {
     if (!primaryCommander || !secondCommanderEnabled) {
-      setSecondResults([])
-      setSecondShowResults(false)
       return
     }
     if (!debouncedSecondQuery.trim()) {
-      setSecondResults([])
-      setSecondShowResults(false)
       return
     }
     const partnerQuery = buildPartnerScryfallQuery(primaryCommander)
     if (!partnerQuery) return
-    setSecondSearching(true)
+    queueMicrotask(() => setSecondSearching(true))
     searchCards(`${partnerQuery} ${debouncedSecondQuery}`)
       .then((cards) => {
         const filtered = cards.filter((c) => c.id !== primaryCommander.id).slice(0, 8)
@@ -215,13 +219,6 @@ export function BrewSection() {
       })
       .finally(() => setSecondSearching(false))
   }, [debouncedSecondQuery, primaryCommander, secondCommanderEnabled])
-
-  useEffect(() => {
-    if (secondCommander && !secondCommanderEnabled) {
-      setSecondCommander(null)
-      setSecondQuery("")
-    }
-  }, [secondCommanderEnabled, secondCommander])
 
   const adjustSlots = useCallback(
     (key: "lands" | "creatures" | "spells", rawVal: number) => {
@@ -248,16 +245,6 @@ export function BrewSection() {
     },
     [secondCommander]
   )
-
-  useEffect(() => {
-    setSlots((prev) => {
-      const target = 99 - (secondCommander ? 1 : 0)
-      const sum = prev.lands + prev.creatures + prev.spells
-      if (sum === target) return prev
-      const diff = target - sum
-      return { ...prev, spells: Math.max(0, prev.spells + diff) }
-    })
-  }, [secondCommander])
 
   // Drain status queue — display each message for at least 300ms before
   // advancing, so fast back-to-back updates don't flash by unread.
@@ -616,7 +603,7 @@ export function BrewSection() {
         setCreating(false)
       }
     },
-    [router]
+    [pushStatus, router]
   )
 
   // After sign-in, auto-resume a pending commander selection
@@ -679,6 +666,11 @@ export function BrewSection() {
       setQuery(card.name)
       setPrimaryCommander(card)
       setShowResults(false)
+      if (!getPartnerKind(card)) {
+        setSecondCommander(null)
+        setSecondQuery("")
+        setSlots((prev) => normalizeSlots(prev, null))
+      }
       if (advancedOpen) return
       await createDeck(card, buildOpts())
     },
@@ -689,6 +681,7 @@ export function BrewSection() {
     setSecondCommander(card)
     setSecondQuery(card.name)
     setSecondShowResults(false)
+    setSlots((prev) => normalizeSlots(prev, card))
   }, [])
 
   const handleBuild = useCallback(async () => {

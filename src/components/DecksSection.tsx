@@ -38,6 +38,10 @@ import type { Deck } from "@/lib/types"
 import Link from "next/link"
 
 export function DecksSection() {
+  return <DecksSectionContent />
+}
+
+function DecksSectionContent() {
   const [decks, setDecks] = useState<Deck[]>([])
   const [loading, setLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
@@ -49,10 +53,6 @@ export function DecksSection() {
   const [renameDeckId, setRenameDeckId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
   const router = useRouter()
-
-  useEffect(() => {
-    void fetchDecks()
-  }, [])
 
   async function fetchDecks() {
     const {
@@ -90,6 +90,12 @@ export function DecksSection() {
     setDecks(populatedDecks)
     setLoading(false)
   }
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchDecks()
+    })
+  }, [])
 
   const handleCreateDeck = async () => {
     if (!newDeckName) return

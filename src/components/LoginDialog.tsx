@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { Mail, Lock, ArrowLeft } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -25,15 +25,17 @@ interface LoginDialogProps {
 }
 
 export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
+  return open ? (
+    <LoginDialogContent open={open} onOpenChange={onOpenChange} />
+  ) : null
+}
+
+function LoginDialogContent({ open, onOpenChange }: LoginDialogProps) {
   const [mode, setMode] = useState<Mode>("auth")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-
-  useEffect(() => {
-    if (!open) setMode("auth")
-  }, [open])
 
   const handleAuth = async (action: "login" | "signup") => {
     setLoading(true)

@@ -18,7 +18,7 @@ export default function TermsOfService() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Acceptance of Terms</h2>
         <p className="text-muted-foreground leading-relaxed">
-          By accessing or using idlebrew ("the Service"), you agree to be bound by these Terms of
+          By accessing or using idlebrew (&quot;the Service&quot;), you agree to be bound by these Terms of
           Service. If you do not agree to these terms, please do not use the Service.
         </p>
       </section>
@@ -50,7 +50,7 @@ export default function TermsOfService() {
         <h2 className="text-lg font-semibold">User Content</h2>
         <p className="text-muted-foreground leading-relaxed">
           You retain ownership of any deck lists, card selections, and other content you create
-          within the Service ("User Content"). By using the Service, you grant idlebrew a
+          within the Service (&quot;User Content&quot;). By using the Service, you grant idlebrew a
           non-exclusive, worldwide, royalty-free license to store and display your User Content
           solely as necessary to provide the Service to you.
         </p>
@@ -90,7 +90,7 @@ export default function TermsOfService() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Disclaimer of Warranties</h2>
         <p className="text-muted-foreground leading-relaxed">
-          The Service is provided "as is" and "as available" without warranty of any kind, express
+          The Service is provided &quot;as is&quot; and &quot;as available&quot; without warranty of any kind, express
           or implied, including but not limited to warranties of merchantability, fitness for a
           particular purpose, or non-infringement. We do not warrant that the Service will be
           uninterrupted, error-free, or free of viruses or other harmful components.
