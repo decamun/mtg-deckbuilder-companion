@@ -33,7 +33,8 @@ export function TopNav() {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const currentPath = pathname ?? ""
   const [visiblePath, setVisiblePath] = useState<string | null>(null)
-  const activePath = visiblePath ?? currentPath
+  const isScrollShellPage = SHELL_PATHS.has(currentPath)
+  const activePath = isScrollShellPage ? visiblePath ?? currentPath : currentPath
   const [loginOpen, setLoginOpen] = useState(false)
 
   useEffect(() => {
@@ -86,14 +87,14 @@ export function TopNav() {
   // When already inside the scroll shell, intercept nav clicks and scroll
   // in-page instead of navigating (which would cause a full re-render).
   const handleNavClick = (e: React.MouseEvent, href: string) => {
-    if (SHELL_PATHS.has(activePath) && SHELL_PATHS.has(href)) {
+    if (isScrollShellPage && SHELL_PATHS.has(href)) {
       e.preventDefault()
       scrollToSection(href.slice(1))
     }
   }
 
   const handleLogoClick = (e: React.MouseEvent) => {
-    if (SHELL_PATHS.has(activePath)) {
+    if (isScrollShellPage) {
       e.preventDefault()
       scrollToSection("brew")
     }
