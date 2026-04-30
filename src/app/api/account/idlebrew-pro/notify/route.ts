@@ -25,7 +25,8 @@ export async function POST() {
     .single()
 
   if (error) {
-    return NextResponse.json({ message: error.message }, { status: 500 })
+    console.error('[idlebrew-pro/notify] upsert failed:', error.message)
+    return NextResponse.json({ message: 'Failed to save notification preference' }, { status: 500 })
   }
 
   return NextResponse.json({
