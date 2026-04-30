@@ -3,6 +3,12 @@
 The old local-worktree Docker workflow is no longer required for Cursor Cloud
 agents. Prefer the host Node process plus hosted Supabase for browser testing.
 
+> **If your PR modifies any file under `supabase/`**, a Supabase preview branch
+> is created automatically. You should target that branch instead of the
+> production project. See `docs/supabase-branch-testing.md` for the full
+> workflow. The instructions below apply when there are no `supabase/` changes
+> or as a fallback when the preview branch is not yet available.
+
 ## Start the frontend
 
 ```bash
@@ -24,18 +30,25 @@ npm ci
 
 ## Login and deck editor smoke test
 
-1. Create a disposable auth user with the hosted Supabase anon key:
+When testing against the **production project**, use the credentials below.
+When testing against a **preview branch**, substitute the branch URL and anon
+key discovered via the Supabase MCP (see `docs/supabase-branch-testing.md`).
+
+1. Create a disposable auth user:
 
 ```bash
+SUPABASE_URL="https://ejnnjdvgrwsjfgafxtvk.supabase.co"   # or branch URL
+ANON_KEY="sb_publishable_1WW8BDIyp7s1yDUKTKH95A_RFq_DqWf"  # or branch anon key
 EMAIL="cursor-agent-$(date +%Y%m%d%H%M%S)@example.com"
 PASSWORD="CursorDeckTest123!"
-curl -sS -X POST "https://ejnnjdvgrwsjfgafxtvk.supabase.co/auth/v1/signup" \
-  -H "apikey: sb_publishable_1WW8BDIyp7s1yDUKTKH95A_RFq_DqWf" \
+curl -sS -X POST "$SUPABASE_URL/auth/v1/signup" \
+  -H "apikey: $ANON_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}"
 ```
 
-2. Confirm the disposable user through the Supabase MCP SQL tool:
+2. Confirm the disposable user through the Supabase MCP SQL tool (use the
+   branch `project_id` when on a preview branch):
 
 ```sql
 update auth.users
