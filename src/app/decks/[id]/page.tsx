@@ -1599,7 +1599,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       {hoverPreview && !clickedPreview && (
         <div
           className="pointer-events-none fixed z-[70] drop-shadow-2xl"
-          style={{ left: hoverPreview.x, top: hoverPreview.y }}
+          style={{ left: hoverPreview.x, top: hoverPreview.y, transform: 'translate(-50%, -50%)' }}
         >
           <CardArt card={hoverPreview.card} imageClassName="w-64 rounded-xl border border-border/50 shadow-2xl" />
         </div>
