@@ -56,6 +56,22 @@ export async function searchCards(
   }
 }
 
+export async function autocompleteCardNames(query: string): Promise<string[]> {
+  const trimmed = query.trim()
+  if (trimmed.length < 2) return []
+  try {
+    const url = new URL("https://api.scryfall.com/cards/autocomplete")
+    url.searchParams.set("q", trimmed)
+    const res = await fetch(url.toString())
+    if (!res.ok) return []
+    const json = await res.json()
+    return Array.isArray(json.data) ? json.data.slice(0, 8) : []
+  } catch (error) {
+    console.error("Scryfall autocomplete error:", error)
+    return []
+  }
+}
+
 /**
  * Module-level cache shared across all helpers in this file. Keyed by
  * Scryfall id. Lifetime = page lifetime — fresh on full reload, no LRU.

@@ -20,12 +20,13 @@ import { LoginDialog } from "@/components/LoginDialog"
 const NAV_LINKS = [
   { href: "/brew", label: "Brew", requiresAuth: false },
   { href: "/decks", label: "Your Decks", requiresAuth: true },
+  { href: "/browse", label: "Browse", requiresAuth: false },
   { href: "/blog", label: "Blog", requiresAuth: false },
 ]
 
 // Paths that render the scroll shell — clicking their nav links scrolls
 // in-page rather than triggering a full navigation.
-const SHELL_PATHS = new Set(["/brew", "/decks", "/blog"])
+const SHELL_PATHS = new Set(["/brew", "/decks", "/browse", "/blog"])
 
 export function TopNav() {
   const pathname = usePathname()

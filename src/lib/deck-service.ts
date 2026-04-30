@@ -21,6 +21,8 @@ export interface DeckRow {
   format: string | null
   description: string | null
   is_public: boolean
+  budget_usd: number | null
+  bracket: number | null
   cover_image_scryfall_id: string | null
   commander_scryfall_ids: string[]
   primer_markdown: string
@@ -134,6 +136,8 @@ async function recordDeckVersion(
       name: deck.name,
       description: deck.description ?? null,
       format: deck.format ?? null,
+      budget_usd: deck.budget_usd ?? null,
+      bracket: deck.bracket ?? null,
       commanders: deck.commander_scryfall_ids ?? [],
       cover_image_scryfall_id: deck.cover_image_scryfall_id ?? null,
       is_public: !!deck.is_public,
