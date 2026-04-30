@@ -50,6 +50,11 @@ type FloatingCardPreview = {
   y: number
 }
 
+type DiffTargetState = {
+  label: string
+  cards: DeckCard[]
+}
+
 // Stack card width is w-44 (176px); height ≈ 176 * 1.4 = 246px
 const DEFAULT_CARD_SIZE = 176
 const MIN_CARD_SIZE = 132
@@ -242,6 +247,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [cardsLoading, setCardsLoading] = useState(true)
   const [printingsByCard, setPrintingsByCard] = useState<Record<string, ScryfallPrinting[]>>({})
   const [viewing, setViewing] = useState<ViewingSnapshotState | null>(null)
+  const [diffTarget, setDiffTarget] = useState<DiffTargetState | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
   const [reverting, setReverting] = useState(false)
@@ -647,12 +653,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const allUniqueTags = Array.from(new Set([...DEFAULT_TAGS, ...cards.flatMap(c => c.tags || [])])).sort()
 
-  const enterVersionView = async (versionId: string) => {
-    const row: DeckVersionRow | null = await getVersion(versionId)
-    if (!row) {
-      toast.error('Version not found')
-      return
-    }
+  const hydrateVersionSnapshot = async (row: DeckVersionRow): Promise<ViewingSnapshotState> => {
     const snap = row.snapshot
     const ids = new Set<string>()
     for (const c of snap.cards) ids.add(c.printing_scryfall_id || c.scryfall_id)
@@ -695,18 +696,46 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const coverId = snap.deck.cover_image_scryfall_id
     const coverImageUrlSnap = coverId ? (sfMap.get(coverId)?.image_uris?.normal ?? null) : null
 
-    setViewing({
+    return {
       versionId: row.id,
       label: row.name ?? new Date(row.created_at).toLocaleString(),
       cards: hydrated,
       deckMeta: snap.deck,
       primerMarkdown: snap.primer_markdown,
       coverImageUrl: coverImageUrlSnap,
-    })
+    }
+  }
+
+  const enterVersionView = async (versionId: string) => {
+    const row: DeckVersionRow | null = await getVersion(versionId)
+    if (!row) {
+      toast.error('Version not found')
+      return
+    }
+
+    setViewing(await hydrateVersionSnapshot(row))
+  }
+
+  const openDiffWithVersion = async (versionId: string, label: string) => {
+    const row = await getVersion(versionId)
+    if (!row) {
+      toast.error('Version not found')
+      return
+    }
+    const hydrated = await hydrateVersionSnapshot(row)
+    setDiffTarget({ label: label || hydrated.label, cards: hydrated.cards })
+    setDiffOpen(true)
+  }
+
+  const openViewingDiffWithLatest = () => {
+    if (!viewing) return
+    setDiffTarget({ label: viewing.label, cards: viewing.cards })
+    setDiffOpen(true)
   }
 
   const exitVersionView = () => {
     setDiffOpen(false)
+    setDiffTarget(null)
     setViewing(null)
   }
 
@@ -1010,16 +1039,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   return (
     <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
 
-      {viewing && (
-        <ViewingVersionBanner
-          versionLabel={viewing.label}
-          isOwner={isOwner}
-          onCompareLatest={() => setDiffOpen(true)}
-          onRevert={() => setRevertConfirmOpen(true)}
-          onBackToLatest={exitVersionView}
-        />
-      )}
-
       {/* Combined toolbar: title | search | controls — banner with cover image background */}
       <header className="border-b border-border h-28 shrink-0 relative z-40">
         {/* Background: cover image with gradient overlay (clipped to banner), or fallback */}
@@ -1139,7 +1158,19 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         </div>
       </header>
 
-      <DeckTabs tab={tab} onChange={setTab} />
+      <DeckTabs
+        tab={tab}
+        onChange={setTab}
+        afterTabs={viewing && (
+          <ViewingVersionBanner
+            versionLabel={viewing.label}
+            isOwner={isOwner}
+            onCompareLatest={openViewingDiffWithLatest}
+            onRevert={() => setRevertConfirmOpen(true)}
+            onBackToLatest={exitVersionView}
+          />
+        )}
+      />
 
       {/* Workspace */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
@@ -1571,6 +1602,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             deckId={deckId}
             isOwner={isOwner}
             onViewVersion={(id) => { setTab('decklist'); void enterVersionView(id) }}
+            onDiffWithVersion={(id, label) => { void openDiffWithVersion(id, label) }}
             onReverted={() => { setViewing(null); void fetchDeck() }}
           />
         )}
@@ -1602,17 +1634,17 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         />
       )}
 
-      <Dialog open={diffOpen && !!viewing} onOpenChange={setDiffOpen}>
-        <DialogContent className="max-h-[88vh] overflow-y-auto bg-card border border-border text-foreground sm:max-w-6xl">
+      <Dialog open={diffOpen && !!diffTarget} onOpenChange={(open) => { setDiffOpen(open); if (!open) setDiffTarget(null) }}>
+        <DialogContent overlayClassName="bg-background/95 supports-backdrop-filter:backdrop-blur-none" className="max-h-[88vh] overflow-y-auto border border-border bg-background text-foreground shadow-2xl sm:max-w-6xl">
           <DialogHeader>
-            <DialogTitle>Diff with latest version</DialogTitle>
+            <DialogTitle>Diff with latest</DialogTitle>
             <DialogDescription>
-              Compare the viewed version against the current latest decklist.
+              Compare a saved version against the current latest decklist.
             </DialogDescription>
           </DialogHeader>
-          {viewing && (
+          {diffTarget && (
             <DeckDiffView
-              before={{ label: viewing.label, cards: viewing.cards }}
+              before={{ label: diffTarget.label, cards: diffTarget.cards }}
               after={{ label: "Latest", cards }}
             />
           )}
