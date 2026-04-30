@@ -42,6 +42,8 @@ type ViewingSnapshotState = {
   coverImageUrl: string | null
 }
 
+type CardInteractionPhase = 'loading' | 'settling' | 'ready'
+
 // Stack card width is w-44 (176px); height ≈ 176 * 1.4 = 246px
 const DEFAULT_CARD_SIZE = 176
 const MIN_CARD_SIZE = 132
@@ -50,6 +52,7 @@ const STACK_PEEK_RATIO = 32 / DEFAULT_CARD_SIZE
 const STACK_EXTRA_PEEK_RATIO = 14 / DEFAULT_CARD_SIZE
 const STACK_CARD_HEIGHT_RATIO = 246 / DEFAULT_CARD_SIZE
 const STACK_HOVER_SHIFT_RATIO = 44 / DEFAULT_CARD_SIZE
+const CARD_INTERACTION_SETTLE_MS = 250
 
 const DEFAULT_TAGS = ['card advantage', 'interaction', 'wincon', 'combo piece']
 
@@ -201,6 +204,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
   const [cardSize, setCardSize] = useState(DEFAULT_CARD_SIZE)
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
+  const [readyCardInteractionKey, setReadyCardInteractionKey] = useState<string | null>(null)
 
   // New: ownership, tabs, settings, primer, version-viewing
   const [isOwner, setIsOwner] = useState(false)
@@ -707,6 +711,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const displayedCommanderIds = viewing ? viewing.deckMeta.commanders : commanderIds
   const displayedCoverImageUrl = viewing ? viewing.coverImageUrl : coverImageUrl
   const displayedDeckName = viewing ? viewing.deckMeta.name : (deck?.name || 'Loading...')
+  const cardInteractionKey = useMemo(
+    () => displayedCards.map(c => `${c.id}:${c.effective_printing_id ?? c.scryfall_id}:${c.quantity}`).join('|'),
+    [displayedCards]
+  )
+  const cardInteractionPhase: CardInteractionPhase = cardsLoading
+    ? 'loading'
+    : readyCardInteractionKey === cardInteractionKey
+      ? 'ready'
+      : 'settling'
 
   const totalUsd = useMemo(() => {
     let sum = 0
@@ -771,6 +784,20 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const stackExtraPeek = Math.round(cardSize * STACK_EXTRA_PEEK_RATIO)
   const stackCardHeight = Math.round(cardSize * STACK_CARD_HEIGHT_RATIO)
   const stackHoverShift = Math.round(cardSize * STACK_HOVER_SHIFT_RATIO)
+
+  useEffect(() => {
+    if (cardsLoading) return
+
+    let settleTimer: ReturnType<typeof setTimeout> | null = null
+    const paintFrame = requestAnimationFrame(() => {
+      settleTimer = setTimeout(() => setReadyCardInteractionKey(cardInteractionKey), CARD_INTERACTION_SETTLE_MS)
+    })
+
+    return () => {
+      cancelAnimationFrame(paintFrame)
+      if (settleTimer) clearTimeout(settleTimer)
+    }
+  }, [cardsLoading, cardInteractionKey, grouping, viewMode])
 
   const showClickedPreview = (card: DeckCard, groupName: string) => {
     setClickedPreview({ card, groupName })
@@ -876,7 +903,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       <DropdownMenu onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(c) }}>
         <DropdownMenuTrigger
           aria-label={`Open options for ${c.name}`}
-          className="h-7 w-7 flex items-center justify-center bg-background/75 hover:bg-background/95 rounded-full border border-border/50 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 data-[popup-open]:opacity-100 transition-opacity"
+          className="h-7 w-7 flex items-center justify-center bg-background/75 hover:bg-background/95 rounded-full border border-border/50 shadow-sm opacity-100 transition-opacity data-[popup-open]:opacity-100"
           onPointerDown={(e: React.PointerEvent) => e.stopPropagation()}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           onContextMenu={(e: React.MouseEvent) => e.stopPropagation()}
@@ -946,6 +973,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const interactionsLocked = !isOwner || !!viewing
+  const cardDragDisabled = interactionsLocked || cardInteractionPhase !== 'ready' || grouping !== 'tag'
 
   return (
     <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
@@ -1166,7 +1194,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               return 0
             })
             .map(([groupName, groupCards]) => (
-            <DroppableTagGroup key={groupName} id={groupName} enabled={!interactionsLocked && grouping === 'tag' && groupName !== 'Untagged'}>
+            <DroppableTagGroup key={groupName} id={groupName} enabled={!cardDragDisabled && groupName !== 'Untagged'}>
               <h3 className="text-xl font-bold border-b border-border pb-2 mb-4 text-foreground">
                 {groupName}{' '}
                 <span className="text-sm font-normal text-muted-foreground ml-2">
@@ -1185,7 +1213,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       <ContextMenuTrigger>
                         <DraggableDeckCard
                           id={c.id}
-                          disabled={interactionsLocked || grouping !== 'tag'}
+                          disabled={cardDragDisabled}
                           className={`relative rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing shadow-xl group aspect-[5/7] transition-all ${
                             commanderIds.includes(c.scryfall_id)
                               ? 'border-yellow-400/80 ring-2 ring-yellow-400/40 hover:border-yellow-300'
@@ -1366,7 +1394,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                               <DraggableDeckCard
                                 key={card.id}
                                 id={card.id}
-                                disabled={interactionsLocked || grouping !== 'tag'}
+                                disabled={cardDragDisabled}
                                 className="absolute w-full cursor-grab active:cursor-grabbing group"
                                 style={dragStyle}
                               >
@@ -1434,7 +1462,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                     <DraggableDeckCard
                       key={c.id}
                       id={c.id}
-                      disabled={interactionsLocked || grouping !== 'tag'}
+                      disabled={cardDragDisabled}
                       className="flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing"
                       onClick={(e) => {
                         e.stopPropagation()
