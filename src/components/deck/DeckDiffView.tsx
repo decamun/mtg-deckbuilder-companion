@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import { Badge } from "@/components/ui/badge"
 import type { DeckCard } from "@/lib/types"
 
@@ -362,13 +363,14 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
         </div>
       )}
 
-      {hoverPreview && (
+      {hoverPreview && createPortal(
         <div
-          className="pointer-events-none fixed z-[90] drop-shadow-2xl"
+          className="pointer-events-none fixed z-[100] drop-shadow-2xl"
           style={{ left: hoverPreview.x, top: hoverPreview.y, transform: "translate(-50%, -50%)" }}
         >
           <CardArtPreview card={hoverPreview.card} />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
