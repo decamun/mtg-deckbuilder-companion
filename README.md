@@ -61,6 +61,10 @@ Then copy the service role key from `npx supabase status` into `.env` as `SUPABA
 
 In constrained cloud VMs, the frontend can still run without Supabase; database-backed routes will fail until Supabase is available.
 
+## Product notes
+
+- [idlebrew pro](docs/idlebrew-pro.md) tracks the staged subscription flags and current deck-assistant gating behavior.
+
 ## Common commands
 
 ```bash

@@ -48,20 +48,32 @@ export const TIER_LIMITS: Record<AgentTier, TierLimits> = {
   },
 }
 
-/**
- * Look up a user's tier. Today everyone is 'free'. When billing lands, this
- * swap reads from `profiles.tier` (or a Stripe-backed `subscriptions` table).
- * Every other layer in the agent path is unchanged.
- */
 export async function getUserTier(
   supabase: SupabaseClient,
   userId: string
 ): Promise<AgentTier> {
-  // Stub: today every authenticated user is on the 'free' tier. When billing
-  // ships, this becomes a `profiles.tier` lookup keyed on userId via supabase.
-  void supabase
-  void userId
-  return 'free'
+  const { data, error } = await supabase
+    .from('user_account_flags')
+    .select('idlebrew_pro_subscribed')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return data?.idlebrew_pro_subscribed ? 'pro' : 'free'
+}
+
+export async function getIdlebrewProNotifyMe(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('user_account_flags')
+    .select('idlebrew_pro_notify_me')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return data?.idlebrew_pro_notify_me ?? false
 }
 
 export interface QuotaCheck {

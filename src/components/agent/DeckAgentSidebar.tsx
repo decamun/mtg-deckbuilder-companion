@@ -4,15 +4,22 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { toast } from "sonner"
-import { Send, Square, Trash2, Sparkles, Brain, PanelRightClose, PanelRightOpen } from "lucide-react"
+import { Send, Square, Trash2, Sparkles, Brain, PanelRightClose, PanelRightOpen, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { ToolChip } from "./ToolChip"
 import { ReasoningPane } from "./ReasoningPane"
 import { ModelPicker } from "./ModelPicker"
 import { AgentMessageText } from "./AgentMessageText"
 import {
-  ALL_MODELS,
   DEFAULT_MODEL,
   type ModelId,
 } from "@/lib/agent-quota"
@@ -27,6 +34,8 @@ interface Props {
 
 interface LimitsResponse {
   tier: string
+  idlebrewProSubscribed: boolean
+  idlebrewProNotifyMe: boolean
   callsPerHour: number
   callsThisHour: number
   callsRemaining: number
@@ -71,6 +80,8 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
   const [draft, setDraft] = useState("")
   const [limits, setLimits] = useState<LimitsResponse | null>(null)
   const [width, setWidth] = useState(DEFAULT_WIDTH)
+  const [subscribeOpen, setSubscribeOpen] = useState(false)
+  const [savingNotify, setSavingNotify] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const isResizing = useRef(false)
 
@@ -139,7 +150,7 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
   }, [messages, status])
 
   const isStreaming = status === "submitted" || status === "streaming"
-  const allowedModels = limits?.allowedModels ?? ALL_MODELS
+  const allowedModels = limits?.allowedModels ?? [DEFAULT_MODEL]
 
   const handleSend = () => {
     const text = draft.trim()
@@ -150,6 +161,38 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
 
   const handleClear = () => {
     setMessages([])
+  }
+
+  const refreshLimits = async () => {
+    try {
+      const res = await fetch("/api/agent/limits", { credentials: "include" })
+      setLimits(res.ok ? await res.json() : null)
+    } catch {
+      // Ignore; the sidebar can still render with default free limits.
+    }
+  }
+
+  const handleNotifyMe = async () => {
+    setSavingNotify(true)
+    try {
+      const res = await fetch("/api/account/idlebrew-pro/notify", {
+        method: "POST",
+        credentials: "include",
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.message ?? "Failed to save notification preference")
+      setLimits((current) =>
+        current ? { ...current, idlebrewProNotifyMe: body.idlebrewProNotifyMe } : current
+      )
+      toast.success("We'll notify you when idlebrew pro is ready.")
+      setSubscribeOpen(false)
+      void refreshLimits()
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to save notification preference"
+      toast.error(message)
+    } finally {
+      setSavingNotify(false)
+    }
   }
 
   if (!open) {
@@ -174,6 +217,7 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
 
   const modelDesc = MODEL_DESCRIPTORS[model]
   const reasoningAvailable = modelDesc.reasoning
+  const proSubscribed = Boolean(limits?.idlebrewProSubscribed)
 
   return (
     <aside
@@ -207,14 +251,35 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
 
       <div className="shrink-0 border-b border-border bg-background/40 px-3 py-2">
         <div className="flex items-center gap-2">
-          <ModelPicker value={model} onChange={setModel} allowedModels={allowedModels} />
+          <ModelPicker
+            value={model}
+            onChange={setModel}
+            allowedModels={allowedModels}
+            onLockedModelClick={() => setSubscribeOpen(true)}
+          />
           <Button
             variant={reasoning ? "default" : "outline"}
             size="sm"
-            disabled={!reasoningAvailable}
-            onClick={() => setReasoning((r) => !r)}
-            className="h-8 gap-1 px-2 text-xs"
-            title={reasoningAvailable ? "Toggle thinking" : "Not available on this model"}
+            onClick={() => {
+              if (!reasoningAvailable) {
+                if (proSubscribed) {
+                  toast.info("Choose a smarter model to enable thinking.")
+                } else {
+                  setSubscribeOpen(true)
+                }
+                return
+              }
+              setReasoning((r) => !r)
+            }}
+            className={`h-8 gap-1 px-2 text-xs ${reasoningAvailable ? "" : "opacity-50"}`}
+            title={
+              reasoningAvailable
+                ? "Toggle thinking"
+                : proSubscribed
+                  ? "Choose a smarter model to enable thinking"
+                  : "Subscribe to unlock smarter models"
+            }
+            aria-disabled={!reasoningAvailable}
           >
             <Brain className="h-3 w-3" /> Think
           </Button>
@@ -278,6 +343,39 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
           )}
         </div>
       </footer>
+      <Dialog open={subscribeOpen} onOpenChange={setSubscribeOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>idlebrew pro</DialogTitle>
+            <DialogDescription>
+              Feature coming soon.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Subscribe for no ads, higher brewing-agent usage limits, and smarter brewing-agent models.
+            </p>
+            {limits?.idlebrewProNotifyMe && (
+              <p className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
+                You are already on the notification list.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleNotifyMe}
+              disabled={savingNotify || Boolean(limits?.idlebrewProNotifyMe)}
+            >
+              <Bell className="h-4 w-4" />
+              {limits?.idlebrewProNotifyMe
+                ? "Notifications on"
+                : savingNotify
+                  ? "Saving..."
+                  : "Notify me"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
   )
 }
