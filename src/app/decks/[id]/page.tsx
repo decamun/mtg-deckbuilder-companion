@@ -903,12 +903,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       <DropdownMenu onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(c) }}>
         <DropdownMenuTrigger
           aria-label={`Open options for ${c.name}`}
-          className="h-7 w-7 flex items-center justify-center bg-background/75 hover:bg-background/95 rounded-full border border-border/50 shadow-sm opacity-100 transition-opacity data-[popup-open]:opacity-100"
+          className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-foreground/25 bg-background/95 text-foreground opacity-100 shadow-lg ring-2 ring-background/80 transition-colors hover:bg-accent hover:text-accent-foreground data-[popup-open]:bg-accent data-[popup-open]:text-accent-foreground"
           onPointerDown={(e: React.PointerEvent) => e.stopPropagation()}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           onContextMenu={(e: React.MouseEvent) => e.stopPropagation()}
         >
-          <MoreVertical className="w-3.5 h-3.5" />
+          <MoreVertical className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align={align} className="w-56 bg-white border-border text-foreground">
           {renderDropdownItems(c, groupName)}
