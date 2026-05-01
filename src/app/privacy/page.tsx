@@ -35,6 +35,11 @@ export default function PrivacyPolicy() {
             and storing your deck lists. We do not sell, rent, or share your personal information
             with third parties for marketing purposes.
           </p>
+          <p className="text-muted-foreground leading-relaxed">
+            Decks are public by default so you can share and host them on idlebrew. Public deck pages
+            may include deck names, descriptions, card lists, primers, and deck history. You can
+            change a deck&apos;s visibility in its settings.
+          </p>
         </section>
 
         <section className="space-y-3">
