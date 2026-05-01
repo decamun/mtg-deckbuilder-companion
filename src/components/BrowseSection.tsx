@@ -35,6 +35,8 @@ type BrowseDeck = {
   cover_url?: string
 }
 
+type LegacyDeckRow = Omit<BrowseDeck, "commander_names" | "budget_usd" | "bracket" | "rank">
+
 const FORMAT_OPTIONS = [
   { value: "all", label: "Any format" },
   { value: "edh", label: "EDH / Commander" },
@@ -61,6 +63,94 @@ function normalizeDeck(row: BrowseDeck): BrowseDeck {
     commander_names: row.commander_names ?? [],
     budget_usd: row.budget_usd == null ? null : Number(row.budget_usd),
   }
+}
+
+function isMissingBrowseRpc(error: { message?: string; code?: string }) {
+  return (
+    error.code === "PGRST202" ||
+    (error.message ?? "").toLowerCase().includes("browse_decks")
+  )
+}
+
+function normalizeText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+function fuzzyMatch(needle: string, haystack: string) {
+  const query = normalizeText(needle)
+  const text = normalizeText(haystack)
+  if (!query) return true
+  if (text.includes(query)) return true
+
+  let index = 0
+  for (const char of query) {
+    index = text.indexOf(char, index)
+    if (index === -1) return false
+    index += 1
+  }
+  return true
+}
+
+async function browseDecksFallback(params: {
+  search: string
+  commander: string
+  format: string
+  usesUnavailableFilters: boolean
+}): Promise<BrowseDeck[]> {
+  if (params.usesUnavailableFilters) {
+    throw new Error("Budget and bracket filters will be available once the browse search migration is applied.")
+  }
+
+  const { data, error } = await supabase
+    .from("decks")
+    .select("id, name, description, format, cover_image_scryfall_id, commander_scryfall_ids, created_at")
+    .eq("is_public", true)
+    .order("created_at", { ascending: false })
+    .limit(200)
+
+  if (error) throw new Error(error.message)
+
+  const rows = ((data ?? []) as LegacyDeckRow[]).map((deck) => ({
+    ...deck,
+    commander_scryfall_ids: deck.commander_scryfall_ids ?? [],
+  }))
+  const commanderIds = Array.from(
+    new Set(rows.flatMap((deck) => deck.commander_scryfall_ids))
+  )
+  const commanderNameMap = new Map<string, string[]>()
+
+  if (rows.length > 0 && commanderIds.length > 0) {
+    const { data: commanderRows } = await supabase
+      .from("deck_cards")
+      .select("deck_id, scryfall_id, name")
+      .in("deck_id", rows.map((deck) => deck.id))
+      .in("scryfall_id", commanderIds)
+
+    for (const card of commanderRows ?? []) {
+      const current = commanderNameMap.get(card.deck_id) ?? []
+      if (!current.includes(card.name)) current.push(card.name)
+      commanderNameMap.set(card.deck_id, current)
+    }
+  }
+
+  return rows
+    .map((deck) => ({
+      ...deck,
+      commander_names: commanderNameMap.get(deck.id) ?? [],
+      budget_usd: null,
+      bracket: null,
+      rank: 0,
+    }))
+    .filter((deck) => {
+      const commanderNames = deck.commander_names.join(" ")
+      const searchText = `${deck.name} ${deck.description ?? ""} ${commanderNames}`
+      return (
+        fuzzyMatch(params.search, searchText) &&
+        fuzzyMatch(params.commander, commanderNames) &&
+        (params.format === "all" || deck.format === params.format)
+      )
+    })
+    .slice(0, 24)
 }
 
 export function BrowseSection() {
@@ -142,13 +232,39 @@ export function BrowseSection() {
 
       if (cancelled) return
       if (searchError) {
-        setError(searchError.message)
-        setDecks([])
-        setLoading(false)
+        if (!isMissingBrowseRpc(searchError)) {
+          setError(searchError.message)
+          setDecks([])
+          setLoading(false)
+          return
+        }
+
+        try {
+          const fallbackRows = await browseDecksFallback({
+            search: searchTerm,
+            commander: commanderTerm,
+            format,
+            usesUnavailableFilters:
+              debouncedMinBudget.trim().length > 0 ||
+              debouncedMaxBudget.trim().length > 0 ||
+              bracket !== "all",
+          })
+          if (cancelled) return
+          await populateDeckCovers(fallbackRows)
+        } catch (fallbackError) {
+          if (cancelled) return
+          setError(fallbackError instanceof Error ? fallbackError.message : searchError.message)
+          setDecks([])
+          setLoading(false)
+        }
         return
       }
 
       const rows = ((data ?? []) as BrowseDeck[]).map(normalizeDeck)
+      await populateDeckCovers(rows)
+    }
+
+    async function populateDeckCovers(rows: BrowseDeck[]) {
       const coverIds = rows
         .map((deck) => deck.cover_image_scryfall_id)
         .filter((id): id is string => Boolean(id))
