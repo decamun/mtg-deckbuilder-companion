@@ -75,7 +75,7 @@ export function BrowseSection() {
   const [format, setFormat] = useState("all")
   const [decks, setDecks] = useState<BrowseDeck[]>([])
   const [loading, setLoading] = useState(false)
-  const [hasSearched, setHasSearched] = useState(false)
+  const [hasActiveSearch, setHasActiveSearch] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const searchRef = useRef<HTMLDivElement>(null)
   const debouncedQuery = useDebounce(query, 220)
@@ -127,17 +127,9 @@ export function BrowseSection() {
         bracket !== "all" ||
         format !== "all"
 
-      if (!hasSearchInput) {
-        setDecks([])
-        setError(null)
-        setLoading(false)
-        setHasSearched(false)
-        return
-      }
-
       setLoading(true)
       setError(null)
-      setHasSearched(true)
+      setHasActiveSearch(hasSearchInput)
       const { data, error: searchError } = await supabase.rpc("browse_decks", {
         p_search: searchTerm,
         p_commander: commanderTerm,
@@ -410,7 +402,7 @@ export function BrowseSection() {
             </Link>
           ))}
         </div>
-      ) : hasSearched ? (
+      ) : hasActiveSearch ? (
         <div className="rounded-2xl border-2 border-dashed border-border py-20 text-center">
           <p className="mb-2 font-medium text-foreground">No decks found</p>
           <p className="text-sm text-muted-foreground">
@@ -419,9 +411,9 @@ export function BrowseSection() {
         </div>
       ) : (
         <div className="rounded-2xl border-2 border-dashed border-border bg-card/30 py-20 text-center">
-          <p className="mb-2 font-medium text-foreground">Start with a deck, card, or commander name</p>
+          <p className="mb-2 font-medium text-foreground">No public decks yet</p>
           <p className="text-sm text-muted-foreground">
-            Advanced filters narrow public decks by commander, budget, bracket, and format.
+            Public decks will appear here as brewers publish them.
           </p>
         </div>
       )}
