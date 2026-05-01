@@ -238,6 +238,7 @@ CREATE OR REPLACE FUNCTION public.deck_metadata_version_summary(
 RETURNS text
 LANGUAGE plpgsql
 IMMUTABLE
+SET search_path = public
 AS $$
 BEGIN
   IF p_old.name IS DISTINCT FROM p_new.name THEN
