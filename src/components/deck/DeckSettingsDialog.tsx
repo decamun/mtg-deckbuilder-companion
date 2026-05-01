@@ -20,7 +20,7 @@ interface Props {
     name: string
     description: string | null
     format: string | null
-    budget_usd?: number | null
+    budget_usd?: number | string | null
     bracket?: number | null
     is_public: boolean
   }

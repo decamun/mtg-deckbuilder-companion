@@ -310,6 +310,7 @@ CREATE OR REPLACE FUNCTION public.revert_deck_to_version(p_deck_id uuid, p_versi
 RETURNS void
 LANGUAGE plpgsql
 SECURITY INVOKER
+SET search_path = public
 AS $$
 DECLARE
   snap jsonb;

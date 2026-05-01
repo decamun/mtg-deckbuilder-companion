@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useDebounce } from "@/hooks/use-debounce"
-import { BRACKET_LABELS, type Bracket } from "@/lib/game-changers"
+import { BRACKET_LABELS } from "@/lib/game-changers"
 import { formatPrice } from "@/lib/format"
 import { autocompleteCardNames, getCardsByIds } from "@/lib/scryfall"
 import { supabase } from "@/lib/supabase/client"
@@ -82,6 +82,7 @@ export function BrowseSection() {
   const debouncedCommander = useDebounce(commander, 220)
   const debouncedMinBudget = useDebounce(minBudget, 220)
   const debouncedMaxBudget = useDebounce(maxBudget, 220)
+  const visibleSuggestions = debouncedQuery.trim().length >= 2 ? suggestions : []
 
   const activeFilterCount = useMemo(
     () =>
@@ -102,7 +103,6 @@ export function BrowseSection() {
   useEffect(() => {
     let cancelled = false
     if (debouncedQuery.trim().length < 2) {
-      setSuggestions([])
       return
     }
     autocompleteCardNames(debouncedQuery).then((names) => {
@@ -215,7 +215,7 @@ export function BrowseSection() {
                 setQuery(event.target.value)
                 setShowSuggestions(true)
               }}
-              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              onFocus={() => visibleSuggestions.length > 0 && setShowSuggestions(true)}
               className="h-11 rounded-xl bg-background pl-9 pr-9"
               placeholder="Search decks, descriptions, or commanders..."
               aria-label="Search public decks"
@@ -234,14 +234,14 @@ export function BrowseSection() {
               </button>
             )}
             <AnimatePresence>
-              {showSuggestions && suggestions.length > 0 && (
+              {showSuggestions && visibleSuggestions.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -6 }}
                   className="absolute top-full z-40 mt-2 w-full overflow-hidden rounded-xl border border-border bg-card shadow-xl"
                 >
-                  {suggestions.map((name) => (
+                  {visibleSuggestions.map((name) => (
                     <button
                       key={name}
                       type="button"
