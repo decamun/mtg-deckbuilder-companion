@@ -25,6 +25,34 @@ when they are sufficient.
 4. If older Docker runs left root-owned artifacts, fix ownership before host
    commands: `sudo chown -R ubuntu:ubuntu node_modules .next`.
 
+### Node.js version
+
+The project targets Node 24 (see `Dockerfile`). The update script installs it
+via nvm. After nvm is loaded (`source $NVM_DIR/nvm.sh`), `node` and `npm` are
+available globally.
+
+### Quick verification commands
+
+- **Lint:** `npm run lint`
+- **Type check:** `npx tsc --noEmit`
+- **Build:** `NEXT_PUBLIC_SUPABASE_URL=<url> NEXT_PUBLIC_SUPABASE_ANON_KEY=<key> npm run build`
+- **Dev server:** `NEXT_PUBLIC_SUPABASE_URL=<url> NEXT_PUBLIC_SUPABASE_ANON_KEY=<key> npm run dev`
+
+### Supabase MCP discovery
+
+Use the Supabase MCP tools with project_id `ejnnjdvgrwsjfgafxtvk`:
+- `get_project_url` → `https://ejnnjdvgrwsjfgafxtvk.supabase.co`
+- `get_publishable_keys` → use the non-disabled publishable key (format
+  `sb_publishable_...`)
+
+### Gotchas
+
+- The `npm run dev` script passes `--webpack` (Turbopack is not used).
+- The app uses Next.js 16 `proxy` convention; a deprecation warning about
+  `middleware` appears on startup but can be ignored.
+- Deck page `/decks/[id]` redirects (307) when no auth cookie is set — this is
+  expected; browser-based testing requires login via the UI.
+
 ## Supabase branch-aware testing
 
 When a PR touches files under `supabase/`, the GitHub integration automatically
