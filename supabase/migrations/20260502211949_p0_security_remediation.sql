@@ -48,6 +48,12 @@ CREATE POLICY "Users manage own api keys"
 CREATE INDEX IF NOT EXISTS mcp_api_keys_active_user_idx
   ON public.mcp_api_keys (user_id, is_active);
 
+ALTER FUNCTION public.deck_card_version_summary(text, public.deck_cards, public.deck_cards)
+  SET search_path = public;
+
+ALTER FUNCTION public.deck_metadata_version_summary(public.decks, public.decks)
+  SET search_path = public;
+
 -- Advisor hardening: lock the RPC search path and keep it invoker-scoped so
 -- RLS still gates all underlying deck/deck_cards operations.
 CREATE OR REPLACE FUNCTION public.revert_deck_to_version(p_deck_id uuid, p_version_id uuid)

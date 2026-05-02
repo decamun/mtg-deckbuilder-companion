@@ -10,7 +10,7 @@ import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfa
  * behind deck-service helpers that apply explicit user_id ownership checks.
  */
 export function createMcpServer(context: McpContext) {
-  const { userId, deckService: decks } = context
+  const { deckService: decks } = context
   const server = new McpServer({
     name: 'idlebrew-MTG-Agent',
     version: '2.0.0',

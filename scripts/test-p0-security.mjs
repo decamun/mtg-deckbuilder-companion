@@ -9,7 +9,7 @@ function assertIncludes(file, expected) {
 
 const [{ isModelId, ALL_MODELS }, { isValidEdhrecSlug }] = await Promise.all([
   import('../src/lib/agent-quota.ts'),
-  import('../src/app/api/edhrec/[slug]/route.ts'),
+  import('../src/lib/edhrec.ts'),
 ])
 
 for (const model of ALL_MODELS) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { checkRateLimit } from "@/lib/rate-limit"
+import { isValidEdhrecSlug } from "@/lib/edhrec"
 
 const BROWSER_HEADERS = {
   "User-Agent":
@@ -20,14 +21,9 @@ const BROWSER_HEADERS = {
   Pragma: "no-cache",
 }
 
-const SLUG_PATTERN = /^[a-z0-9-]{1,120}$/
 const SUCCESS_CACHE = "private, max-age=3600, stale-while-revalidate=86400"
 const MISS_CACHE = "private, max-age=300"
 const EDHREC_RATE_LIMIT = { maxRequests: 30, windowMs: 60_000 }
-
-export function isValidEdhrecSlug(slug: string): boolean {
-  return SLUG_PATTERN.test(slug) && !slug.includes("--")
-}
 
 /** Parse whatever shape EDHREC returns into a normalised { decklist } string */
 function normalise(data: unknown): { decklist: string } | null {
