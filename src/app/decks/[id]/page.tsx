@@ -1327,20 +1327,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           }`}
                           style={{ width: cardSize }}
                         >
-                          <div
+                          <button
+                            type="button"
                             className="absolute inset-0 z-10 cursor-grab bg-transparent p-0 text-left active:cursor-grabbing"
-                            role="button"
-                            tabIndex={0}
                             aria-label={`Preview ${c.name}`}
                             onClick={(e) => {
                               e.stopPropagation()
                               showClickedPreview(c, groupName)
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                showClickedPreview(c, groupName)
-                              }
                             }}
                           />
                           <CardThumbnail card={c} className="h-full w-full" imageClassName="h-full w-full object-cover" overlayClassName="rounded-none" />
