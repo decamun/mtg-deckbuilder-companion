@@ -6,6 +6,7 @@ import { getCardFaceImages, type CardFaceImage } from "@/lib/scryfall"
 interface ScryfallNamedResult {
   id: string
   name: string
+  layout?: string
   image_uris?: { normal?: string; small?: string }
   card_faces?: Array<{ name?: string; image_uris?: { normal?: string; small?: string } }>
 }
@@ -94,9 +95,11 @@ export function CardNameTooltip({ name }: { name: string }) {
           className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2"
           style={{ width: entry.faces.length > 1 ? 400 : 200 }}
         >
-          <span
+          <button
+            type="button"
             onClick={() => setEnlarged(true)}
-            className="pointer-events-auto flex gap-2"
+            className="pointer-events-auto flex w-full gap-2 border-0 bg-transparent p-0"
+            aria-label={`Enlarge ${entry.cardName}`}
           >
             {entry.faces.map((face, index) => (
               <img
@@ -106,14 +109,16 @@ export function CardNameTooltip({ name }: { name: string }) {
                 className="min-w-0 flex-1 rounded-xl shadow-2xl ring-1 ring-border"
               />
             ))}
-          </span>
+          </button>
         </span>
       )}
 
       {enlarged && entry?.found && (
-        <span
+        <button
+          type="button"
           onClick={() => setEnlarged(false)}
-          className="fixed inset-0 z-[60] flex cursor-zoom-out items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex w-full cursor-zoom-out items-center justify-center bg-black/70 backdrop-blur-sm border-0 p-0"
+          aria-label="Close preview"
         >
           <span className="flex max-w-[95vw] gap-3">
             {entry.faces.map((face, index) => (
@@ -125,7 +130,7 @@ export function CardNameTooltip({ name }: { name: string }) {
               />
             ))}
           </span>
-        </span>
+        </button>
       )}
     </span>
   )

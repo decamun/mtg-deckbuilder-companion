@@ -11,10 +11,19 @@ export interface ScryfallCardFace {
   image_uris?: ScryfallImageUris
 }
 
+/** Scryfall layouts that render both faces as separate images side-by-side. */
+const DOUBLE_FACED_LAYOUTS = new Set([
+  "transform",
+  "modal_dfc",
+  "double_faced_token",
+  "reversible_card",
+])
+
 export interface ScryfallCard {
   id: string
   oracle_id?: string
   name: string
+  layout?: string
   type_line: string
   mana_cost: string
   oracle_text: string
@@ -53,17 +62,23 @@ export interface CardFaceImage {
   small?: string
 }
 
-export function getCardFaceImages(card: Pick<ScryfallCard, "name" | "image_uris" | "card_faces"> | null | undefined): CardFaceImage[] {
+export function getCardFaceImages(card: Pick<ScryfallCard, "name" | "layout" | "image_uris" | "card_faces"> | null | undefined): CardFaceImage[] {
   if (!card) return []
-  const faces = card.card_faces
-    ?.map(face => ({
-      name: face.name ?? card.name,
-      normal: face.image_uris?.normal,
-      small: face.image_uris?.small,
-    }))
-    .filter(face => Boolean(face.normal ?? face.small))
 
-  if (faces?.length) return faces
+  // Only show separate per-face images for genuinely double-faced layouts.
+  // Other multi-face layouts (split, adventure, flip, meld) use a single image.
+  if (card.layout && DOUBLE_FACED_LAYOUTS.has(card.layout)) {
+    const faces = card.card_faces
+      ?.map(face => ({
+        name: face.name ?? card.name,
+        normal: face.image_uris?.normal,
+        small: face.image_uris?.small,
+      }))
+      .filter(face => Boolean(face.normal ?? face.small))
+
+    if (faces?.length) return faces
+  }
+
   if (card.image_uris?.normal || card.image_uris?.small) {
     return [{
       name: card.name,
@@ -75,7 +90,7 @@ export function getCardFaceImages(card: Pick<ScryfallCard, "name" | "image_uris"
 }
 
 export function getCardImageUrl(
-  card: Pick<ScryfallCard, "name" | "image_uris" | "card_faces"> | null | undefined,
+  card: Pick<ScryfallCard, "name" | "layout" | "image_uris" | "card_faces"> | null | undefined,
   size: "normal" | "small" = "normal"
 ): string | undefined {
   const faces = getCardFaceImages(card)
