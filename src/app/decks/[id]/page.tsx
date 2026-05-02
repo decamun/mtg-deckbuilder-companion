@@ -14,7 +14,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, cmcOf, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
+import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, cmcOf, getCardFaceImages, getCardImageUrl, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/types"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
@@ -33,7 +33,7 @@ import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type D
 import { formatPrice, pickPrice } from "@/lib/format"
 import { ManaText } from "@/components/mana/ManaText"
 
-type DeckCardRow = Omit<DeckCard, "image_url" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
+type DeckCardRow = Omit<DeckCard, "image_url" | "face_images" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
 
 type ViewingSnapshotState = {
   versionId: string
@@ -126,10 +126,13 @@ function mergeDeckCardRow(current: DeckCard, row: DeckCardRow): DeckCard {
     ...current,
     ...row,
     image_url: current.image_url,
+    face_images: current.face_images,
     type_line: current.type_line,
     mana_cost: current.mana_cost,
+    oracle_text: current.oracle_text,
     cmc: current.cmc,
     colors: current.colors,
+    produced_mana: current.produced_mana,
     set_code: current.set_code,
     collector_number: current.collector_number,
     available_finishes: current.available_finishes,
@@ -156,22 +159,77 @@ function DroppableTagGroup({
   )
 }
 
+function primaryDeckCardImage(card: DeckCard): string | undefined {
+  return card.face_images?.[0]?.normal ?? card.face_images?.[0]?.small ?? card.image_url
+}
+
+function CardThumbnail({
+  card,
+  className,
+  imageClassName,
+  overlayClassName = "rounded-xl",
+}: {
+  card: DeckCard
+  className?: string
+  imageClassName: string
+  overlayClassName?: string
+}) {
+  const imageUrl = primaryDeckCardImage(card)
+  if (!imageUrl) {
+    return (
+      <div className={`${className ?? ""} flex aspect-[5/7] items-center justify-center rounded-xl border border-border/40 bg-card/50`}>
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
+      </div>
+    )
+  }
+
+  return (
+    <div className={`relative ${className ?? ""}`}>
+      <img src={imageUrl} alt={card.name} className={imageClassName} draggable={false} />
+      {(card.finish === 'foil' || card.finish === 'etched') && (
+        <div className={`absolute inset-0 pointer-events-none foil-overlay ${overlayClassName}`} />
+      )}
+    </div>
+  )
+}
+
 function CardArt({
   card,
   className,
   imageClassName = "w-full rounded-xl border border-border/50 shadow-2xl",
+  faceIndex = 0,
+  onFlip,
 }: {
   card: DeckCard
   className?: string
   imageClassName?: string
+  faceIndex?: number
+  onFlip?: () => void
 }) {
+  const faces = card.face_images?.length ? card.face_images : card.image_url ? [{ name: card.name, normal: card.image_url }] : []
+  const activeFace = faces[faceIndex] ?? faces[0]
+  const activeImage = activeFace?.normal ?? activeFace?.small
+  const canFlip = faces.length > 1
+
   return (
     <div className={`relative ${className ?? ""}`}>
-      {card.image_url ? (
+      {activeImage ? (
         <>
-          <img src={card.image_url} alt={card.name} className={imageClassName} draggable={false} />
+          <img src={activeImage} alt={activeFace.name} className={imageClassName} draggable={false} />
           {(card.finish === 'foil' || card.finish === 'etched') && (
             <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
+          )}
+          {canFlip && onFlip && (
+            <button
+              type="button"
+              className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 px-3 py-1 text-xs font-semibold text-foreground shadow-lg backdrop-blur transition hover:bg-accent hover:text-accent-foreground"
+              onClick={(event) => {
+                event.stopPropagation()
+                onFlip()
+              }}
+            >
+              Flip to {faces[(faceIndex + 1) % faces.length]?.name ?? "back"}
+            </button>
           )}
         </>
       ) : (
@@ -211,6 +269,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
   const [cardSize, setCardSize] = useState(DEFAULT_CARD_SIZE)
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
+  const [previewFaceIndex, setPreviewFaceIndex] = useState(0)
   const [readyCardInteractionKey, setReadyCardInteractionKey] = useState<string | null>(null)
 
   // New: ownership, tabs, settings, primer, version-viewing
@@ -336,12 +395,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         const effectiveId = c.printing_scryfall_id || c.scryfall_id
         const effSf = sfMap.get(effectiveId) ?? baseSf
         const finish = (c.finish ?? 'nonfoil') as 'nonfoil' | 'foil' | 'etched'
+        const faceImages = getCardFaceImages(effSf)
         return {
           ...c,
           oracle_id: oracleId,
           finish,
           printing_scryfall_id: c.printing_scryfall_id ?? null,
-          image_url: effSf?.image_uris?.normal,
+          image_url: getCardImageUrl(effSf),
+          face_images: faceImages,
           type_line: effSf?.type_line || '',
           mana_cost: effSf?.mana_cost || '',
           cmc: cmcOf(effSf),
@@ -363,10 +424,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       const coverId = deckData.cover_image_scryfall_id || null
       if (coverId) {
         const inDeck = sfMap.get(coverId)
-        if (inDeck?.image_uris?.normal) setCoverImageUrl(inDeck.image_uris.normal)
+        const inDeckCoverUrl = getCardImageUrl(inDeck)
+        if (inDeckCoverUrl) setCoverImageUrl(inDeckCoverUrl)
         else {
           const fetched = await getCard(coverId)
-          if (gen === fetchGenRef.current) setCoverImageUrl(fetched?.image_uris?.normal ?? null)
+          if (gen === fetchGenRef.current) setCoverImageUrl(getCardImageUrl(fetched) ?? null)
         }
       } else {
         setCoverImageUrl(null)
@@ -417,7 +479,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         quantity: 1,
         zone: 'mainboard',
         tags: [],
-        image_url: card.image_uris?.normal,
+        image_url: getCardImageUrl(card),
+        face_images: getCardFaceImages(card),
         type_line: card.type_line || '',
         mana_cost: card.mana_cost || '',
         cmc: cmcOf(card),
@@ -640,6 +703,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
       const effectiveId = c.printing_scryfall_id || c.scryfall_id
       const effSf = sfMap.get(effectiveId) ?? baseSf
+      const faceImages = getCardFaceImages(effSf)
       return {
         id: `snap-${i}`,
         deck_id: deckId,
@@ -651,7 +715,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         quantity: c.quantity,
         zone: c.zone,
         tags: c.tags,
-        image_url: effSf?.image_uris?.normal,
+        image_url: getCardImageUrl(effSf),
+        face_images: faceImages,
         type_line: effSf?.type_line || '',
         mana_cost: effSf?.mana_cost || '',
         cmc: cmcOf(effSf),
@@ -667,7 +732,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     })
 
     const coverId = snap.deck.cover_image_scryfall_id
-    const coverImageUrlSnap = coverId ? (sfMap.get(coverId)?.image_uris?.normal ?? null) : null
+    const coverImageUrlSnap = coverId ? (getCardImageUrl(sfMap.get(coverId)) ?? null) : null
 
     return {
       versionId: row.id,
@@ -835,6 +900,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }, [cardsLoading, cardInteractionKey, grouping, viewMode])
 
   const showClickedPreview = (card: DeckCard, groupName: string) => {
+    setPreviewFaceIndex(0)
     setClickedPreview({ card, groupName })
     void ensurePrintingsLoaded(card)
   }
@@ -1081,9 +1147,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         onMouseEnter={() => setSelectedResultIdx(idx)}
                         onClick={() => handleAddCard(card)}
                       >
-                        {card.image_uris && (
+                        {getCardImageUrl(card, "small") && (
                           <img
-                            src={card.image_uris.small ?? card.image_uris.normal}
+                            src={getCardImageUrl(card, "small")}
                             alt=""
                             className="w-7 h-auto rounded shrink-0"
                             draggable={false}
@@ -1161,8 +1227,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                     className="group relative flex w-56 items-center gap-3 rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left shadow-lg transition hover:border-yellow-300"
                     onClick={() => showClickedPreview(c, 'Commander')}
                   >
-                    {c.image_url ? (
-                      <img src={c.image_url} alt={c.name} className="h-28 rounded-lg border border-border/60" draggable={false} />
+                    {primaryDeckCardImage(c) ? (
+                      <CardThumbnail card={c} className="h-28 shrink-0" imageClassName="h-28 w-auto rounded-lg border border-border/60" overlayClassName="rounded-lg" />
                     ) : (
                       <div className="flex h-28 aspect-[5/7] items-center justify-center rounded-lg border border-border/40 bg-muted/40">
                         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
@@ -1261,31 +1327,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           }`}
                           style={{ width: cardSize }}
                         >
-                          <div
+                          <button
+                            type="button"
                             className="absolute inset-0 z-10 cursor-grab bg-transparent p-0 text-left active:cursor-grabbing"
-                            role="button"
-                            tabIndex={0}
                             aria-label={`Preview ${c.name}`}
                             onClick={(e) => {
                               e.stopPropagation()
                               showClickedPreview(c, groupName)
                             }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                showClickedPreview(c, groupName)
-                              }
-                            }}
                           />
-                          {c.image_url
-                            ? <>
-                                <img src={c.image_url} alt={c.name} className="w-full h-full object-cover" />
-                                {(c.finish === 'foil' || c.finish === 'etched') && (
-                                  <div className="absolute inset-0 pointer-events-none foil-overlay" />
-                                )}
-                              </>
-                            : <div className="w-full h-full flex items-center justify-center bg-card/50"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground/40" /></div>
-                          }
+                          <CardThumbnail card={c} className="h-full w-full" imageClassName="h-full w-full object-cover" overlayClassName="rounded-none" />
                           {commanderIds.includes(c.scryfall_id) && (
                             <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg">
                               <Crown className="w-2.5 h-2.5" /> CMD
@@ -1453,15 +1504,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                     showClickedPreview(card, groupName)
                                   }}
                                 />
-                                {card.image_url
-                                  ? <div className="relative w-full">
-                                      <img src={card.image_url} alt={card.name} className="w-full rounded-xl border border-black/60 shadow-xl" draggable={false} />
-                                      {(card.finish === 'foil' || card.finish === 'etched') && (
-                                        <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
-                                      )}
-                                    </div>
-                                  : <div className="w-full aspect-[5/7] rounded-xl border border-border/40 bg-card/50 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground/40" /></div>
-                                }
+                                <CardThumbnail card={card} imageClassName="w-full rounded-xl border border-black/60 shadow-xl" />
                                 {card.quantity > 1 && (
                                   <div className="absolute top-2 right-2 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
                                     {card.quantity}x
@@ -1509,7 +1552,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
-                        {c.image_url && <img src={c.image_url} alt="" className="h-9 rounded border border-border/50" draggable={false} />}
+                        {(c.face_images?.[0] || c.image_url) && <CardThumbnail card={c} className="h-9 shrink-0" imageClassName="h-9 w-auto rounded border border-border/50" overlayClassName="rounded" />}
                         <ManaText text={c.name} className="font-medium cursor-pointer hover:text-primary transition-colors truncate" />
                         <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
                       </div>
@@ -1624,7 +1667,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-start gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <CardArt card={clickedPreview.card} imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl" />
+            <CardArt
+              card={clickedPreview.card}
+              imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl"
+              faceIndex={previewFaceIndex}
+              onFlip={() => setPreviewFaceIndex(i => i + 1)}
+            />
             {renderPreviewActionPanel(clickedPreview.card, clickedPreview.groupName)}
           </div>
         </div>

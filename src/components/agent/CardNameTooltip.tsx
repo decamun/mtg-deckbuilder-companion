@@ -1,15 +1,17 @@
 "use client"
 
 import { useRef, useState } from "react"
+import { getCardFaceImages, type CardFaceImage } from "@/lib/scryfall"
 
 interface ScryfallNamedResult {
   id: string
   name: string
-  image_uris?: { normal: string; small: string }
-  card_faces?: Array<{ image_uris?: { normal: string; small: string } }>
+  layout?: string
+  image_uris?: { normal?: string; small?: string }
+  card_faces?: Array<{ name?: string; image_uris?: { normal?: string; small?: string } }>
 }
 
-type CacheEntry = { found: false } | { found: true; imageUrl: string; cardName: string }
+type CacheEntry = { found: false } | { found: true; faces: CardFaceImage[]; cardName: string }
 
 const nameCache = new Map<string, CacheEntry>()
 const inFlight = new Map<string, Promise<CacheEntry>>()
@@ -33,14 +35,9 @@ async function fetchCardByName(name: string): Promise<CacheEntry> {
         return entry
       }
       const card = (await res.json()) as ScryfallNamedResult
-      const imageUrl =
-        card.image_uris?.normal ??
-        card.image_uris?.small ??
-        card.card_faces?.[0]?.image_uris?.normal ??
-        card.card_faces?.[0]?.image_uris?.small ??
-        null
-      const entry: CacheEntry = imageUrl
-        ? { found: true, imageUrl, cardName: card.name }
+      const faces = getCardFaceImages(card)
+      const entry: CacheEntry = faces.length > 0
+        ? { found: true, faces, cardName: card.name }
         : { found: false }
       nameCache.set(key, entry)
       return entry
@@ -96,28 +93,44 @@ export function CardNameTooltip({ name }: { name: string }) {
       {visible && entry?.found && (
         <span
           className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2"
-          style={{ width: 200 }}
+          style={{ width: entry.faces.length > 1 ? 400 : 200 }}
         >
-          <img
-            src={entry.imageUrl}
-            alt={entry.cardName}
+          <button
+            type="button"
             onClick={() => setEnlarged(true)}
-            className="pointer-events-auto w-full rounded-xl shadow-2xl ring-1 ring-border"
-          />
+            className="pointer-events-auto flex w-full gap-2 border-0 bg-transparent p-0"
+            aria-label={`Enlarge ${entry.cardName}`}
+          >
+            {entry.faces.map((face, index) => (
+              <img
+                key={`${face.name}-${index}`}
+                src={face.normal ?? face.small}
+                alt={face.name}
+                className="min-w-0 flex-1 rounded-xl shadow-2xl ring-1 ring-border"
+              />
+            ))}
+          </button>
         </span>
       )}
 
       {enlarged && entry?.found && (
-        <span
+        <button
+          type="button"
           onClick={() => setEnlarged(false)}
-          className="fixed inset-0 z-[60] flex cursor-zoom-out items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex w-full cursor-zoom-out items-center justify-center bg-black/70 backdrop-blur-sm border-0 p-0"
+          aria-label="Close preview"
         >
-          <img
-            src={entry.imageUrl}
-            alt={entry.cardName}
-            className="max-h-[90vh] rounded-xl shadow-2xl"
-          />
-        </span>
+          <span className="flex max-w-[95vw] gap-3">
+            {entry.faces.map((face, index) => (
+              <img
+                key={`${face.name}-${index}`}
+                src={face.normal ?? face.small}
+                alt={face.name}
+                className="max-h-[90vh] min-w-0 rounded-xl shadow-2xl"
+              />
+            ))}
+          </span>
+        </button>
       )}
     </span>
   )

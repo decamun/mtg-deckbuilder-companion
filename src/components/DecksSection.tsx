@@ -32,7 +32,7 @@ import {
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { getCardsByIds, getCardsCollection, getCardBySetAndCN } from "@/lib/scryfall"
+import { getCardsByIds, getCardsCollection, getCardBySetAndCN, getCardImageUrl } from "@/lib/scryfall"
 import { parseDecklist } from "@/lib/decklist-import"
 import type { Deck } from "@/lib/types"
 import Link from "next/link"
@@ -83,8 +83,7 @@ function DecksSectionContent() {
     const coverMap = new Map(coverCards.map((c) => [c.id, c]))
     const populatedDecks = data.map((deck) => ({
       ...deck,
-      cover_url: coverMap.get(deck.cover_image_scryfall_id!)?.image_uris
-        ?.normal,
+      cover_url: getCardImageUrl(coverMap.get(deck.cover_image_scryfall_id!)),
     }))
 
     setDecks(populatedDecks)

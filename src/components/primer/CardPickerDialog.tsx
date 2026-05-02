@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ManaText } from "@/components/mana/ManaText"
 import { useDebounce } from "@/hooks/use-debounce"
-import { searchCards, getPrintingsByOracleId, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
+import { searchCards, getPrintingsByOracleId, getCardImageUrl, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 
 interface Props {
   open: boolean
@@ -67,21 +67,24 @@ function CardPickerDialogContent({ onOpenChange, onPicked }: Omit<Props, "open">
               className="bg-background/50 border-border"
             />
             <div className="max-h-72 overflow-y-auto rounded border border-border">
-              {displayedResults.slice(0, 20).map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => handlePickCard(c)}
-                  className="w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-accent/50"
-                >
-                  {c.image_uris?.small && (
-                    <img src={c.image_uris.small} alt="" className="w-7 rounded" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <ManaText text={c.name} className="text-sm font-medium truncate" />
-                    <div className="text-xs text-muted-foreground truncate">{c.type_line}</div>
-                  </div>
-                </button>
-              ))}
+              {displayedResults.slice(0, 20).map(c => {
+                const imageUrl = getCardImageUrl(c, "small")
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => handlePickCard(c)}
+                    className="w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-accent/50"
+                  >
+                    {imageUrl && (
+                      <img src={imageUrl} alt="" className="w-7 rounded" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <ManaText text={c.name} className="text-sm font-medium truncate" />
+                      <div className="text-xs text-muted-foreground truncate">{c.type_line}</div>
+                    </div>
+                  </button>
+                )
+              })}
               {displayedResults.length === 0 && query.length > 1 && (
                 <div className="px-3 py-2 text-xs text-muted-foreground">No matches</div>
               )}
@@ -96,6 +99,7 @@ function CardPickerDialogContent({ onOpenChange, onPicked }: Omit<Props, "open">
             <div className="grid grid-cols-3 gap-2 max-h-80 overflow-y-auto">
               {(printings.length > 0 ? printings : []).map(p => {
                 const active = printingId === p.id
+                const imageUrl = getCardImageUrl(p, "small")
                 return (
                   <button
                     key={p.id}
@@ -104,8 +108,8 @@ function CardPickerDialogContent({ onOpenChange, onPicked }: Omit<Props, "open">
                       active ? "border-primary" : "border-transparent hover:border-border"
                     }`}
                   >
-                    {p.image_uris?.small && (
-                      <img src={p.image_uris.small} alt="" className="w-full rounded" />
+                    {imageUrl && (
+                      <img src={imageUrl} alt="" className="w-full rounded" />
                     )}
                     <div className="text-[10px] text-muted-foreground mt-1 truncate">
                       {p.set?.toUpperCase()} · {p.collector_number}

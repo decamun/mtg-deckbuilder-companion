@@ -1,17 +1,37 @@
+export interface ScryfallImageUris {
+  normal?: string
+  small?: string
+}
+
+export interface ScryfallCardFace {
+  name?: string
+  mana_cost?: string
+  type_line?: string
+  oracle_text?: string
+  image_uris?: ScryfallImageUris
+}
+
+/** Scryfall layouts that render both faces as separate images side-by-side. */
+const DOUBLE_FACED_LAYOUTS = new Set([
+  "transform",
+  "modal_dfc",
+  "double_faced_token",
+  "reversible_card",
+])
+
 export interface ScryfallCard {
   id: string
   oracle_id?: string
   name: string
+  layout?: string
   type_line: string
   mana_cost: string
   oracle_text: string
   cmc?: number
   colors?: string[]
   color_identity?: string[]
-  image_uris?: {
-    normal: string
-    small: string
-  }
+  image_uris?: ScryfallImageUris
+  card_faces?: ScryfallCardFace[]
   set?: string
   set_name?: string
   collector_number?: string
@@ -34,6 +54,47 @@ export interface ScryfallPrinting extends ScryfallCard {
   collector_number: string
   released_at: string
   finishes: string[]
+}
+
+export interface CardFaceImage {
+  name: string
+  normal?: string
+  small?: string
+}
+
+export function getCardFaceImages(card: Pick<ScryfallCard, "name" | "layout" | "image_uris" | "card_faces"> | null | undefined): CardFaceImage[] {
+  if (!card) return []
+
+  // Only show separate per-face images for genuinely double-faced layouts.
+  // Other multi-face layouts (split, adventure, flip, meld) use a single image.
+  if (card.layout && DOUBLE_FACED_LAYOUTS.has(card.layout)) {
+    const faces = card.card_faces
+      ?.map(face => ({
+        name: face.name ?? card.name,
+        normal: face.image_uris?.normal,
+        small: face.image_uris?.small,
+      }))
+      .filter(face => Boolean(face.normal ?? face.small))
+
+    if (faces?.length) return faces
+  }
+
+  if (card.image_uris?.normal || card.image_uris?.small) {
+    return [{
+      name: card.name,
+      normal: card.image_uris.normal,
+      small: card.image_uris.small,
+    }]
+  }
+  return []
+}
+
+export function getCardImageUrl(
+  card: Pick<ScryfallCard, "name" | "layout" | "image_uris" | "card_faces"> | null | undefined,
+  size: "normal" | "small" = "normal"
+): string | undefined {
+  const faces = getCardFaceImages(card)
+  return faces[0]?.[size] ?? faces[0]?.normal ?? faces[0]?.small
 }
 
 export async function searchCards(
