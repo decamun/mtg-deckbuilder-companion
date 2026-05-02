@@ -16,6 +16,12 @@ export interface Deck {
   cover_url?: string
 }
 
+export interface DeckCardFace {
+  name: string
+  normal?: string
+  small?: string
+}
+
 export interface DeckCard {
   id: string
   deck_id: string
@@ -30,6 +36,7 @@ export interface DeckCard {
   oracle_id: string | null
   // Runtime-populated from Scryfall
   image_url?: string
+  face_images?: DeckCardFace[]
   type_line?: string
   mana_cost?: string
   cmc?: number

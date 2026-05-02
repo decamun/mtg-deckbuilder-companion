@@ -6,6 +6,17 @@ import { Badge } from "@/components/ui/badge"
 import { ManaText } from "@/components/mana/ManaText"
 import type { DeckCard } from "@/lib/types"
 
+function primaryCardImage(card: DeckCard): string | undefined {
+  return card.face_images?.[0]?.normal ?? card.face_images?.[0]?.small ?? card.image_url
+}
+
+function CardFaceImage({ card, className, alt = card.name }: { card: DeckCard; className: string; alt?: string }) {
+  const imageUrl = primaryCardImage(card)
+  if (!imageUrl) return null
+
+  return <img src={imageUrl} alt={alt} className={className} draggable={false} />
+}
+
 type DiffSide = {
   label: string
   cards: DeckCard[]
@@ -165,11 +176,12 @@ function finishLabel(finish: DeckCard["finish"]): string {
 }
 
 function CardArtPreview({ card }: { card: DeckCard }) {
+  const imageUrl = primaryCardImage(card)
   return (
     <div className="relative">
-      {card.image_url ? (
+      {imageUrl ? (
         <>
-          <img src={card.image_url} alt={card.name} className="w-64 rounded-xl border border-border/50 shadow-2xl" draggable={false} />
+          <img src={imageUrl} alt={card.name} className="w-64 rounded-xl border border-border/50 shadow-2xl" draggable={false} />
           {(card.finish === "foil" || card.finish === "etched") && (
             <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
           )}
@@ -213,9 +225,9 @@ function CardCell({
       onMouseLeave={onMouseLeave}
     >
       <span className="w-6 shrink-0 text-right font-mono text-sm text-muted-foreground">{quantity}</span>
-      {card.image_url && (
+      {primaryCardImage(card) && (
         <div className="relative shrink-0">
-          <img src={card.image_url} alt="" className="h-10 rounded border border-border/50" draggable={false} />
+          <CardFaceImage card={card} alt="" className="h-10 rounded border border-border/50" />
           {(card.finish === "foil" || card.finish === "etched") && (
             <div className="absolute inset-0 pointer-events-none foil-overlay rounded" />
           )}
@@ -283,7 +295,7 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
   }
 
   const scheduleHoverPreview = (card: DeckCard, event: React.MouseEvent<HTMLDivElement>) => {
-    if (!card.image_url) return
+    if (!primaryCardImage(card)) return
     if (hoverPreviewTimer) clearTimeout(hoverPreviewTimer)
     const timer = setTimeout(() => {
       setHoverPreview({ card, x: event.clientX, y: event.clientY })

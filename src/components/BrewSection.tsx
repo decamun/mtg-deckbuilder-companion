@@ -9,6 +9,7 @@ import {
   searchCards,
   getCardsCollection,
   getCardByName,
+  getCardImageUrl,
   ScryfallCard,
 } from "@/lib/scryfall"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -753,9 +754,9 @@ export function BrewSection() {
                       i > 0 ? "border-t border-border/50" : ""
                     }`}
                   >
-                    {card.image_uris && (
+                    {getCardImageUrl(card, "small") && (
                       <img
-                        src={card.image_uris.small}
+                        src={getCardImageUrl(card, "small")}
                         alt={card.name}
                         className="h-14 w-auto shrink-0 rounded-md shadow-md"
                       />
@@ -860,9 +861,9 @@ export function BrewSection() {
                                 i > 0 ? "border-t border-border/50" : ""
                               }`}
                             >
-                              {card.image_uris && (
+                              {getCardImageUrl(card, "small") && (
                                 <img
-                                  src={card.image_uris.small}
+                                  src={getCardImageUrl(card, "small")}
                                   alt={card.name}
                                   className="h-12 w-auto shrink-0 rounded-md shadow"
                                 />
