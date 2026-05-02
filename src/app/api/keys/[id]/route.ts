@@ -19,13 +19,14 @@ export async function DELETE(
 
   const { data, error } = await supabase
     .from('mcp_api_keys')
-    .delete()
+    .update({ is_active: false })
     .eq('id', id)
     .eq('user_id', user.id)
     .select('id')
 
   if (error) {
-    return NextResponse.json({ message: error.message }, { status: 500 })
+    console.error('[api-keys] delete failed', { userId: user.id, keyId: id, error: error.message })
+    return NextResponse.json({ message: 'Unable to delete API key' }, { status: 500 })
   }
   if (!data || data.length === 0) {
     // Deliberately ambiguous: 404 either way to prevent enumeration.

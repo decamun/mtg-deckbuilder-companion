@@ -1,0 +1,49 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+import * as deckService from './deck-service'
+
+export interface McpContext {
+  userId: string
+  deckService: {
+    listDecks: () => Promise<deckService.DeckRow[]>
+    getDeck: (deckId: string) => Promise<deckService.DeckRow>
+    getDecklist: (deckId: string) => Promise<deckService.DeckCardRow[]>
+    addCard: (deckId: string, input: deckService.AddCardInput) => Promise<deckService.DeckCardRow>
+    removeCard: (deckCardId: string) => Promise<void>
+    setCardQuantity: (deckCardId: string, quantity: number) => Promise<deckService.DeckCardRow | null>
+    addCardTag: (deckCardId: string, tag: string) => Promise<deckService.DeckCardRow>
+    removeCardTag: (deckCardId: string, tag: string) => Promise<deckService.DeckCardRow>
+    setCardTags: (deckCardId: string, tags: string[]) => Promise<deckService.DeckCardRow>
+    setCardPrinting: (deckCardId: string, printingScryfallId: string | null) => Promise<deckService.DeckCardRow>
+    setCardFinish: (deckCardId: string, finish: deckService.Finish) => Promise<deckService.DeckCardRow>
+    setCommanders: (deckId: string, scryfallIds: string[]) => Promise<deckService.DeckRow>
+    setCoverImage: (deckId: string, scryfallId: string | null) => Promise<deckService.DeckRow>
+  }
+}
+
+export function createMcpContext(supabase: SupabaseClient, userId: string): McpContext {
+  return {
+    userId,
+    deckService: {
+      listDecks: () => deckService.listDecks(supabase, userId),
+      getDeck: (deckId) => deckService.getDeck(supabase, userId, deckId),
+      getDecklist: (deckId) => deckService.getDecklist(supabase, userId, deckId),
+      addCard: (deckId, input) => deckService.addCard(supabase, userId, deckId, input),
+      removeCard: (deckCardId) => deckService.removeCard(supabase, userId, deckCardId),
+      setCardQuantity: (deckCardId, quantity) =>
+        deckService.setCardQuantity(supabase, userId, deckCardId, quantity),
+      addCardTag: (deckCardId, tag) => deckService.addCardTag(supabase, userId, deckCardId, tag),
+      removeCardTag: (deckCardId, tag) =>
+        deckService.removeCardTag(supabase, userId, deckCardId, tag),
+      setCardTags: (deckCardId, tags) =>
+        deckService.setCardTags(supabase, userId, deckCardId, tags),
+      setCardPrinting: (deckCardId, printingScryfallId) =>
+        deckService.setCardPrinting(supabase, userId, deckCardId, printingScryfallId),
+      setCardFinish: (deckCardId, finish) =>
+        deckService.setCardFinish(supabase, userId, deckCardId, finish),
+      setCommanders: (deckId, scryfallIds) =>
+        deckService.setCommanders(supabase, userId, deckId, scryfallIds),
+      setCoverImage: (deckId, scryfallId) =>
+        deckService.setCoverImage(supabase, userId, deckId, scryfallId),
+    },
+  }
+}

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 const BROWSER_HEADERS = {
   "User-Agent":
@@ -16,6 +18,15 @@ const BROWSER_HEADERS = {
   "sec-fetch-site": "same-site",
   "Cache-Control": "no-cache",
   Pragma: "no-cache",
+}
+
+const SLUG_PATTERN = /^[a-z0-9-]{1,120}$/
+const SUCCESS_CACHE = "private, max-age=3600, stale-while-revalidate=86400"
+const MISS_CACHE = "private, max-age=300"
+const EDHREC_RATE_LIMIT = { maxRequests: 30, windowMs: 60_000 }
+
+export function isValidEdhrecSlug(slug: string): boolean {
+  return SLUG_PATTERN.test(slug) && !slug.includes("--")
 }
 
 /** Parse whatever shape EDHREC returns into a normalised { decklist } string */
@@ -46,10 +57,29 @@ interface EdhrecCardview { label?: string; name?: string; inclusion?: number; nu
 interface EdhrecCardlist { cardviews?: EdhrecCardview[] }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params
+  if (!isValidEdhrecSlug(slug)) {
+    return NextResponse.json({ error: "invalid_slug" }, { status: 400 })
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+  }
+
+  const rateLimit = checkRateLimit(`edhrec:${user.id}`, EDHREC_RATE_LIMIT)
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      { error: "rate_limited", retryAfter: rateLimit.retryAfter },
+      { status: 429, headers: { "Retry-After": rateLimit.retryAfter.toString() } }
+    )
+  }
 
   // Primary: average-decks endpoint
   try {
@@ -63,8 +93,12 @@ export async function GET(
       // EDHREC returns 200 + { error: "not_found" } for unknown commanders
       if (!data.error) {
         const normalised = normalise(data)
-        if (normalised) return NextResponse.json(normalised)
-        console.warn("[edhrec] average-decks unknown shape for", slug, data)
+        if (normalised) {
+          return NextResponse.json(normalised, {
+            headers: { "Cache-Control": SUCCESS_CACHE },
+          })
+        }
+        console.warn("[edhrec] average-decks unknown shape for", slug, Object.keys(data))
       } else {
         console.warn(`[edhrec] average-decks error body for ${slug}:`, data.error)
       }
@@ -100,7 +134,12 @@ export async function GET(
         .sort((a, b) => b[1] - a[1])
         .slice(0, 99)
         .map(([name]) => `1 ${name}`)
-      if (lines.length > 0) return NextResponse.json({ decklist: lines.join("\n") })
+      if (lines.length > 0) {
+        return NextResponse.json(
+          { decklist: lines.join("\n") },
+          { headers: { "Cache-Control": SUCCESS_CACHE } }
+        )
+      }
     }
 
     console.warn(`[edhrec] pages/commanders returned ${res.status} for ${slug}`)
@@ -108,5 +147,8 @@ export async function GET(
     console.warn("[edhrec] pages/commanders fetch error:", e)
   }
 
-  return NextResponse.json({ error: "unavailable" }, { status: 503 })
+  return NextResponse.json(
+    { error: "unavailable" },
+    { status: 503, headers: { "Cache-Control": MISS_CACHE } }
+  )
 }
