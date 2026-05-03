@@ -4,7 +4,7 @@ import { useState, useEffect, use, useRef, useMemo, type CSSProperties, type Rea
 import { motion, type MotionProps } from "framer-motion"
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
-import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2 } from "lucide-react"
+import { Camera, Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +22,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { DeckAgentSidebar } from "@/components/agent/DeckAgentSidebar"
 import { DeckAnalytics } from "@/components/deck-analytics"
 import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
+import { DeckScannerDialog } from "@/components/deck/DeckScannerDialog"
 import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
 import { DeckDiffView } from "@/components/deck/DeckDiffView"
 import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
@@ -285,6 +286,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     router.replace(`${url.pathname}${url.search}`)
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(true)
   const [primerEditing, setPrimerEditing] = useState(false)
   const [primerMarkdown, setPrimerMarkdown] = useState("")
@@ -1248,6 +1250,17 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               <div className="hidden lg:block" />
             )}
             <div className="flex flex-wrap items-center justify-end gap-2 lg:order-1">
+              {!interactionsLocked && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setScannerOpen(true)}
+                  className="h-8 bg-card"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  Scan deck
+                </Button>
+              )}
               <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">
                 Card size
                 <input
@@ -1634,6 +1647,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             is_public: !!deck.is_public,
           }}
           onSaved={(next) => setDeck({ ...deck, ...next })}
+        />
+      )}
+
+      {isOwner && !viewing && (
+        <DeckScannerDialog
+          deckId={deckId}
+          cards={cards}
+          open={scannerOpen}
+          onOpenChange={setScannerOpen}
+          onApplied={fetchDeck}
         />
       )}
 
