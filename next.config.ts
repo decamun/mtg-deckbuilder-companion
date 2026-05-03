@@ -5,7 +5,7 @@ const isDev = process.env.NODE_ENV === "development";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseOrigin = supabaseUrl ? new URL(supabaseUrl).origin : "https://*.supabase.co";
 
-const scriptSrc = ["'self'", "https://va.vercel-scripts.com"];
+const scriptSrc = ["'self'", "'unsafe-inline'", "https://va.vercel-scripts.com"];
 const styleSrc = ["'self'", "'unsafe-inline'"];
 const connectSrc = [
   "'self'",
