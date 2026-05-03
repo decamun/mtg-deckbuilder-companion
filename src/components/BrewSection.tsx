@@ -105,25 +105,35 @@ async function fetchBudgetFallbackRows(params: {
 }
 
 async function fetchEDHRECCards(
-  commanderName: string
+  commanderName: string,
+  secondCommanderName?: string
 ): Promise<{ name: string; quantity: number }[]> {
-  try {
-    const slug = toEDHRECSlug(commanderName)
+  const parseDecklist = (text: string): { name: string; quantity: number }[] =>
+    text.split("\n").flatMap((line: string) => {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith("//")) return []
+      const match = trimmed.match(/^(\d+)\s+(.+)$/)
+      if (match) return [{ quantity: parseInt(match[1]), name: match[2].trim() }]
+      return [{ quantity: 1, name: trimmed }]
+    })
+
+  const fetchSlug = async (slug: string): Promise<{ name: string; quantity: number }[]> => {
     const res = await fetch(`/api/edhrec/${encodeURIComponent(slug)}`)
     if (!res.ok) return []
     const data = await res.json()
     if (data._raw) console.debug("[edhrec] unknown response shape:", data._raw)
     const decklistText: unknown = data.decklist
     if (!decklistText || typeof decklistText !== "string") return []
-    return decklistText
-      .split("\n")
-      .flatMap((line: string) => {
-        const trimmed = line.trim()
-        if (!trimmed || trimmed.startsWith("//")) return []
-        const match = trimmed.match(/^(\d+)\s+(.+)$/)
-        if (match) return [{ quantity: parseInt(match[1]), name: match[2].trim() }]
-        return [{ quantity: 1, name: trimmed }]
-      })
+    return parseDecklist(decklistText)
+  }
+
+  try {
+    if (secondCommanderName) {
+      const pairSlug = `${toEDHRECSlug(commanderName)}-${toEDHRECSlug(secondCommanderName)}`
+      const pairResult = await fetchSlug(pairSlug)
+      if (pairResult.length > 0) return pairResult
+    }
+    return await fetchSlug(toEDHRECSlug(commanderName))
   } catch {
     return []
   }
@@ -368,7 +378,7 @@ export function BrewSection() {
             : ["Wastes"]
 
         pushStatus("Consulting EDHREC…")
-        const edhrecRaw = await fetchEDHRECCards(card.name)
+        const edhrecRaw = await fetchEDHRECCards(card.name, opts.secondCommander?.name)
         const skipNames = new Set([
           card.name.toLowerCase(),
           "sol ring",
