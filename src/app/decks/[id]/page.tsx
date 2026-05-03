@@ -642,6 +642,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     if (!card) return
     const versionSince = new Date().toISOString()
     const nextPrinting = printingId ? printingsByCard[cardId]?.find(p => p.id === printingId) : null
+    const defaultPrinting = !printingId ? printingsByCard[cardId]?.find(p => p.id === card.scryfall_id) : null
     const nextCard = nextPrinting ? {
       ...card,
       printing_scryfall_id: printingId,
@@ -652,6 +653,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       available_finishes: nextPrinting.finishes,
       price_usd: pickPrice(nextPrinting.prices, card.finish),
       effective_printing_id: nextPrinting.id,
+    } : defaultPrinting ? {
+      ...card,
+      printing_scryfall_id: null,
+      image_url: getCardImageUrl(defaultPrinting),
+      face_images: getCardFaceImages(defaultPrinting),
+      set_code: defaultPrinting.set,
+      collector_number: defaultPrinting.collector_number,
+      available_finishes: defaultPrinting.finishes,
+      price_usd: pickPrice(defaultPrinting.prices, card.finish),
+      effective_printing_id: card.scryfall_id,
     } : {
       ...card,
       printing_scryfall_id: null,
@@ -671,7 +682,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const card = cards.find(c => c.id === cardId)
     if (!card) return
     const versionSince = new Date().toISOString()
-    setCards(prev => prev.map(c => c.id === cardId ? { ...c, finish, price_usd: pickPrice(undefined, finish) ?? c.price_usd } : c))
+    const currentPrinting = printingsByCard[cardId]?.find(p => p.id === (card.printing_scryfall_id || card.scryfall_id))
+    setCards(prev => prev.map(c => c.id === cardId ? { ...c, finish, price_usd: pickPrice(currentPrinting?.prices, finish) ?? c.price_usd } : c))
     const { error } = await supabase.from('deck_cards').update({ finish }).eq('id', cardId)
     if (error) {
       setCards(prev => prev.map(c => c.id === cardId ? { ...c, finish: card.finish } : c))
@@ -1166,6 +1178,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const interactionsLocked = !isOwner || !!viewing
   const cardDragDisabled = interactionsLocked || cardInteractionPhase !== 'ready' || grouping !== 'tag'
+  const clickedPreviewCard = clickedPreview
+    ? displayedCards.find(card => card.id === clickedPreview.card.id) ?? clickedPreview.card
+    : null
 
   return (
     <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
@@ -1804,7 +1819,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       </Dialog>
 
 
-      {clickedPreview && (
+      {clickedPreview && clickedPreviewCard && (
         <div
           className="fixed inset-0 z-[80] bg-background/20 backdrop-blur-[1px]"
           onClick={(e) => {
@@ -1816,12 +1831,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             onClick={(e) => e.stopPropagation()}
           >
             <CardArt
-              card={clickedPreview.card}
+              card={clickedPreviewCard}
               imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl"
               faceIndex={previewFaceIndex}
               onFlip={() => setPreviewFaceIndex(i => i + 1)}
             />
-            {renderPreviewActionPanel(clickedPreview.card, clickedPreview.groupName)}
+            {renderPreviewActionPanel(clickedPreviewCard, clickedPreview.groupName)}
           </div>
         </div>
       )}
