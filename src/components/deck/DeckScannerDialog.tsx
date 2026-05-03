@@ -204,8 +204,6 @@ export function DeckScannerDialog({ deckId, cards, open, onOpenChange, onApplied
     if (!open) {
       streamRef.current?.getTracks().forEach(track => track.stop())
       streamRef.current = null
-      setCameraError(null)
-      setLastMatch(null)
       return
     }
 
@@ -230,6 +228,7 @@ export function DeckScannerDialog({ deckId, cards, open, onOpenChange, onApplied
           videoRef.current.srcObject = stream
           await videoRef.current.play()
         }
+        if (!cancelled) setCameraError(null)
       } catch (error) {
         setCameraError(error instanceof Error ? error.message : "Camera permission was denied.")
       }
@@ -464,8 +463,16 @@ export function DeckScannerDialog({ deckId, cards, open, onOpenChange, onApplied
     }
   }
 
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
+      resetScan()
+      setCameraError(null)
+    }
+    onOpenChange(nextOpen)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent overlayClassName="bg-background/80" className="max-h-[90vh] overflow-y-auto border border-border bg-background text-foreground sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -590,7 +597,7 @@ export function DeckScannerDialog({ deckId, cards, open, onOpenChange, onApplied
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={applying}>Cancel</Button>
+          <Button variant="ghost" onClick={() => handleOpenChange(false)} disabled={applying}>Cancel</Button>
           <Button onClick={applyDiff} disabled={changedRows.length === 0 || applying}>
             {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
             Apply scan diff
