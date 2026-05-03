@@ -7,9 +7,10 @@ function assertIncludes(file, expected) {
   )
 }
 
-const [{ isModelId, ALL_MODELS }, { isValidEdhrecSlug }] = await Promise.all([
+const [{ isModelId, ALL_MODELS }, { isValidEdhrecSlug }, { getEnabledOAuthProviders }] = await Promise.all([
   import('../src/lib/agent-quota.ts'),
   import('../src/lib/edhrec.ts'),
+  import('../src/lib/oauth-providers.ts'),
 ])
 
 for (const model of ALL_MODELS) {
@@ -25,6 +26,27 @@ assert.equal(isValidEdhrecSlug('atraxa%2fpraetors-voice'), false)
 assert.equal(isValidEdhrecSlug('atraxa.praetors'), false)
 assert.equal(isValidEdhrecSlug(''), false)
 assert.equal(isValidEdhrecSlug('a'.repeat(121)), false)
+
+const originalOauthProviders = process.env.NEXT_PUBLIC_AUTH_OAUTH_PROVIDERS
+const originalSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+delete process.env.NEXT_PUBLIC_AUTH_OAUTH_PROVIDERS
+process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://ujvylhmvumjwscgpqcuk.supabase.co'
+assert.deepEqual(getEnabledOAuthProviders(), [])
+process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://ejnnjdvgrwsjfgafxtvk.supabase.co'
+assert.deepEqual(getEnabledOAuthProviders().map((provider) => provider.id), ['google', 'discord'])
+process.env.NEXT_PUBLIC_AUTH_OAUTH_PROVIDERS = 'google'
+process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://ujvylhmvumjwscgpqcuk.supabase.co'
+assert.deepEqual(getEnabledOAuthProviders().map((provider) => provider.id), ['google'])
+if (originalOauthProviders === undefined) {
+  delete process.env.NEXT_PUBLIC_AUTH_OAUTH_PROVIDERS
+} else {
+  process.env.NEXT_PUBLIC_AUTH_OAUTH_PROVIDERS = originalOauthProviders
+}
+if (originalSupabaseUrl === undefined) {
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL
+} else {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = originalSupabaseUrl
+}
 
 const migration = await import('node:fs/promises').then((fs) =>
   fs.readFile('supabase/migrations/20260502211949_p0_security_remediation.sql', 'utf8')
