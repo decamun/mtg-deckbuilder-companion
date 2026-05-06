@@ -22,6 +22,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { DeckAgentSidebar } from "@/components/agent/DeckAgentSidebar"
 import { DeckAnalytics } from "@/components/deck-analytics"
 import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
+import { ImportDecklistDialog } from "@/components/deck/ImportDecklistDialog"
 import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
 import { DeckDiffView } from "@/components/deck/DeckDiffView"
 import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
@@ -295,6 +296,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [diffOpen, setDiffOpen] = useState(false)
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
   const [reverting, setReverting] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
@@ -1191,6 +1193,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   isPublic={!!deck.is_public}
                   isOwner={isOwner}
                   onVisibilityChange={(pub) => setDeck({ ...deck, is_public: pub })}
+                  onImportClick={isOwner && !viewing ? () => setImportOpen(true) : undefined}
                 />
               )}
             </div>
@@ -1637,6 +1640,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         />
       )}
 
+
+      {isOwner && (
+        <ImportDecklistDialog
+          deckId={deckId}
+          currentCards={cards}
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          onImported={() => void fetchDeck()}
+        />
+      )}
 
       <Dialog open={diffOpen && !!diffTarget} onOpenChange={(open) => { setDiffOpen(open); if (!open) setDiffTarget(null) }}>
         <DialogContent overlayClassName="bg-background/95 supports-backdrop-filter:backdrop-blur-none" className="max-h-[88vh] overflow-y-auto border border-border bg-background text-foreground shadow-2xl sm:max-w-6xl">

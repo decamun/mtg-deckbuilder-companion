@@ -32,8 +32,8 @@ import {
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { getCardsByIds, getCardsCollection, getCardBySetAndCN, getCardImageUrl } from "@/lib/scryfall"
-import { parseDecklist } from "@/lib/decklist-import"
+import { getCardsByIds, getCardImageUrl } from "@/lib/scryfall"
+import { resolveDecklist } from "@/lib/decklist-import"
 import type { Deck } from "@/lib/types"
 import Link from "next/link"
 
@@ -120,77 +120,27 @@ function DecksSectionContent() {
     }
 
     if (decklistText.trim()) {
-      const parsedCards = parseDecklist(decklistText)
-      const uniqueNames = Array.from(new Set(parsedCards.map((p) => p.name)))
-      const scryfallCards = await getCardsCollection(uniqueNames)
+      const { cards: resolved, warnings } = await resolveDecklist(decklistText)
+      for (const w of warnings) toast.warning(w)
 
-      // Resolve specific printings (set + CN) for any line that asked for one.
-      const printingKeys = parsedCards
-        .filter((p) => p.setCode && p.collectorNumber)
-        .map((p) => `${p.setCode!.toLowerCase()}/${p.collectorNumber!}`)
-      const uniquePrintingKeys = Array.from(new Set(printingKeys))
-      const printingMap = new Map<string, { id: string; finishes?: string[] }>()
-      await Promise.all(
-        uniquePrintingKeys.map(async (k) => {
-          const [s, cn] = k.split("/")
-          const card = await getCardBySetAndCN(s, cn)
-          if (card) printingMap.set(k, { id: card.id, finishes: card.finishes })
-        })
-      )
-
-      let addedCount = 0
-      const inserts: Array<{
-        deck_id: string
-        scryfall_id: string
-        name: string
-        quantity: number
-        printing_scryfall_id: string | null
-        finish: "nonfoil" | "foil" | "etched"
-        oracle_id: string | null
-      }> = []
-
-      for (const parsed of parsedCards) {
-        const scryfallCard = scryfallCards.find(
-          (c) => c.name.toLowerCase() === parsed.name.toLowerCase()
-        )
-        if (!scryfallCard) {
-          toast.error(`Could not find card: ${parsed.name}`)
-          continue
-        }
-        let printingId: string | null = null
-        let finishes: string[] | undefined
-        if (parsed.setCode && parsed.collectorNumber) {
-          const k = `${parsed.setCode.toLowerCase()}/${parsed.collectorNumber}`
-          const hit = printingMap.get(k)
-          if (hit) { printingId = hit.id; finishes = hit.finishes }
-        }
-        let finish: "nonfoil" | "foil" | "etched" = "nonfoil"
-        if (parsed.foil) {
-          if (!finishes || finishes.includes("foil")) finish = "foil"
-          else toast.message(`${parsed.name}: foil not available for this printing — saved as non-foil`)
-        }
-        inserts.push({
+      if (resolved.length > 0) {
+        const inserts = resolved.map((r) => ({
           deck_id: data.id,
-          scryfall_id: scryfallCard.id,
-          printing_scryfall_id: printingId,
-          finish,
-          oracle_id: scryfallCard.oracle_id ?? null,
-          name: scryfallCard.name,
-          quantity: parsed.quantity,
-        })
-        addedCount++
-      }
+          scryfall_id: r.scryfall_id,
+          printing_scryfall_id: r.printing_scryfall_id,
+          finish: r.finish,
+          oracle_id: r.oracle_id,
+          name: r.name,
+          quantity: r.quantity,
+        }))
 
-      if (inserts.length > 0) {
-        const { error: insertError } = await supabase
-          .from("deck_cards")
-          .insert(inserts)
+        const { error: insertError } = await supabase.from("deck_cards").insert(inserts)
         if (insertError) {
           toast.error(`Error saving cards: ${insertError.message}`)
         }
       }
 
-      toast.success(`Deck created with ${addedCount} unique cards!`)
+      toast.success(`Deck created with ${resolved.length} unique cards!`)
     } else {
       toast.success("Deck created!")
     }
