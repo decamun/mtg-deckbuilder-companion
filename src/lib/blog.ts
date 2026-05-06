@@ -8,6 +8,19 @@ export interface BlogPost {
 
 export const BLOG_POSTS: BlogPost[] = [
   {
+    slug: "connecting-idlebrew-mcp",
+    title: "Connecting to idlebrew via MCP",
+    date: "2026-05-06",
+    excerpt:
+      "idlebrew exposes your decks over the Model Context Protocol, so Claude Desktop, Cursor, and any other MCP-aware tool can read and edit your cards without opening a browser.",
+    body: [
+      "The Model Context Protocol (MCP) is an open standard that lets AI assistants talk directly to external services. idlebrew implements an MCP server at https://idlebrew.com/api/mcp, giving any MCP-aware client — Claude Desktop, Cursor, Windsurf, or a custom agent — live access to your decks. You can search Scryfall, add cards, retag cards, and more, all from your AI assistant's chat window.",
+      "To connect, first create an API key on your profile page under \"API keys (MCP)\". The key starts with idlb_ and acts as you: any client that holds it can read and modify your decks. Treat it like a password — never paste it into public channels or commit it to version control.",
+      "For Claude Desktop, open your claude_desktop_config.json (found via Settings → Developer → Edit Config) and add an entry under mcpServers. Set the type to \"streamable-http\", the url to \"https://idlebrew.com/api/mcp\", and add an Authorization header with the value \"Bearer YOUR_KEY\". Restart Claude Desktop and the idlebrew tools will appear in the tool list. For Cursor, go to Settings → MCP, add a new server with the same URL and header, and reload the window.",
+      "Once connected, you can ask your assistant to list your decks, pull a full decklist, or add and retag cards by name. The same tools available in the in-browser deck assistant are exposed over MCP, so both interfaces stay in sync. If you see authentication errors, verify that your key is still active on the profile page and that the Authorization header is formatted as \"Bearer YOUR_KEY\" with no extra spaces.",
+    ],
+  },
+  {
     slug: "choosing-your-first-commander",
     title: "Choosing Your First Commander",
     date: "2026-04-22",

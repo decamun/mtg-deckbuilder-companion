@@ -1,6 +1,7 @@
 "use client"
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Network } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ALL_MODELS, type ModelId } from "@/lib/agent-quota"
 import { MODEL_DESCRIPTORS } from "@/lib/agent-models"
 
@@ -17,6 +18,10 @@ export function ModelPicker({ value, onChange, allowedModels, onLockedModelClick
       value={value}
       onValueChange={(v) => {
         const next = v as ModelId
+        if (next === 'use-mcp') {
+          onChange(next)
+          return
+        }
         if (!allowedModels.includes(next)) {
           onLockedModelClick()
           return
@@ -48,6 +53,13 @@ export function ModelPicker({ value, onChange, allowedModels, onLockedModelClick
             </SelectItem>
           )
         })}
+        <SelectSeparator />
+        <SelectItem value="use-mcp" className="text-xs">
+          <span className="flex items-center gap-2">
+            <Network className="h-3 w-3" />
+            Use MCP
+          </span>
+        </SelectItem>
       </SelectContent>
     </Select>
   )

@@ -11,6 +11,7 @@ export type ModelId =
   | 'anthropic/claude-opus-4.7'
   | 'google/gemini-2.5-pro'
   | 'openai/gpt-5.1-thinking'
+  | 'use-mcp'
 
 export type AgentTier = 'free' | 'pro' | 'unlimited'
 

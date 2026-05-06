@@ -13,6 +13,12 @@ export interface ModelDescriptor {
 }
 
 export const MODEL_DESCRIPTORS: Record<ModelId, ModelDescriptor> = {
+  'use-mcp': {
+    id: 'use-mcp',
+    label: 'Use MCP',
+    provider: 'anthropic',
+    reasoning: false,
+  },
   'anthropic/claude-haiku-4.5': {
     id: 'anthropic/claude-haiku-4.5',
     label: 'Claude Haiku 4.5',

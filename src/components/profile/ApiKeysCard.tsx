@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Copy, KeyRound, Trash2, Plus, Check } from "lucide-react"
+import { Copy, KeyRound, Trash2, Plus, Check, ExternalLink } from "lucide-react"
+import Link from "next/link"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -171,6 +172,19 @@ export function ApiKeysCard() {
                 Use these keys to connect Claude Desktop, Cursor, or any other MCP-aware
                 agent to your decks. Each key acts as you.
               </CardDescription>
+              <div className="mt-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
+                <p className="mb-1 text-muted-foreground">MCP server URL</p>
+                <code className="break-all font-mono text-foreground">
+                  https://idlebrew.com/api/mcp
+                </code>
+              </div>
+              <Link
+                href="/blog/connecting-idlebrew-mcp"
+                className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                How to connect Claude Desktop &amp; Cursor
+                <ExternalLink className="h-3 w-3" />
+              </Link>
             </div>
             <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" /> New key
