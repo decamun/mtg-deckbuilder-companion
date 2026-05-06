@@ -60,7 +60,7 @@
 
   --background: var(--white);
   --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0 / 60%);
+  --card: var(--white);
   --card-foreground: oklch(0.145 0 0);
   --popover: var(--white);
   --popover-foreground: oklch(0.145 0 0);
