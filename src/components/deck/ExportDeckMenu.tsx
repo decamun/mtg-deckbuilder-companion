@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDown, Copy, Download, FileText, BookOpen, Share2, Globe, Lock, Link as LinkIcon } from "lucide-react"
+import { ChevronDown, Copy, Download, FileText, BookOpen, Share2, Globe, Lock, Link as LinkIcon, Upload } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,7 @@ interface Props {
   isPublic: boolean
   isOwner: boolean
   onVisibilityChange?: (isPublic: boolean) => void
+  onImportClick?: () => void
 }
 
 function formatAsText(cards: DeckCard[], commanderIds: string[]): string {
@@ -102,6 +103,7 @@ export function ExportDeckMenu({
   isPublic,
   isOwner,
   onVisibilityChange,
+  onImportClick,
 }: Props) {
   const safeName = deckName.replace(/[^a-z0-9]/gi, "-").toLowerCase()
 
@@ -189,6 +191,18 @@ export function ExportDeckMenu({
         <ChevronDown className="w-3 h-3 opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
+        {isOwner && onImportClick && (
+          <>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Import</DropdownMenuLabel>
+              <DropdownMenuItem onClick={onImportClick}>
+                <Upload className="w-4 h-4" />
+                Import Decklist
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuGroup>
           <DropdownMenuLabel>Share</DropdownMenuLabel>
           <DropdownMenuItem onClick={handleCopyLink}>

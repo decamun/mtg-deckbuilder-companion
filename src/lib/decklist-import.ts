@@ -6,6 +6,9 @@
 //   "4 Lightning Bolt (M11) 146 F"
 //   "1 Sol Ring [LEA]"
 
+import { getCardsCollection, getCardBySetAndCN } from "@/lib/scryfall"
+import type { DeckCard } from "@/lib/types"
+
 export interface ParsedDecklistLine {
   quantity: number
   name: string
@@ -59,4 +62,109 @@ export function parseDecklist(text: string): ParsedDecklistLine[] {
     if (parsed) out.push(parsed)
   }
   return out
+}
+
+export interface ResolvedImportCard {
+  name: string
+  quantity: number
+  scryfall_id: string
+  oracle_id: string | null
+  printing_scryfall_id: string | null
+  finish: "nonfoil" | "foil" | "etched"
+  zone: string
+}
+
+export interface DecklistResolveResult {
+  cards: ResolvedImportCard[]
+  warnings: string[]
+}
+
+/**
+ * Parses a decklist string and resolves each entry to a Scryfall-backed card.
+ *
+ * preservePrintings: if true and existingCards is provided, cards already in
+ * the deck keep their current printing_scryfall_id and finish.
+ */
+export async function resolveDecklist(
+  text: string,
+  opts?: {
+    preservePrintings?: boolean
+    existingCards?: DeckCard[]
+  },
+): Promise<DecklistResolveResult> {
+  const parsedCards = parseDecklist(text)
+  if (parsedCards.length === 0) return { cards: [], warnings: [] }
+
+  const uniqueNames = Array.from(new Set(parsedCards.map((p) => p.name)))
+  const scryfallCards = await getCardsCollection(uniqueNames)
+
+  const printingKeys = parsedCards
+    .filter((p) => p.setCode && p.collectorNumber)
+    .map((p) => `${p.setCode!.toLowerCase()}/${p.collectorNumber!}`)
+  const uniquePrintingKeys = Array.from(new Set(printingKeys))
+  const printingMap = new Map<string, { id: string; finishes?: string[] }>()
+  await Promise.all(
+    uniquePrintingKeys.map(async (k) => {
+      const [s, cn] = k.split("/")
+      const card = await getCardBySetAndCN(s, cn)
+      if (card) printingMap.set(k, { id: card.id, finishes: card.finishes })
+    }),
+  )
+
+  const warnings: string[] = []
+  const cards: ResolvedImportCard[] = []
+
+  for (const parsed of parsedCards) {
+    const scryfallCard = scryfallCards.find(
+      (c) => c.name.toLowerCase() === parsed.name.toLowerCase(),
+    )
+    if (!scryfallCard) {
+      warnings.push(`Could not find card: ${parsed.name}`)
+      continue
+    }
+
+    let printingId: string | null = null
+    let finish: "nonfoil" | "foil" | "etched" = "nonfoil"
+
+    // When preserving printings, carry over the existing card's printing/finish.
+    const existing =
+      opts?.preservePrintings && opts.existingCards
+        ? opts.existingCards.find(
+            (c) =>
+              (scryfallCard.oracle_id && c.oracle_id === scryfallCard.oracle_id) ||
+              c.name.toLowerCase() === parsed.name.toLowerCase(),
+          )
+        : undefined
+
+    if (existing) {
+      printingId = existing.printing_scryfall_id
+      finish = existing.finish
+    } else {
+      if (parsed.setCode && parsed.collectorNumber) {
+        const k = `${parsed.setCode.toLowerCase()}/${parsed.collectorNumber}`
+        const hit = printingMap.get(k)
+        if (hit) {
+          printingId = hit.id
+          if (parsed.foil) {
+            if (hit.finishes?.includes("foil")) finish = "foil"
+            else warnings.push(`${parsed.name}: foil not available for this printing — saved as non-foil`)
+          }
+        }
+      } else if (parsed.foil) {
+        finish = "foil"
+      }
+    }
+
+    cards.push({
+      name: scryfallCard.name,
+      quantity: parsed.quantity,
+      scryfall_id: scryfallCard.id,
+      oracle_id: scryfallCard.oracle_id ?? null,
+      printing_scryfall_id: printingId,
+      finish,
+      zone: "mainboard",
+    })
+  }
+
+  return { cards, warnings }
 }
