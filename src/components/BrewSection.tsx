@@ -129,9 +129,13 @@ async function fetchEDHRECCards(
 
   try {
     if (secondCommanderName) {
-      const pairSlug = `${toEDHRECSlug(commanderName)}-${toEDHRECSlug(secondCommanderName)}`
-      const pairResult = await fetchSlug(pairSlug)
+      const slug1 = toEDHRECSlug(commanderName)
+      const slug2 = toEDHRECSlug(secondCommanderName)
+      // EDHREC has a single canonical slug order for a pair; try both orderings
+      const pairResult = await fetchSlug(`${slug1}-${slug2}`)
       if (pairResult.length > 0) return pairResult
+      const pairResultReversed = await fetchSlug(`${slug2}-${slug1}`)
+      if (pairResultReversed.length > 0) return pairResultReversed
     }
     return await fetchSlug(toEDHRECSlug(commanderName))
   } catch {
