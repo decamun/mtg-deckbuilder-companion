@@ -5,6 +5,8 @@
 //   "4 Lightning Bolt (M11) 146 *F*"
 //   "4 Lightning Bolt (M11) 146 F"
 //   "1 Sol Ring [LEA]"
+//   "1 Wear // Tear"            (full split card name)
+//   "1 Wear"                    (first-face-only; Scryfall fuzzy-matches to "Wear // Tear")
 
 import { getCardsCollection, getCardBySetAndCN } from "@/lib/scryfall"
 import type { DeckCard } from "@/lib/types"
@@ -115,9 +117,15 @@ export async function resolveDecklist(
   const cards: ResolvedImportCard[] = []
 
   for (const parsed of parsedCards) {
-    const scryfallCard = scryfallCards.find(
-      (c) => c.name.toLowerCase() === parsed.name.toLowerCase(),
-    )
+    const parsedLower = parsed.name.toLowerCase()
+    const scryfallCard = scryfallCards.find((c) => {
+      const cardLower = c.name.toLowerCase()
+      // Exact match (handles full split names like "Wear // Tear")
+      if (cardLower === parsedLower) return true
+      // Face-name match: Scryfall returns "Wear // Tear" but user typed only "Wear"
+      const primaryFace = cardLower.split(" // ")[0]
+      return primaryFace === parsedLower
+    })
     if (!scryfallCard) {
       warnings.push(`Could not find card: ${parsed.name}`)
       continue
