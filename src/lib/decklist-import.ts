@@ -97,7 +97,13 @@ export async function resolveDecklist(
   const parsedCards = parseDecklist(text)
   if (parsedCards.length === 0) return { cards: [], warnings: [] }
 
-  const uniqueNames = Array.from(new Set(parsedCards.map((p) => p.name)))
+  // For split/adventure cards (e.g. "Wear // Tear") Scryfall's /cards/collection
+  // endpoint fuzzy-matches by the primary face name only; sending the full " // "
+  // form causes the entry to land in `not_found`.  Normalize to the primary face
+  // here — the matching logic below still handles both exact and face-name forms.
+  const scryfallLookupName = (name: string) =>
+    name.includes(" // ") ? name.split(" // ")[0] : name
+  const uniqueNames = Array.from(new Set(parsedCards.map((p) => scryfallLookupName(p.name))))
   const scryfallCards = await getCardsCollection(uniqueNames)
 
   const printingKeys = parsedCards
