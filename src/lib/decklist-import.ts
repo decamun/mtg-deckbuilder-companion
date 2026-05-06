@@ -6,7 +6,7 @@
 //   "4 Lightning Bolt (M11) 146 F"
 //   "1 Sol Ring [LEA]"
 
-import { getCardsCollection, getCardBySetAndCN } from "@/lib/scryfall"
+import { getCardsCollection, getCardsBySetAndCN } from "@/lib/scryfall"
 import type { DeckCard } from "@/lib/types"
 
 export interface ParsedDecklistLine {
@@ -96,20 +96,28 @@ export async function resolveDecklist(
   if (parsedCards.length === 0) return { cards: [], warnings: [] }
 
   const uniqueNames = Array.from(new Set(parsedCards.map((p) => p.name)))
-  const scryfallCards = await getCardsCollection(uniqueNames)
 
-  const printingKeys = parsedCards
-    .filter((p) => p.setCode && p.collectorNumber)
-    .map((p) => `${p.setCode!.toLowerCase()}/${p.collectorNumber!}`)
-  const uniquePrintingKeys = Array.from(new Set(printingKeys))
-  const printingMap = new Map<string, { id: string; finishes?: string[] }>()
-  await Promise.all(
-    uniquePrintingKeys.map(async (k) => {
-      const [s, cn] = k.split("/")
-      const card = await getCardBySetAndCN(s, cn)
-      if (card) printingMap.set(k, { id: card.id, finishes: card.finishes })
-    }),
-  )
+  // Collect unique set/CN pairs for cards with specific printings requested.
+  const seenSetCN = new Set<string>()
+  const printingRequests: Array<{ set: string; collectorNumber: string }> = []
+  for (const p of parsedCards) {
+    if (p.setCode && p.collectorNumber) {
+      const k = `${p.setCode.toLowerCase()}/${p.collectorNumber}`
+      if (!seenSetCN.has(k)) {
+        seenSetCN.add(k)
+        printingRequests.push({ set: p.setCode.toLowerCase(), collectorNumber: p.collectorNumber })
+      }
+    }
+  }
+
+  // Fire both lookups in parallel: name-based oracle data + specific printings.
+  // getCardsBySetAndCN uses the /cards/collection batch endpoint (one POST for
+  // all printings) and caches results by ID, so the dialog's getCardsByIds
+  // call afterwards gets all cache hits.
+  const [scryfallCards, printingMap] = await Promise.all([
+    getCardsCollection(uniqueNames),
+    getCardsBySetAndCN(printingRequests),
+  ])
 
   const warnings: string[] = []
   const cards: ResolvedImportCard[] = []
@@ -154,6 +162,8 @@ export async function resolveDecklist(
         finish = "foil"
       }
     }
+    // scryfall_id stays the oracle/default card's ID; printing_scryfall_id
+    // points at the specific printing when one was requested.
 
     cards.push({
       name: scryfallCard.name,

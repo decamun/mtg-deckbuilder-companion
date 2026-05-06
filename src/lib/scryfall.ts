@@ -261,6 +261,33 @@ export async function getCardBySetAndCN(set: string, collectorNumber: string): P
   }
 }
 
+/**
+ * Batch-fetch specific printings by set + collector number in one collection
+ * request instead of N individual GETs. Results are cached by ID so subsequent
+ * getCardsByIds calls return immediately from memory.
+ *
+ * Returns a map keyed by "set/collector_number" (lower-cased).
+ */
+export async function getCardsBySetAndCN(
+  keys: Array<{ set: string; collectorNumber: string }>,
+): Promise<Map<string, ScryfallCard>> {
+  if (keys.length === 0) return new Map()
+  const fetched = await fetchCollection(
+    keys.map(({ set, collectorNumber }) => ({
+      set: set.toLowerCase(),
+      collector_number: collectorNumber,
+    })),
+  )
+  rememberCards(fetched)
+  const result = new Map<string, ScryfallCard>()
+  for (const card of fetched) {
+    if (card.set && card.collector_number) {
+      result.set(`${card.set.toLowerCase()}/${card.collector_number}`, card)
+    }
+  }
+  return result
+}
+
 const printingsByOracleCache = new Map<string, ScryfallPrinting[]>()
 const inFlightPrintings = new Map<string, Promise<ScryfallPrinting[]>>()
 
