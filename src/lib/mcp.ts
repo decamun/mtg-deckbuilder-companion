@@ -345,6 +345,63 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     }
   )
 
+  // ─── Primer ───────────────────────────────────────────────────────────────
+
+  server.tool(
+    'get_primer',
+    "Get a deck's primer (the full markdown guide text).",
+    { deck_id: z.string().describe('UUID of the deck') },
+    async ({ deck_id }) => {
+      try {
+        const deck = await deckService.getDeck(supabase, userId, deck_id)
+        return ok(deck.primer_markdown || '(no primer)')
+      } catch (e) {
+        return errFromException('get_primer failed', e)
+      }
+    }
+  )
+
+  server.tool(
+    'set_primer',
+    'Write or replace a deck\'s primer. The primer is GitHub-Flavored Markdown (headings, bold, italic, lists, links).' +
+      ' Embed a card image inline with {{card:<printing_scryfall_id>}} — use the `id` field from search_scryfall or list_printings results (a UUID), NOT the oracle_id.' +
+      ' Links must point to idlebrew.app (other hosts are stripped by the renderer).' +
+      ' Pass the complete markdown content; this replaces the entire primer.',
+    {
+      deck_id: z.string().describe('UUID of the deck'),
+      markdown: z.string().describe('Full primer markdown content'),
+    },
+    async ({ deck_id, markdown }) => {
+      try {
+        const row = await deckService.setPrimer(supabase, userId, deck_id, markdown)
+        return ok(`Primer saved (${row.primer_markdown.length} chars)`)
+      } catch (e) {
+        return errFromException('set_primer failed', e)
+      }
+    }
+  )
+
+  server.tool(
+    'patch_primer',
+    'Replace an exact passage in a deck\'s primer without rewriting the whole thing.' +
+      ' old_string must match exactly one location in the current primer; include enough surrounding' +
+      ' context (a sentence or heading) to make it unique. Errors if the string is not found or matches' +
+      ' more than once. Call get_primer first to read the current text.',
+    {
+      deck_id: z.string().describe('UUID of the deck'),
+      old_string: z.string().min(1).describe('Exact text to find and replace'),
+      new_string: z.string().describe('Replacement text (may be empty to delete)'),
+    },
+    async ({ deck_id, old_string, new_string }) => {
+      try {
+        const row = await deckService.patchPrimer(supabase, userId, deck_id, old_string, new_string)
+        return ok(`Primer patched (${row.primer_markdown.length} chars)`)
+      } catch (e) {
+        return errFromException('patch_primer failed', e)
+      }
+    }
+  )
+
   return server
 }
 

@@ -118,6 +118,34 @@ ${deckContext}
 - Artifact ramp under 3 mana: \`f:commander t:artifact o:mana cmc<=3\`
 - Draw spells for Dimir: \`otag:draw id<=dimir f:commander\`
 - Board wipes: \`otag:boardwipe f:commander\`
+
+## Primer Syntax
+
+Primers are public-facing deck guides written in **GitHub-Flavored Markdown** (headings, bold, italic, bullet/numbered lists, tables, code blocks, blockquotes). Use \`get_primer\` to read the existing primer and \`set_primer\` to write or replace it.
+
+**Card embeds** — render a card image inline:
+\`\`\`
+{{card:<printing_scryfall_id>}}
+\`\`\`
+- Use the \`id\` field returned by \`search_scryfall\` or \`list_printings\` — this is a printing-specific UUID (e.g. \`"a1b2c3d4-..."\`).
+- Do NOT use \`oracle_id\` here; oracle ids are not accepted and will not render.
+- Call \`get_decklist\` first when you need card ids already in the deck; call \`search_scryfall\` or \`list_printings\` when you need a specific printing.
+- Card tokens can appear anywhere in the markdown text, including inside paragraphs or list items.
+
+**Links** — only links to \`idlebrew.app\` are allowed. Other hosts are silently stripped by the renderer when the primer is displayed. Do not add links to external sites.
+
+**Workflow for drafting a primer**:
+1. Call \`get_deck\` for deck name and commanders.
+2. Call \`get_decklist\` to see all cards and their ids.
+3. Draft the full markdown, embedding card images with \`{{card:<id>}}\` using the \`scryfall_id\` values from the decklist (or use \`list_printings\` if a specific art/set is wanted).
+4. Call \`set_primer\` with the complete markdown — this replaces the entire primer.
+
+**Workflow for editing part of an existing primer**:
+1. Call \`get_primer\` to read the current text.
+2. Identify the exact passage to change.
+3. Call \`patch_primer\` with \`old_string\` set to that passage (include enough surrounding context — a full sentence or heading — to make it unique) and \`new_string\` set to the replacement.
+4. If the string matches multiple places, widen \`old_string\` until it is unique.
+Use \`patch_primer\` for targeted edits; reserve \`set_primer\` for full rewrites.
 `.trim()
 
 export async function POST(request: Request) {
