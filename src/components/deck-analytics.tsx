@@ -57,6 +57,20 @@ function isLand(typeLine: string | undefined): boolean {
   return !!typeLine && primaryTypeLine(typeLine).includes('Land')
 }
 
+function isBasicLand(typeLine: string | undefined): boolean {
+  return !!typeLine && primaryTypeLine(typeLine).includes('Basic') && primaryTypeLine(typeLine).includes('Land')
+}
+
+// MDFCs where the front face is NOT a land but the back face IS (e.g. "Sorcery // Land")
+function isMdfcWithLandBack(typeLine: string | undefined): boolean {
+  if (!typeLine) return false
+  const sep = typeLine.indexOf(' // ')
+  if (sep === -1) return false
+  const front = typeLine.slice(0, sep)
+  const back = typeLine.slice(sep + 4)
+  return !front.includes('Land') && back.includes('Land')
+}
+
 function cardColors(c: AnalyticsCard): ColorKey[] {
   const cs = (c.colors || []).filter((x): x is ColorKey =>
     x === 'W' || x === 'U' || x === 'B' || x === 'R' || x === 'G'
@@ -297,6 +311,14 @@ function StatsLine({
     const deckSize = cards.reduce((s, c) => s + c.quantity, 0)
     const lands = typeCounts.Land
 
+    const basicLandCount = cards
+      .filter(c => isBasicLand(c.type_line))
+      .reduce((s, c) => s + c.quantity, 0)
+
+    const mdfcLandCount = cards
+      .filter(c => isMdfcWithLandBack(c.type_line))
+      .reduce((s, c) => s + c.quantity, 0)
+
     const onCurve = commanders.map(cmd => {
       const cmc = cmd.cmc ?? 0
       // Cards seen by turn `cmc` going first: opening 7 + (cmc - 1) draws.
@@ -305,7 +327,7 @@ function StatsLine({
       return { name: cmd.name, cmc, probability: p }
     })
 
-    return { avgCmc, avgCmcAll, typeCounts, onCurve }
+    return { avgCmc, avgCmcAll, typeCounts, basicLandCount, mdfcLandCount, onCurve }
   }, [cards, commanders])
 
   return (
@@ -313,10 +335,29 @@ function StatsLine({
       <Stat label="Avg. CMC" value={stats.avgCmcAll.toFixed(2)} hint="all" />
       <Stat label="Avg. CMC" value={stats.avgCmc.toFixed(2)} hint="non-land" />
       {(Object.keys(stats.typeCounts) as CardType[])
-        .filter(t => stats.typeCounts[t] > 0)
+        .filter(t => stats.typeCounts[t] > 0 && t !== 'Land')
         .map(t => (
           <Stat key={t} label={t === 'Sorcery' ? 'Sorceries' : `${t}s`} value={String(stats.typeCounts[t])} />
         ))}
+      {stats.typeCounts.Land > 0 && (
+        <>
+          {stats.basicLandCount > 0 && (
+            <Stat label="Basic Lands" value={String(stats.basicLandCount)} />
+          )}
+          <Stat
+            label="Lands"
+            value={String(stats.typeCounts.Land)}
+            hint={stats.mdfcLandCount > 0 ? 'no MDFC' : undefined}
+          />
+          {stats.mdfcLandCount > 0 && (
+            <Stat
+              label="Lands"
+              value={String(stats.typeCounts.Land + stats.mdfcLandCount)}
+              hint="w/ MDFC"
+            />
+          )}
+        </>
+      )}
       {stats.onCurve.length > 0 && (
         <div className="flex flex-col justify-center min-w-[180px]">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">
