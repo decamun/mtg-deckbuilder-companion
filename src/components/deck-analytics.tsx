@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { Shuffle, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ManaText } from "@/components/mana/ManaText"
+import { primaryTypeLine } from "@/lib/card-types"
 
 export interface AnalyticsCard {
   id: string
@@ -45,14 +46,15 @@ const TYPE_PRIORITY = [
 type CardType = typeof TYPE_PRIORITY[number]
 
 function getCardType(typeLine: string): CardType {
+  const primary = primaryTypeLine(typeLine)
   for (const t of TYPE_PRIORITY) {
-    if (typeLine.includes(t)) return t
+    if (primary.includes(t)) return t
   }
   return 'Creature'
 }
 
 function isLand(typeLine: string | undefined): boolean {
-  return !!typeLine && typeLine.includes('Land')
+  return !!typeLine && primaryTypeLine(typeLine).includes('Land')
 }
 
 function cardColors(c: AnalyticsCard): ColorKey[] {

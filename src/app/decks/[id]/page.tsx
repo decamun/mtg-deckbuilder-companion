@@ -33,6 +33,7 @@ import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner
 import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { formatPrice, pickPrice } from "@/lib/format"
 import { ManaText } from "@/components/mana/ManaText"
+import { getCardTypeGroup } from "@/lib/card-types"
 
 type DeckCardRow = Omit<DeckCard, "image_url" | "face_images" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
 
@@ -862,13 +863,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     sorted.forEach(c => {
       let key = 'Other'
       if (grouping === 'type') {
-        if (c.type_line?.includes('Creature')) key = 'Creature'
-        else if (c.type_line?.includes('Instant')) key = 'Instant'
-        else if (c.type_line?.includes('Sorcery')) key = 'Sorcery'
-        else if (c.type_line?.includes('Artifact')) key = 'Artifact'
-        else if (c.type_line?.includes('Enchantment')) key = 'Enchantment'
-        else if (c.type_line?.includes('Planeswalker')) key = 'Planeswalker'
-        else if (c.type_line?.includes('Land')) key = 'Land'
+        key = getCardTypeGroup(c.type_line)
       } else if (grouping === 'mana') {
         key = `Mana Value ${c.cmc || 0}`
       }
