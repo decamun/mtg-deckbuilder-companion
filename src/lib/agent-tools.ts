@@ -216,6 +216,31 @@ export function buildDeckAgentTools(
         return { cover_image_scryfall_id: row.cover_image_scryfall_id }
       },
     }),
+
+    get_primer: tool({
+      description: "Get this deck's primer markdown.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const deck = await deckService.getDeck(supabase, userId, deckId)
+        return { primer_markdown: deck.primer_markdown }
+      },
+    }),
+
+    set_primer: tool({
+      description:
+        'Write or replace this deck\'s primer. The primer is GitHub-Flavored Markdown (headings, bold, italic, lists, links).' +
+        ' Embed a card image inline with {{card:<printing_scryfall_id>}} — use the `id` field from search_scryfall or list_printings results (a UUID), NOT the oracle_id.' +
+        ' Links must point to idlebrew.app (other hosts are stripped by the renderer).' +
+        ' Call get_decklist first if you need card names/ids to embed.' +
+        ' Pass the complete markdown; this replaces the entire primer.',
+      inputSchema: z.object({
+        markdown: z.string(),
+      }),
+      execute: async ({ markdown }) => {
+        const row = await deckService.setPrimer(supabase, userId, deckId, markdown)
+        return { saved: true, length: row.primer_markdown.length }
+      },
+    }),
   }
 }
 

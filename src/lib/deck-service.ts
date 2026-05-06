@@ -484,4 +484,24 @@ export async function setCoverImage(
   return data as DeckRow
 }
 
+export async function setPrimer(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  markdown: string
+): Promise<DeckRow> {
+  await loadOwnedDeck(supabase, userId, deckId)
+  const versionSince = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('decks')
+    .update({ primer_markdown: markdown })
+    .eq('id', deckId)
+    .eq('user_id', userId)
+    .select()
+    .single()
+  if (error) throw new DeckServiceError(error.message, 'db_error')
+  await recordDeckVersion(supabase, userId, deckId, 'Updated primer', versionSince)
+  return data as DeckRow
+}
+
 export { DeckServiceError }
