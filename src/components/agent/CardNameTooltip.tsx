@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { getCardFaceImages, type CardFaceImage } from "@/lib/scryfall"
 
 interface ScryfallNamedResult {
@@ -61,12 +62,18 @@ export function CardNameTooltip({ name }: { name: string }) {
   })
   const [visible, setVisible] = useState(false)
   const [enlarged, setEnlarged] = useState(false)
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const triggerRef = useRef<HTMLElement | null>(null)
 
   const handleMouseEnter = () => {
     hoverTimer.current = setTimeout(async () => {
       const result = await fetchCardByName(name)
       setEntry(result)
+      if (triggerRef.current) {
+        const rect = triggerRef.current.getBoundingClientRect()
+        setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top })
+      }
       setVisible(true)
     }, 120)
   }
@@ -76,9 +83,12 @@ export function CardNameTooltip({ name }: { name: string }) {
     setVisible(false)
   }
 
+  const tooltipWidth = entry?.found && entry.faces.length > 1 ? 400 : 200
+
   return (
     <span className="relative inline-block">
       <strong
+        ref={triggerRef as React.RefObject<HTMLElement>}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         className={
@@ -90,48 +100,57 @@ export function CardNameTooltip({ name }: { name: string }) {
         {name}
       </strong>
 
-      {visible && entry?.found && (
-        <span
-          className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2"
-          style={{ width: entry.faces.length > 1 ? 400 : 200 }}
-        >
+      {visible && entry?.found && tooltipPos &&
+        createPortal(
+          <span
+            className="pointer-events-none fixed z-[200]"
+            style={{
+              width: tooltipWidth,
+              left: tooltipPos.x - tooltipWidth / 2,
+              top: tooltipPos.y - 8,
+              transform: "translateY(-100%)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setEnlarged(true)}
+              className="pointer-events-auto flex w-full gap-2 border-0 bg-transparent p-0"
+              aria-label={`Enlarge ${entry.cardName}`}
+            >
+              {entry.faces.map((face, index) => (
+                <img
+                  key={`${face.name}-${index}`}
+                  src={face.normal ?? face.small}
+                  alt={face.name}
+                  className="min-w-0 flex-1 rounded-xl shadow-2xl ring-1 ring-border"
+                />
+              ))}
+            </button>
+          </span>,
+          document.body
+        )}
+
+      {enlarged && entry?.found &&
+        createPortal(
           <button
             type="button"
-            onClick={() => setEnlarged(true)}
-            className="pointer-events-auto flex w-full gap-2 border-0 bg-transparent p-0"
-            aria-label={`Enlarge ${entry.cardName}`}
+            onClick={() => setEnlarged(false)}
+            className="fixed inset-0 z-[60] flex w-full cursor-zoom-out items-center justify-center bg-black/70 backdrop-blur-sm border-0 p-0"
+            aria-label="Close preview"
           >
-            {entry.faces.map((face, index) => (
-              <img
-                key={`${face.name}-${index}`}
-                src={face.normal ?? face.small}
-                alt={face.name}
-                className="min-w-0 flex-1 rounded-xl shadow-2xl ring-1 ring-border"
-              />
-            ))}
-          </button>
-        </span>
-      )}
-
-      {enlarged && entry?.found && (
-        <button
-          type="button"
-          onClick={() => setEnlarged(false)}
-          className="fixed inset-0 z-[60] flex w-full cursor-zoom-out items-center justify-center bg-black/70 backdrop-blur-sm border-0 p-0"
-          aria-label="Close preview"
-        >
-          <span className="flex max-w-[95vw] gap-3">
-            {entry.faces.map((face, index) => (
-              <img
-                key={`${face.name}-${index}`}
-                src={face.normal ?? face.small}
-                alt={face.name}
-                className="max-h-[90vh] min-w-0 rounded-xl shadow-2xl"
-              />
-            ))}
-          </span>
-        </button>
-      )}
+            <span className="flex max-w-[95vw] gap-3">
+              {entry.faces.map((face, index) => (
+                <img
+                  key={`${face.name}-${index}`}
+                  src={face.normal ?? face.small}
+                  alt={face.name}
+                  className="max-h-[90vh] min-w-0 rounded-xl shadow-2xl"
+                />
+              ))}
+            </span>
+          </button>,
+          document.body
+        )}
     </span>
   )
 }
