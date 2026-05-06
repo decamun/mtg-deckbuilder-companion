@@ -51,6 +51,10 @@ function summariseInput(toolName: string, input: unknown): string | undefined {
     const qty = typeof o.quantity === "number" ? o.quantity : 1
     return `${qty}× ${o.name}`
   }
+  if (toolName === "set_primer" && typeof o.markdown === "string") {
+    const words = o.markdown.trim().split(/\s+/).filter(Boolean).length
+    return `${words} word${words === 1 ? "" : "s"}…`
+  }
   if (typeof o.tag === "string") return `"${o.tag}"`
   if (typeof o.deck_card_id === "string") return `card ${o.deck_card_id.slice(0, 8)}…`
   return undefined
@@ -66,6 +70,14 @@ function summariseOutput(toolName: string, output: unknown): string | undefined 
   }
   if (toolName === "add_card") return `quantity now ${String(o.quantity ?? "?")}`
   if (toolName === "get_decklist" && Array.isArray(o)) return `${o.length} entries`
+  if (toolName === "set_primer") {
+    const length = typeof o.length === "number" ? o.length : "?"
+    return `saved (${length} chars)`
+  }
+  if (toolName === "get_primer") {
+    const text = typeof o.primer_markdown === "string" ? o.primer_markdown : ""
+    return text ? `${text.length} chars` : "(empty)"
+  }
   if (Array.isArray(o.tags)) return `tags: ${o.tags.join(", ") || "(none)"}`
   return undefined
 }
@@ -302,6 +314,7 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
               <li>Tag every wincon and tutor in this deck</li>
               <li>Swap all my Sol Ring printings to LEA</li>
               <li>Add 5 budget green removal spells</li>
+              <li>Write a primer for this deck</li>
             </ul>
           </div>
         )}

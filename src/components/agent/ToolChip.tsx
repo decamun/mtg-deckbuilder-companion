@@ -27,6 +27,8 @@ const TOOL_LABELS: Record<string, string> = {
   set_card_finish: "Setting finish",
   set_commanders: "Setting commanders",
   set_cover_image: "Setting cover image",
+  get_primer: "Reading primer",
+  set_primer: "Writing primer",
 }
 
 export function ToolChip({ toolName, state, inputSummary, outputSummary, errorText }: Props) {
