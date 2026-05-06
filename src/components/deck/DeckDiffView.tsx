@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import { Badge } from "@/components/ui/badge"
 import { ManaText } from "@/components/mana/ManaText"
 import type { DeckCard } from "@/lib/types"
+import { getCardTypeGroup } from "@/lib/card-types"
 
 function primaryCardImage(card: DeckCard): string | undefined {
   return card.face_images?.[0]?.normal ?? card.face_images?.[0]?.small ?? card.image_url
@@ -49,20 +50,12 @@ interface DeckDiffViewProps {
   after: DiffSide
 }
 
-const TYPE_ORDER = ["Creature", "Planeswalker", "Instant", "Sorcery", "Artifact", "Enchantment", "Land", "Other"]
+const TYPE_ORDER = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land", "Other"]
 const HOVER_PREVIEW_DELAY_MS = 750
 const HOVER_PREVIEW_MAX_VISIBLE_MS = 30_000
 
 function typeGroup(card: DeckCard | undefined): string {
-  const line = card?.type_line ?? ""
-  if (line.includes("Creature")) return "Creature"
-  if (line.includes("Planeswalker")) return "Planeswalker"
-  if (line.includes("Instant")) return "Instant"
-  if (line.includes("Sorcery")) return "Sorcery"
-  if (line.includes("Artifact")) return "Artifact"
-  if (line.includes("Enchantment")) return "Enchantment"
-  if (line.includes("Land")) return "Land"
-  return "Other"
+  return getCardTypeGroup(card?.type_line)
 }
 
 function cardComparisonKey(card: DeckCard): string {
