@@ -55,6 +55,10 @@ function summariseInput(toolName: string, input: unknown): string | undefined {
     const words = o.markdown.trim().split(/\s+/).filter(Boolean).length
     return `${words} word${words === 1 ? "" : "s"}…`
   }
+  if (toolName === "patch_primer" && typeof o.old_string === "string") {
+    const preview = o.old_string.slice(0, 40)
+    return `"${preview}${o.old_string.length > 40 ? "…" : ""}"`
+  }
   if (typeof o.tag === "string") return `"${o.tag}"`
   if (typeof o.deck_card_id === "string") return `card ${o.deck_card_id.slice(0, 8)}…`
   return undefined
@@ -70,7 +74,7 @@ function summariseOutput(toolName: string, output: unknown): string | undefined 
   }
   if (toolName === "add_card") return `quantity now ${String(o.quantity ?? "?")}`
   if (toolName === "get_decklist" && Array.isArray(o)) return `${o.length} entries`
-  if (toolName === "set_primer") {
+  if (toolName === "set_primer" || toolName === "patch_primer") {
     const length = typeof o.length === "number" ? o.length : "?"
     return `saved (${length} chars)`
   }

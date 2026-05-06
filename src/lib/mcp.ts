@@ -381,6 +381,27 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     }
   )
 
+  server.tool(
+    'patch_primer',
+    'Replace an exact passage in a deck\'s primer without rewriting the whole thing.' +
+      ' old_string must match exactly one location in the current primer; include enough surrounding' +
+      ' context (a sentence or heading) to make it unique. Errors if the string is not found or matches' +
+      ' more than once. Call get_primer first to read the current text.',
+    {
+      deck_id: z.string().describe('UUID of the deck'),
+      old_string: z.string().min(1).describe('Exact text to find and replace'),
+      new_string: z.string().describe('Replacement text (may be empty to delete)'),
+    },
+    async ({ deck_id, old_string, new_string }) => {
+      try {
+        const row = await deckService.patchPrimer(supabase, userId, deck_id, old_string, new_string)
+        return ok(`Primer patched (${row.primer_markdown.length} chars)`)
+      } catch (e) {
+        return errFromException('patch_primer failed', e)
+      }
+    }
+  )
+
   return server
 }
 

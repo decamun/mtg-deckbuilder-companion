@@ -241,6 +241,22 @@ export function buildDeckAgentTools(
         return { saved: true, length: row.primer_markdown.length }
       },
     }),
+
+    patch_primer: tool({
+      description:
+        'Replace an exact passage in this deck\'s primer without rewriting the whole thing.' +
+        ' old_string must match exactly one location in the current primer; include enough surrounding' +
+        ' context (a sentence or heading) to make it unique. Errors if the string is not found or matches' +
+        ' more than once. Call get_primer first to read the current text.',
+      inputSchema: z.object({
+        old_string: z.string().min(1).describe('Exact text to find and replace'),
+        new_string: z.string().describe('Replacement text (may be empty to delete)'),
+      }),
+      execute: async ({ old_string, new_string }) => {
+        const row = await deckService.patchPrimer(supabase, userId, deckId, old_string, new_string)
+        return { saved: true, length: row.primer_markdown.length }
+      },
+    }),
   }
 }
 

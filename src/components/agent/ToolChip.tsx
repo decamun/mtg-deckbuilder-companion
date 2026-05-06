@@ -29,6 +29,7 @@ const TOOL_LABELS: Record<string, string> = {
   set_cover_image: "Setting cover image",
   get_primer: "Reading primer",
   set_primer: "Writing primer",
+  patch_primer: "Patching primer",
 }
 
 export function ToolChip({ toolName, state, inputSummary, outputSummary, errorText }: Props) {

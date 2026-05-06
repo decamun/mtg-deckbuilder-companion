@@ -139,6 +139,13 @@ Primers are public-facing deck guides written in **GitHub-Flavored Markdown** (h
 2. Call \`get_decklist\` to see all cards and their ids.
 3. Draft the full markdown, embedding card images with \`{{card:<id>}}\` using the \`scryfall_id\` values from the decklist (or use \`list_printings\` if a specific art/set is wanted).
 4. Call \`set_primer\` with the complete markdown — this replaces the entire primer.
+
+**Workflow for editing part of an existing primer**:
+1. Call \`get_primer\` to read the current text.
+2. Identify the exact passage to change.
+3. Call \`patch_primer\` with \`old_string\` set to that passage (include enough surrounding context — a full sentence or heading — to make it unique) and \`new_string\` set to the replacement.
+4. If the string matches multiple places, widen \`old_string\` until it is unique.
+Use \`patch_primer\` for targeted edits; reserve \`set_primer\` for full rewrites.
 `.trim()
 
 export async function POST(request: Request) {
