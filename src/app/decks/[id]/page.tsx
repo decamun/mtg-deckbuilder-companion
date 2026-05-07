@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, use, useRef, useMemo, type CSSProperties, type ReactNode } from "react"
+import { useState, useEffect, useLayoutEffect, use, useRef, useMemo, type CSSProperties, type ReactNode } from "react"
 import { motion, type MotionProps } from "framer-motion"
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
@@ -276,9 +276,19 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     if (next.has(name)) next.delete(name); else next.add(name)
     return next
   })
-  const toggleAllSections = (allNames: string[]) => setCollapsedSections(prev =>
-    prev.size === allNames.length ? new Set() : new Set(allNames)
-  )
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const scrollAnchorRef = useRef<{ el: HTMLElement; top: number } | null>(null)
+  useLayoutEffect(() => {
+    const anchor = scrollAnchorRef.current
+    if (!anchor || !scrollContainerRef.current) return
+    scrollAnchorRef.current = null
+    const delta = anchor.el.getBoundingClientRect().top - anchor.top
+    scrollContainerRef.current.scrollTop += delta
+  })
+  const toggleAllSections = (allNames: string[], anchorEl: HTMLElement) => {
+    scrollAnchorRef.current = { el: anchorEl, top: anchorEl.getBoundingClientRect().top }
+    setCollapsedSections(prev => prev.size === allNames.length ? new Set() : new Set(allNames))
+  }
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
   const [previewFaceIndex, setPreviewFaceIndex] = useState(0)
   const [readyCardInteractionKey, setReadyCardInteractionKey] = useState<string | null>(null)
@@ -1221,7 +1231,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
       {/* Workspace */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-      <div className="flex-1 overflow-y-auto bg-background/20 min-w-0">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-background/20 min-w-0">
         <div className="p-6 max-w-7xl mx-auto space-y-8">
         {tab === 'decklist' && (<>
           {/* Toolbar */}
@@ -1307,7 +1317,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               <button
                 type="button"
                 onClick={() => toggleSection(groupName)}
-                onDoubleClick={(e) => { e.preventDefault(); toggleAllSections(Object.keys(groupedCards)) }}
+                onDoubleClick={(e) => { e.preventDefault(); toggleAllSections(Object.keys(groupedCards), e.currentTarget) }}
                 className="flex w-full items-center gap-2 border-b border-border pb-2 mb-4 text-left group"
               >
                 <ChevronDown className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 ${collapsedSections.has(groupName) ? '-rotate-90' : ''}`} />
