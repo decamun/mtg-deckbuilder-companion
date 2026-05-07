@@ -41,38 +41,61 @@ The full key is shown exactly once. Copy it immediately and store it somewhere s
 
 ---
 
+## A note on OAuth and remote MCP servers
+
+You may see an error in Claude Desktop or Cursor that mentions a **client ID** or says the MCP server "failed to start." This is not a bug in your configuration. Newer MCP clients attempt OAuth 2.0 negotiation when connecting to any remote HTTP server — they try to register themselves as OAuth clients before sending your Bearer token. The idlebrew server uses simple Bearer-token auth rather than a full OAuth flow, so that negotiation fails.
+
+The fix is **mcp-remote**, a small local bridge that runs as a stdio process (which all MCP clients support natively) and relays traffic to the HTTP server with your Bearer token attached. The client sees a normal stdio MCP server; mcp-remote handles the HTTP connection on its behalf.
+
+The steps below use mcp-remote for Claude Desktop and Cursor. Claude Code has its own HTTP transport that works without the bridge.
+
+---
+
 ## Step 2 — Connect Claude Desktop
 
-Claude Desktop reads its MCP server list from a JSON config file on disk.
+### Install mcp-remote (one time)
 
-**Locate the config file:**
+mcp-remote is an npm package. You do not need to install it globally — the \`npx -y\` invocation in the config will download and run it automatically on first use.
+
+If you prefer a permanent install:
+
+\`\`\`bash
+npm install -g mcp-remote
+\`\`\`
+
+### Edit the config file
+
+Claude Desktop reads from a JSON config file on disk. Find it at:
 
 | OS | Path |
 |---|---|
 | macOS | \`~/Library/Application Support/Claude/claude_desktop_config.json\` |
 | Windows | \`%APPDATA%\\Claude\\claude_desktop_config.json\` |
 
-You can also reach it from inside Claude Desktop via **Settings → Developer → Edit Config**.
+You can also reach it via **Settings → Developer → Edit Config** inside Claude Desktop.
 
-**Add the idlebrew server block:**
+Add the idlebrew entry to \`mcpServers\`:
 
 \`\`\`json
 {
   "mcpServers": {
     "idlebrew": {
-      "type": "streamable-http",
-      "url": "https://idlebrew.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_KEY"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://idlebrew.com/api/mcp",
+        "--header",
+        "Authorization:Bearer YOUR_KEY"
+      ]
     }
   }
 }
 \`\`\`
 
-Replace \`YOUR_KEY\` with the key you copied in Step 1. If you already have other servers in the \`mcpServers\` object, add \`"idlebrew"\` alongside them — do not replace the whole file.
+Replace \`YOUR_KEY\` with the key you copied in Step 1. Note there is **no space** between \`Authorization:\` and \`Bearer\` in the header string — this is required by mcp-remote's argument parser. If you already have other servers in \`mcpServers\`, add \`"idlebrew"\` alongside them; do not replace the whole file.
 
-**Restart Claude Desktop** (fully quit and reopen; a new conversation is not enough). Click the tools icon (the plug symbol) in a new chat. You should see idlebrew tools listed — \`list_decks\`, \`get_decklist\`, \`add_card\`, and others. Try:
+**Fully quit and reopen Claude Desktop** (a new conversation alone is not enough). Open a new chat and click the tools icon (the plug symbol). You should see idlebrew tools listed — \`list_decks\`, \`get_decklist\`, \`add_card\`, and others. Try asking:
 
 > *"List my idlebrew decks."*
 
@@ -80,7 +103,7 @@ Replace \`YOUR_KEY\` with the key you copied in Step 1. If you already have othe
 
 ## Step 3 — Connect Claude Code
 
-Claude Code (the CLI) supports both project-level and global MCP configuration, and also has an \`mcp add\` command for quick setup.
+Claude Code (the CLI tool) has its own HTTP transport that sends headers directly without OAuth negotiation, so mcp-remote is not needed.
 
 ### Option A: CLI command (quickest)
 
@@ -89,7 +112,7 @@ claude mcp add --transport http idlebrew https://idlebrew.com/api/mcp \\
   --header "Authorization: Bearer YOUR_KEY"
 \`\`\`
 
-This writes the config to \`~/.claude/mcp.json\` (global, available in every project). To scope it to the current project only, add \`--scope project\`:
+This writes to \`~/.claude/mcp.json\` (global, available in every project). To scope it to just the current project instead, add \`--scope project\`:
 
 \`\`\`bash
 claude mcp add --transport http --scope project idlebrew \\
@@ -99,9 +122,9 @@ claude mcp add --transport http --scope project idlebrew \\
 
 ### Option B: Edit the config file manually
 
-**Project-level** (only active inside this repo): create or edit \`.claude/mcp.json\` at the repo root.
+**Project-level** (only active inside this repo) — create or edit \`.claude/mcp.json\` at the repo root.
 
-**Global** (active in every Claude Code session): create or edit \`~/.claude/mcp.json\`.
+**Global** (active in every Claude Code session) — create or edit \`~/.claude/mcp.json\`.
 
 Both files use the same format:
 
@@ -127,9 +150,9 @@ Start a new Claude Code session and run:
 /mcp
 \`\`\`
 
-You should see \`idlebrew\` listed as a connected server with its tools enumerated. If the server shows as disconnected, double-check the key and URL, then run \`claude mcp list\` to confirm the entry was saved correctly.
+You should see \`idlebrew\` listed as connected with its tools enumerated. If it shows as disconnected, double-check the key and URL, then run \`claude mcp list\` to confirm the entry was saved correctly.
 
-Once connected you can ask Claude Code things like:
+Once connected you can prompt Claude Code with things like:
 
 > *"Pull the decklist for my Prossh deck and tag every card that generates tokens as 'token-producer'."*
 
@@ -137,7 +160,7 @@ Once connected you can ask Claude Code things like:
 
 ## Step 4 — Connect Cursor
 
-Cursor stores MCP configuration in a JSON file at the project or global level.
+Cursor also requires the mcp-remote bridge for remote HTTP servers.
 
 **Project-level** — create or edit \`.cursor/mcp.json\` at the root of your project:
 
@@ -145,11 +168,14 @@ Cursor stores MCP configuration in a JSON file at the project or global level.
 {
   "mcpServers": {
     "idlebrew": {
-      "type": "streamable-http",
-      "url": "https://idlebrew.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_KEY"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://idlebrew.com/api/mcp",
+        "--header",
+        "Authorization:Bearer YOUR_KEY"
+      ]
     }
   }
 }
@@ -157,9 +183,9 @@ Cursor stores MCP configuration in a JSON file at the project or global level.
 
 **Global** — create or edit \`~/.cursor/mcp.json\` for access across all projects (same format as above).
 
-Alternatively, open **Cursor Settings → MCP → Add new global MCP server** and paste the JSON block into the editor there.
+You can also use the GUI: open **Cursor Settings → MCP → Add new global MCP server** and paste the JSON block into the editor.
 
-After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shift+P\` / \`Cmd+Shift+P\`). In Cursor's Agent chat the idlebrew tools become available immediately. Verify by asking:
+After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shift+P\` / \`Cmd+Shift+P\`). In Cursor's Agent chat the idlebrew tools will be available immediately. Verify with:
 
 > *"What decks do I have on idlebrew?"*
 
@@ -191,13 +217,15 @@ After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shi
 
 ## Troubleshooting
 
-**401 Unauthorized** — The key is missing, inactive, or the \`Authorization\` header is malformed. Confirm it reads exactly \`Bearer YOUR_KEY\` with one space and no surrounding quotes. Check that the key is still active on your Profile page (revoked keys appear greyed out).
+**"Failed to start MCP" / "must be provided a client id"** — Claude Desktop or Cursor is trying to do OAuth negotiation. Make sure you are using the mcp-remote config from Step 2 / Step 4, not a direct \`streamable-http\` URL entry. The OAuth error only appears when the client tries to connect to the HTTP URL without the bridge.
 
-**429 Too Many Requests** — The MCP server enforces a limit of 120 requests per minute per key. If you hit this, wait a minute before retrying or break your work into smaller batches.
+**401 Unauthorized** — The key is missing, inactive, or the header is malformed. In mcp-remote configs check there is no space between \`Authorization:\` and \`Bearer\`. In Claude Code configs confirm the header reads \`Authorization: Bearer YOUR_KEY\` with exactly one space after the colon. Check that the key is still active on your Profile page.
 
-**Tools not appearing after config change** — Claude Desktop requires a full quit-and-reopen (not just a new conversation). Cursor requires **Reload Window**. Claude Code picks up changes on the next session start; you can also run \`claude mcp list\` to confirm the entry exists before opening a session.
+**429 Too Many Requests** — The server enforces a limit of 120 requests per minute per key. Wait a minute and retry, or break your work into smaller prompts.
 
-**Wrong deck being modified** — Each key is scoped to the account that created it. Make sure you are logged in to the same idlebrew account that owns the deck.
+**Tools not appearing after a config change** — Claude Desktop requires a full quit-and-reopen. Cursor requires **Reload Window**. Claude Code picks up changes at the next session start; run \`claude mcp list\` to confirm the entry exists before opening a session.
+
+**Wrong deck being modified** — Each key is scoped to the account that created it. Confirm you are logged in to the same idlebrew account that owns the deck.
 `,
   },
   {

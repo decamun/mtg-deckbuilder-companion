@@ -332,9 +332,8 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
             Generate an API key in your{" "}
             <Link href="/profile" className="text-primary underline underline-offset-2">
               profile settings
-            </Link>{" "}
-            and pass it as{" "}
-            <code className="font-mono">Authorization: Bearer YOUR_KEY</code>.
+            </Link>
+            {", then follow the setup guide to connect Claude Desktop, Claude Code, or Cursor."}
           </p>
           <Link
             href="/blog/connecting-idlebrew-mcp"

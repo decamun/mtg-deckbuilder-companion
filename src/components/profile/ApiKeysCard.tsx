@@ -182,7 +182,7 @@ export function ApiKeysCard() {
                 href="/blog/connecting-idlebrew-mcp"
                 className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
               >
-                How to connect Claude Desktop &amp; Cursor
+                Setup guide for Claude Desktop, Claude Code &amp; Cursor
                 <ExternalLink className="h-3 w-3" />
               </Link>
             </div>
