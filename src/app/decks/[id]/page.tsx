@@ -1629,6 +1629,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             name: deck.name ?? "",
             description: deck.description ?? null,
             format: deck.format ?? null,
+            budget_usd: deck.budget_usd ?? null,
+            bracket: deck.bracket ?? null,
             is_public: !!deck.is_public,
           }}
           onSaved={(next) => setDeck({ ...deck, ...next })}

@@ -31,6 +31,10 @@ export const ALL_MODELS: ReadonlyArray<ModelId> = [
 
 export const DEFAULT_MODEL: ModelId = 'anthropic/claude-haiku-4.5'
 
+export function isModelId(value: unknown): value is ModelId {
+  return typeof value === 'string' && ALL_MODELS.includes(value as ModelId)
+}
+
 export const TIER_LIMITS: Record<AgentTier, TierLimits> = {
   free: {
     callsPerHour: 30,
@@ -118,12 +122,17 @@ export async function recordCall(
   supabase: SupabaseClient,
   userId: string,
   model: ModelId
-): Promise<void> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isModelId(model)) {
+    return { ok: false, error: 'Unknown model' }
+  }
+
   const { error } = await supabase
     .from('agent_call_log')
     .insert({ user_id: userId, model })
   if (error) {
-    // Don't fail the request because quota logging blew up. Just warn.
     console.warn('[agent-quota] recordCall failed:', error.message)
+    return { ok: false, error: error.message }
   }
+  return { ok: true }
 }

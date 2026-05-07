@@ -21,6 +21,8 @@ export interface DeckRow {
   format: string | null
   description: string | null
   is_public: boolean
+  budget_usd: number | null
+  bracket: number | null
   cover_image_scryfall_id: string | null
   commander_scryfall_ids: string[]
   primer_markdown: string
@@ -134,6 +136,8 @@ async function recordDeckVersion(
       name: deck.name,
       description: deck.description ?? null,
       format: deck.format ?? null,
+      budget_usd: deck.budget_usd ?? null,
+      bracket: deck.bracket ?? null,
       commanders: deck.commander_scryfall_ids ?? [],
       cover_image_scryfall_id: deck.cover_image_scryfall_id ?? null,
       is_public: !!deck.is_public,
@@ -482,6 +486,46 @@ export async function setCoverImage(
     versionSince
   )
   return data as DeckRow
+}
+
+export async function setPrimer(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  markdown: string
+): Promise<DeckRow> {
+  await loadOwnedDeck(supabase, userId, deckId)
+  const versionSince = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('decks')
+    .update({ primer_markdown: markdown })
+    .eq('id', deckId)
+    .eq('user_id', userId)
+    .select()
+    .single()
+  if (error) throw new DeckServiceError(error.message, 'db_error')
+  await recordDeckVersion(supabase, userId, deckId, 'Updated primer', versionSince)
+  return data as DeckRow
+}
+
+export async function patchPrimer(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  oldString: string,
+  newString: string
+): Promise<DeckRow> {
+  const deck = await loadOwnedDeck(supabase, userId, deckId)
+  const current = deck.primer_markdown ?? ''
+  const count = current.split(oldString).length - 1
+  if (count === 0) throw new DeckServiceError('old_string not found in primer', 'invalid')
+  if (count > 1)
+    throw new DeckServiceError(
+      `old_string matches ${count} locations — provide more surrounding context to make it unique`,
+      'invalid'
+    )
+  const updated = current.replace(oldString, newString)
+  return setPrimer(supabase, userId, deckId, updated)
 }
 
 export { DeckServiceError }

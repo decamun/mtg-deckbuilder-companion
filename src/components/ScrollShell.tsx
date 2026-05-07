@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 import { BrewSection } from "@/components/BrewSection"
+import { BrowseSection } from "@/components/BrowseSection"
 import { DecksSection } from "@/components/DecksSection"
 import { BLOG_POSTS } from "@/lib/blog"
 import { supabase } from "@/lib/supabase/client"
@@ -11,16 +12,18 @@ import { supabase } from "@/lib/supabase/client"
 const SECTION_PATHS: Record<string, string> = {
   brew: "/brew",
   decks: "/decks",
+  browse: "/browse",
   blog: "/blog",
 }
 
 interface Props {
-  initialSection: "brew" | "decks" | "blog"
+  initialSection: "brew" | "decks" | "browse" | "blog"
 }
 
 export function ScrollShell({ initialSection }: Props) {
   const brewRef = useRef<HTMLElement>(null)
   const decksRef = useRef<HTMLElement>(null)
+  const browseRef = useRef<HTMLElement>(null)
   const blogRef = useRef<HTMLElement>(null)
   // Start false — decks section is hidden until we confirm a live session.
   // This matches the nav tab behaviour and avoids any flash for logged-out users.
@@ -59,8 +62,8 @@ export function ScrollShell({ initialSection }: Props) {
     }
     if (initialSection === "decks" && !isAuthenticated) return
 
-    const refMap = { decks: decksRef, blog: blogRef }
-    const el = refMap[initialSection as "decks" | "blog"].current
+    const refMap = { decks: decksRef, browse: browseRef, blog: blogRef }
+    const el = refMap[initialSection as "decks" | "browse" | "blog"].current
     if (!el) return
 
     initialScrollDone.current = true
@@ -90,7 +93,7 @@ export function ScrollShell({ initialSection }: Props) {
       { rootMargin: "-50% 0px -50% 0px", threshold: 0 }
     )
 
-    for (const ref of [brewRef, decksRef, blogRef]) {
+    for (const ref of [brewRef, decksRef, browseRef, blogRef]) {
       if (ref.current) obs.observe(ref.current)
     }
 
@@ -116,6 +119,14 @@ export function ScrollShell({ initialSection }: Props) {
           <DecksSection />
         </section>
       )}
+
+      <section
+        id="browse"
+        ref={browseRef}
+        className="flex min-h-[calc(100vh-3.5rem)] flex-col border-b border-border"
+      >
+        <BrowseSection />
+      </section>
 
       <section
         id="blog"

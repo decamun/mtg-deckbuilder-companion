@@ -305,6 +305,8 @@ export function BrewSection() {
             name: deckName,
             user_id: user.id,
             format: "edh",
+            budget_usd: opts.budgetUsd,
+            bracket: opts.bracket,
             commander_scryfall_ids: commanderIds,
             cover_image_scryfall_id: card.id,
           })
