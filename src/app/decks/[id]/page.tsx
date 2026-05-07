@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect, use, useRef, useMemo, type CSSProperties, type ReactNode } from "react"
+import { useState, useEffect, useLayoutEffect, use, useRef, useMemo, type CSSProperties, type ReactNode } from "react"
 import { motion, type MotionProps } from "framer-motion"
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
-import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2 } from "lucide-react"
+import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2, ChevronDown } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -270,6 +270,25 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
   const [cardSize, setCardSize] = useState(DEFAULT_CARD_SIZE)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const toggleSection = (name: string) => setCollapsedSections(prev => {
+    const next = new Set(prev)
+    if (next.has(name)) next.delete(name); else next.add(name)
+    return next
+  })
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const scrollAnchorRef = useRef<{ el: HTMLElement; top: number } | null>(null)
+  useLayoutEffect(() => {
+    const anchor = scrollAnchorRef.current
+    if (!anchor || !scrollContainerRef.current) return
+    scrollAnchorRef.current = null
+    const delta = anchor.el.getBoundingClientRect().top - anchor.top
+    scrollContainerRef.current.scrollTop += delta
+  })
+  const toggleAllSections = (allNames: string[], anchorEl: HTMLElement) => {
+    scrollAnchorRef.current = { el: anchorEl, top: anchorEl.getBoundingClientRect().top }
+    setCollapsedSections(prev => prev.size === allNames.length ? new Set() : new Set(allNames))
+  }
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
   const [previewFaceIndex, setPreviewFaceIndex] = useState(0)
   const [readyCardInteractionKey, setReadyCardInteractionKey] = useState<string | null>(null)
@@ -1212,73 +1231,71 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
       {/* Workspace */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-      <div className="flex-1 overflow-y-auto bg-background/20 min-w-0">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-background/20 min-w-0">
         <div className="p-6 max-w-7xl mx-auto space-y-8">
         {tab === 'decklist' && (<>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            {commanderCards.length > 0 ? (
-              <div className="order-2 flex flex-wrap justify-end gap-3 lg:order-2">
-                {commanderCards.map(c => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className="group relative flex w-56 items-center gap-3 rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left shadow-lg transition hover:border-yellow-300"
-                    onClick={() => showClickedPreview(c, 'Commander')}
-                  >
-                    {primaryDeckCardImage(c) ? (
-                      <CardThumbnail card={c} className="h-28 shrink-0" imageClassName="h-28 w-auto rounded-lg border border-border/60" overlayClassName="rounded-lg" />
-                    ) : (
-                      <div className="flex h-28 aspect-[5/7] items-center justify-center rounded-lg border border-border/40 bg-muted/40">
-                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
-                        <Crown className="h-3 w-3" /> Commander
-                      </div>
-                      <ManaText text={c.name} className="truncate text-sm font-semibold text-foreground" />
-                      <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{c.type_line}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="hidden lg:block" />
-            )}
-            <div className="flex flex-wrap items-center justify-end gap-2 lg:order-1">
-              <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">
-                Card size
-                <input
-                  type="range"
-                  min={MIN_CARD_SIZE}
-                  max={MAX_CARD_SIZE}
-                  step={4}
-                  value={cardSize}
-                  onChange={(e) => setCardSize(Number(e.target.value))}
-                  className="w-28 accent-primary"
-                />
-                <span className="w-8 text-right font-mono text-[11px]">{cardSize}</span>
-              </label>
-              <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
-                <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
-                  <SelectValue placeholder="Group by" />
-                </SelectTrigger>
-                <SelectContent className="bg-card border-border text-foreground">
-                  <SelectItem value="none">No Grouping</SelectItem>
-                  <SelectItem value="type">By Type</SelectItem>
-                  <SelectItem value="mana">By Mana Cost</SelectItem>
-                  <SelectItem value="tag">By Tags</SelectItem>
-                </SelectContent>
-              </Select>
-              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
-                <TabsList className="h-7 bg-transparent">
-                  <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
-                  <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
-                  <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">
+              Card size
+              <input
+                type="range"
+                min={MIN_CARD_SIZE}
+                max={MAX_CARD_SIZE}
+                step={4}
+                value={cardSize}
+                onChange={(e) => setCardSize(Number(e.target.value))}
+                className="w-28 accent-primary"
+              />
+              <span className="w-8 text-right font-mono text-[11px]">{cardSize}</span>
+            </label>
+            <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
+              <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
+                <SelectValue placeholder="Group by" />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border text-foreground">
+                <SelectItem value="none">No Grouping</SelectItem>
+                <SelectItem value="type">By Type</SelectItem>
+                <SelectItem value="mana">By Mana Cost</SelectItem>
+                <SelectItem value="tag">By Tags</SelectItem>
+              </SelectContent>
+            </Select>
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
+              <TabsList className="h-7 bg-transparent">
+                <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
+                <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
+                <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
+          {/* Commanders */}
+          {commanderCards.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {commanderCards.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="group flex w-64 items-center gap-3 rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left shadow-lg transition hover:border-yellow-300 overflow-hidden"
+                  onClick={() => showClickedPreview(c, 'Commander')}
+                >
+                  {primaryDeckCardImage(c) ? (
+                    <CardThumbnail card={c} className="h-24 shrink-0" imageClassName="h-24 w-auto rounded-lg border border-border/60" overlayClassName="rounded-lg" />
+                  ) : (
+                    <div className="flex h-24 aspect-[5/7] shrink-0 items-center justify-center rounded-lg border border-border/40 bg-muted/40">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
+                      <Crown className="h-3 w-3" /> Commander
+                    </div>
+                    <div className="truncate text-sm font-semibold text-foreground">{c.name}</div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">{c.type_line}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
           {cardsLoading && cards.length === 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
               {Array.from({ length: 12 }).map((_, i) => (
@@ -1297,12 +1314,21 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             })
             .map(([groupName, groupCards]) => (
             <DroppableTagGroup key={groupName} id={groupName} enabled={!cardDragDisabled && groupName !== 'Untagged'}>
-              <h3 className="text-xl font-bold border-b border-border pb-2 mb-4 text-foreground">
-                {groupName}{' '}
-                <span className="text-sm font-normal text-muted-foreground ml-2">
-                  ({groupCards.reduce((a, c) => a + c.quantity, 0)})
-                </span>
-              </h3>
+              <button
+                type="button"
+                onClick={() => toggleSection(groupName)}
+                onDoubleClick={(e) => { e.preventDefault(); toggleAllSections(Object.keys(groupedCards), e.currentTarget) }}
+                className="flex w-full items-center gap-2 border-b border-border pb-2 mb-4 text-left group"
+              >
+                <ChevronDown className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 ${collapsedSections.has(groupName) ? '-rotate-90' : ''}`} />
+                <h3 className="text-xl font-bold text-foreground">
+                  {groupName}{' '}
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    ({groupCards.reduce((a, c) => a + c.quantity, 0)})
+                  </span>
+                </h3>
+              </button>
+              {collapsedSections.has(groupName) ? null : (<>
 
               {/* ── VISUAL VIEW ── */}
               {viewMode === 'visual' && (
@@ -1564,6 +1590,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   ))}
                 </div>
               )}
+            </>)}
             </DroppableTagGroup>
           ))}
           </DndContext>
