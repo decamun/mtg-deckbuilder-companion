@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -27,7 +27,10 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user && request.nextUrl.pathname.startsWith('/decks')) {
+  const path = request.nextUrl.pathname
+  const isDeckListPath = path === '/decks' || path === '/decks/'
+
+  if (!user && isDeckListPath) {
     const redirect = request.nextUrl.clone()
     redirect.pathname = '/login'
     return NextResponse.redirect(redirect)

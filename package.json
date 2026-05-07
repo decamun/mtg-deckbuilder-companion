@@ -13,6 +13,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "test:p0-security": "node scripts/test-p0-security.mjs",
     "test:deck-service": "node scripts/test-deck-service-validation.mjs",
     "agent:pro-account": "node scripts/provision-agent-pro-account.mjs"
   },

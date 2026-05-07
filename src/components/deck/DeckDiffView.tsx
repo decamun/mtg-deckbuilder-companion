@@ -5,6 +5,18 @@ import { createPortal } from "react-dom"
 import { Badge } from "@/components/ui/badge"
 import { ManaText } from "@/components/mana/ManaText"
 import type { DeckCard } from "@/lib/types"
+import { getCardTypeGroup } from "@/lib/card-types"
+
+function primaryCardImage(card: DeckCard): string | undefined {
+  return card.face_images?.[0]?.normal ?? card.face_images?.[0]?.small ?? card.image_url
+}
+
+function CardFaceImage({ card, className, alt = card.name }: { card: DeckCard; className: string; alt?: string }) {
+  const imageUrl = primaryCardImage(card)
+  if (!imageUrl) return null
+
+  return <img src={imageUrl} alt={alt} className={className} draggable={false} />
+}
 
 type DiffSide = {
   label: string
@@ -38,20 +50,12 @@ interface DeckDiffViewProps {
   after: DiffSide
 }
 
-const TYPE_ORDER = ["Creature", "Planeswalker", "Instant", "Sorcery", "Artifact", "Enchantment", "Land", "Other"]
+const TYPE_ORDER = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land", "Other"]
 const HOVER_PREVIEW_DELAY_MS = 750
 const HOVER_PREVIEW_MAX_VISIBLE_MS = 30_000
 
 function typeGroup(card: DeckCard | undefined): string {
-  const line = card?.type_line ?? ""
-  if (line.includes("Creature")) return "Creature"
-  if (line.includes("Planeswalker")) return "Planeswalker"
-  if (line.includes("Instant")) return "Instant"
-  if (line.includes("Sorcery")) return "Sorcery"
-  if (line.includes("Artifact")) return "Artifact"
-  if (line.includes("Enchantment")) return "Enchantment"
-  if (line.includes("Land")) return "Land"
-  return "Other"
+  return getCardTypeGroup(card?.type_line)
 }
 
 function cardComparisonKey(card: DeckCard): string {
@@ -165,11 +169,12 @@ function finishLabel(finish: DeckCard["finish"]): string {
 }
 
 function CardArtPreview({ card }: { card: DeckCard }) {
+  const imageUrl = primaryCardImage(card)
   return (
     <div className="relative">
-      {card.image_url ? (
+      {imageUrl ? (
         <>
-          <img src={card.image_url} alt={card.name} className="w-64 rounded-xl border border-border/50 shadow-2xl" draggable={false} />
+          <img src={imageUrl} alt={card.name} className="w-64 rounded-xl border border-border/50 shadow-2xl" draggable={false} />
           {(card.finish === "foil" || card.finish === "etched") && (
             <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
           )}
@@ -213,9 +218,9 @@ function CardCell({
       onMouseLeave={onMouseLeave}
     >
       <span className="w-6 shrink-0 text-right font-mono text-sm text-muted-foreground">{quantity}</span>
-      {card.image_url && (
+      {primaryCardImage(card) && (
         <div className="relative shrink-0">
-          <img src={card.image_url} alt="" className="h-10 rounded border border-border/50" draggable={false} />
+          <CardFaceImage card={card} alt="" className="h-10 rounded border border-border/50" />
           {(card.finish === "foil" || card.finish === "etched") && (
             <div className="absolute inset-0 pointer-events-none foil-overlay rounded" />
           )}
@@ -283,7 +288,7 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
   }
 
   const scheduleHoverPreview = (card: DeckCard, event: React.MouseEvent<HTMLDivElement>) => {
-    if (!card.image_url) return
+    if (!primaryCardImage(card)) return
     if (hoverPreviewTimer) clearTimeout(hoverPreviewTimer)
     const timer = setTimeout(() => {
       setHoverPreview({ card, x: event.clientX, y: event.clientY })

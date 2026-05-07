@@ -1,17 +1,16 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
-import * as deckService from './deck-service'
+import type { McpContext } from './mcp-context'
 import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfall'
 
 /**
  * Build an MCP server bound to a specific authenticated user.
  *
- * `supabase` is either the cookie-aware session client (RLS active) or the
- * service-role client (RLS bypassed). Either way, every mutation goes through
- * `deckService`, which scopes by user_id explicitly.
+ * Tools receive only a user-scoped context. That keeps service-role clients
+ * behind deck-service helpers that apply explicit user_id ownership checks.
  */
-export function createMcpServer(supabase: SupabaseClient, userId: string) {
+export function createMcpServer(context: McpContext) {
+  const { deckService: decks } = context
   const server = new McpServer({
     name: 'idlebrew-MTG-Agent',
     version: '2.0.0',
@@ -89,15 +88,15 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     {},
     async () => {
       try {
-        const decks = await deckService.listDecks(supabase, userId)
-        const trimmed = decks.map((d) => ({
+        const rows = await decks.listDecks()
+        const trimmed = rows.map((d) => ({
           id: d.id,
           name: d.name,
           format: d.format,
           created_at: d.created_at,
           is_public: d.is_public,
         }))
-        return json(`You have ${decks.length} deck(s):`, trimmed)
+        return json(`You have ${rows.length} deck(s):`, trimmed)
       } catch (e) {
         return errFromException('list_decks failed', e)
       }
@@ -110,7 +109,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     { deck_id: z.string().describe('UUID of the deck') },
     async ({ deck_id }) => {
       try {
-        const deck = await deckService.getDeck(supabase, userId, deck_id)
+        const deck = await decks.getDeck(deck_id)
         return json('Deck:', {
           id: deck.id,
           name: deck.name,
@@ -132,7 +131,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     { deck_id: z.string().describe('UUID of the deck') },
     async ({ deck_id }) => {
       try {
-        const cards = await deckService.getDecklist(supabase, userId, deck_id)
+        const cards = await decks.getDecklist(deck_id)
         const trimmed = cards.map((c) => ({
           deck_card_id: c.id,
           name: c.name,
@@ -174,7 +173,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     },
     async ({ deck_id, scryfall_id, name, oracle_id, printing_scryfall_id, quantity, finish }) => {
       try {
-        const row = await deckService.addCard(supabase, userId, deck_id, {
+        const row = await decks.addCard(deck_id, {
           scryfall_id,
           name,
           oracle_id: oracle_id ?? null,
@@ -199,7 +198,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     },
     async ({ deck_card_id }) => {
       try {
-        await deckService.removeCard(supabase, userId, deck_card_id)
+        await decks.removeCard(deck_card_id)
         return ok(`Removed deck_card ${deck_card_id}`)
       } catch (e) {
         return errFromException('remove_card failed', e)
@@ -216,7 +215,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     },
     async ({ deck_card_id, quantity }) => {
       try {
-        const row = await deckService.setCardQuantity(supabase, userId, deck_card_id, quantity)
+        const row = await decks.setCardQuantity(deck_card_id, quantity)
         if (!row) return ok(`Removed deck_card ${deck_card_id} (quantity set to 0)`)
         return ok(`Set ${row.name} quantity to ${row.quantity}`)
       } catch (e) {
@@ -231,7 +230,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     { deck_card_id: z.string(), tag: z.string().min(1) },
     async ({ deck_card_id, tag }) => {
       try {
-        const row = await deckService.addCardTag(supabase, userId, deck_card_id, tag)
+        const row = await decks.addCardTag(deck_card_id, tag)
         return ok(`Tags on ${row.name}: ${row.tags.join(', ') || '(none)'}`)
       } catch (e) {
         return errFromException('add_card_tag failed', e)
@@ -245,7 +244,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     { deck_card_id: z.string(), tag: z.string().min(1) },
     async ({ deck_card_id, tag }) => {
       try {
-        const row = await deckService.removeCardTag(supabase, userId, deck_card_id, tag)
+        const row = await decks.removeCardTag(deck_card_id, tag)
         return ok(`Tags on ${row.name}: ${row.tags.join(', ') || '(none)'}`)
       } catch (e) {
         return errFromException('remove_card_tag failed', e)
@@ -259,7 +258,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     { deck_card_id: z.string(), tags: z.array(z.string()) },
     async ({ deck_card_id, tags }) => {
       try {
-        const row = await deckService.setCardTags(supabase, userId, deck_card_id, tags)
+        const row = await decks.setCardTags(deck_card_id, tags)
         return ok(`Tags on ${row.name}: ${row.tags.join(', ') || '(none)'}`)
       } catch (e) {
         return errFromException('set_card_tags failed', e)
@@ -279,12 +278,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     },
     async ({ deck_card_id, printing_scryfall_id }) => {
       try {
-        const row = await deckService.setCardPrinting(
-          supabase,
-          userId,
-          deck_card_id,
-          printing_scryfall_id
-        )
+        const row = await decks.setCardPrinting(deck_card_id, printing_scryfall_id)
         return ok(
           `Printing for ${row.name} set to ${row.printing_scryfall_id ?? 'default'}`
         )
@@ -303,7 +297,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     },
     async ({ deck_card_id, finish }) => {
       try {
-        const row = await deckService.setCardFinish(supabase, userId, deck_card_id, finish)
+        const row = await decks.setCardFinish(deck_card_id, finish)
         return ok(`Finish for ${row.name} set to ${row.finish}`)
       } catch (e) {
         return errFromException('set_card_finish failed', e)
@@ -320,7 +314,7 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     },
     async ({ deck_id, scryfall_ids }) => {
       try {
-        const row = await deckService.setCommanders(supabase, userId, deck_id, scryfall_ids)
+        const row = await decks.setCommanders(deck_id, scryfall_ids)
         return ok(`Commanders: [${row.commander_scryfall_ids.join(', ') || 'none'}]`)
       } catch (e) {
         return errFromException('set_commanders failed', e)
@@ -337,10 +331,67 @@ export function createMcpServer(supabase: SupabaseClient, userId: string) {
     },
     async ({ deck_id, scryfall_id }) => {
       try {
-        const row = await deckService.setCoverImage(supabase, userId, deck_id, scryfall_id)
+        const row = await decks.setCoverImage(deck_id, scryfall_id)
         return ok(`Cover image: ${row.cover_image_scryfall_id ?? 'cleared'}`)
       } catch (e) {
         return errFromException('set_cover_image failed', e)
+      }
+    }
+  )
+
+  // ─── Primer ───────────────────────────────────────────────────────────────
+
+  server.tool(
+    'get_primer',
+    "Get a deck's primer (the full markdown guide text).",
+    { deck_id: z.string().describe('UUID of the deck') },
+    async ({ deck_id }) => {
+      try {
+        const deck = await decks.getDeck(deck_id)
+        return ok(deck.primer_markdown || '(no primer)')
+      } catch (e) {
+        return errFromException('get_primer failed', e)
+      }
+    }
+  )
+
+  server.tool(
+    'set_primer',
+    'Write or replace a deck\'s primer. The primer is GitHub-Flavored Markdown (headings, bold, italic, lists, links).' +
+      ' Embed a card image inline with {{card:<printing_scryfall_id>}} — use the `id` field from search_scryfall or list_printings results (a UUID), NOT the oracle_id.' +
+      ' Links must point to idlebrew.app (other hosts are stripped by the renderer).' +
+      ' Pass the complete markdown content; this replaces the entire primer.',
+    {
+      deck_id: z.string().describe('UUID of the deck'),
+      markdown: z.string().describe('Full primer markdown content'),
+    },
+    async ({ deck_id, markdown }) => {
+      try {
+        const row = await decks.setPrimer(deck_id, markdown)
+        return ok(`Primer saved (${row.primer_markdown.length} chars)`)
+      } catch (e) {
+        return errFromException('set_primer failed', e)
+      }
+    }
+  )
+
+  server.tool(
+    'patch_primer',
+    'Replace an exact passage in a deck\'s primer without rewriting the whole thing.' +
+      ' old_string must match exactly one location in the current primer; include enough surrounding' +
+      ' context (a sentence or heading) to make it unique. Errors if the string is not found or matches' +
+      ' more than once. Call get_primer first to read the current text.',
+    {
+      deck_id: z.string().describe('UUID of the deck'),
+      old_string: z.string().min(1).describe('Exact text to find and replace'),
+      new_string: z.string().describe('Replacement text (may be empty to delete)'),
+    },
+    async ({ deck_id, old_string, new_string }) => {
+      try {
+        const row = await decks.patchPrimer(deck_id, old_string, new_string)
+        return ok(`Primer patched (${row.primer_markdown.length} chars)`)
+      } catch (e) {
+        return errFromException('patch_primer failed', e)
       }
     }
   )

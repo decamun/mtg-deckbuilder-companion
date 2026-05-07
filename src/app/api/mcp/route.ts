@@ -17,13 +17,14 @@ export const runtime = 'nodejs'
 async function handle(request: Request): Promise<Response> {
   const auth = await resolveMcpAuth(request)
   if (auth.userId === null) {
-    return new Response(JSON.stringify({ message: 'Unauthorized', reason: auth.reason }), {
-      status: 401,
+    const status = auth.reason === 'rate_limited' ? 429 : 401
+    return new Response(JSON.stringify({ message: 'Unauthorized' }), {
+      status,
       headers: { 'Content-Type': 'application/json' },
     })
   }
 
-  const server = createMcpServer(auth.supabase, auth.userId)
+  const server = createMcpServer(auth.context)
   const transport = new WebStandardStreamableHTTPServerTransport({
     // Stateless: no cross-request session affinity required because each
     // request rebuilds the server. Scales horizontally without shared state.

@@ -19,7 +19,8 @@ export async function GET() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
   if (error) {
-    return NextResponse.json({ message: error.message }, { status: 500 })
+    console.error('[api-keys] list failed', { userId: user.id, error: error.message })
+    return NextResponse.json({ message: 'Unable to list API keys.' }, { status: 500 })
   }
 
   return NextResponse.json(data)
@@ -56,11 +57,13 @@ export async function POST(request: Request) {
       name: name.trim(),
       key_hash: hash,
       key_prefix: prefix,
+      is_active: true,
     })
     .select('id, name, key_prefix, created_at')
     .single()
   if (error) {
-    return NextResponse.json({ message: error.message }, { status: 500 })
+    console.error('[api-keys] create failed', { userId: user.id, error: error.message })
+    return NextResponse.json({ message: 'Unable to create API key.' }, { status: 500 })
   }
 
   return NextResponse.json({ ...data, key: raw }, { status: 201 })

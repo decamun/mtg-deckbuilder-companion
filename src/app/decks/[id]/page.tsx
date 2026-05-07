@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect, use, useRef, useMemo, type CSSProperties, type ReactNode } from "react"
+import { useState, useEffect, useLayoutEffect, use, useRef, useMemo, type CSSProperties, type ReactNode } from "react"
 import { motion, type MotionProps } from "framer-motion"
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
-import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2 } from "lucide-react"
+import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2, ChevronDown } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,7 +14,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase/client"
-import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, cmcOf, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
+import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, cmcOf, getCardFaceImages, getCardImageUrl, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/types"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
@@ -22,6 +22,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { DeckAgentSidebar } from "@/components/agent/DeckAgentSidebar"
 import { DeckAnalytics } from "@/components/deck-analytics"
 import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
+import { ImportDecklistDialog } from "@/components/deck/ImportDecklistDialog"
 import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
 import { DeckDiffView } from "@/components/deck/DeckDiffView"
 import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
@@ -32,8 +33,9 @@ import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner
 import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { formatPrice, pickPrice } from "@/lib/format"
 import { ManaText } from "@/components/mana/ManaText"
+import { getCardTypeGroup } from "@/lib/card-types"
 
-type DeckCardRow = Omit<DeckCard, "image_url" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
+type DeckCardRow = Omit<DeckCard, "image_url" | "face_images" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
 
 type ViewingSnapshotState = {
   versionId: string
@@ -126,10 +128,13 @@ function mergeDeckCardRow(current: DeckCard, row: DeckCardRow): DeckCard {
     ...current,
     ...row,
     image_url: current.image_url,
+    face_images: current.face_images,
     type_line: current.type_line,
     mana_cost: current.mana_cost,
+    oracle_text: current.oracle_text,
     cmc: current.cmc,
     colors: current.colors,
+    produced_mana: current.produced_mana,
     set_code: current.set_code,
     collector_number: current.collector_number,
     available_finishes: current.available_finishes,
@@ -156,22 +161,77 @@ function DroppableTagGroup({
   )
 }
 
+function primaryDeckCardImage(card: DeckCard): string | undefined {
+  return card.face_images?.[0]?.normal ?? card.face_images?.[0]?.small ?? card.image_url
+}
+
+function CardThumbnail({
+  card,
+  className,
+  imageClassName,
+  overlayClassName = "rounded-xl",
+}: {
+  card: DeckCard
+  className?: string
+  imageClassName: string
+  overlayClassName?: string
+}) {
+  const imageUrl = primaryDeckCardImage(card)
+  if (!imageUrl) {
+    return (
+      <div className={`${className ?? ""} flex aspect-[5/7] items-center justify-center rounded-xl border border-border/40 bg-card/50`}>
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
+      </div>
+    )
+  }
+
+  return (
+    <div className={`relative ${className ?? ""}`}>
+      <img src={imageUrl} alt={card.name} className={imageClassName} draggable={false} />
+      {(card.finish === 'foil' || card.finish === 'etched') && (
+        <div className={`absolute inset-0 pointer-events-none foil-overlay ${overlayClassName}`} />
+      )}
+    </div>
+  )
+}
+
 function CardArt({
   card,
   className,
   imageClassName = "w-full rounded-xl border border-border/50 shadow-2xl",
+  faceIndex = 0,
+  onFlip,
 }: {
   card: DeckCard
   className?: string
   imageClassName?: string
+  faceIndex?: number
+  onFlip?: () => void
 }) {
+  const faces = card.face_images?.length ? card.face_images : card.image_url ? [{ name: card.name, normal: card.image_url }] : []
+  const activeFace = faces[faceIndex] ?? faces[0]
+  const activeImage = activeFace?.normal ?? activeFace?.small
+  const canFlip = faces.length > 1
+
   return (
     <div className={`relative ${className ?? ""}`}>
-      {card.image_url ? (
+      {activeImage ? (
         <>
-          <img src={card.image_url} alt={card.name} className={imageClassName} draggable={false} />
+          <img src={activeImage} alt={activeFace.name} className={imageClassName} draggable={false} />
           {(card.finish === 'foil' || card.finish === 'etched') && (
             <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
+          )}
+          {canFlip && onFlip && (
+            <button
+              type="button"
+              className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 px-3 py-1 text-xs font-semibold text-foreground shadow-lg backdrop-blur transition hover:bg-accent hover:text-accent-foreground"
+              onClick={(event) => {
+                event.stopPropagation()
+                onFlip()
+              }}
+            >
+              Flip to {faces[(faceIndex + 1) % faces.length]?.name ?? "back"}
+            </button>
           )}
         </>
       ) : (
@@ -210,7 +270,27 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
   const [cardSize, setCardSize] = useState(DEFAULT_CARD_SIZE)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const toggleSection = (name: string) => setCollapsedSections(prev => {
+    const next = new Set(prev)
+    if (next.has(name)) next.delete(name); else next.add(name)
+    return next
+  })
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const scrollAnchorRef = useRef<{ el: HTMLElement; top: number } | null>(null)
+  useLayoutEffect(() => {
+    const anchor = scrollAnchorRef.current
+    if (!anchor || !scrollContainerRef.current) return
+    scrollAnchorRef.current = null
+    const delta = anchor.el.getBoundingClientRect().top - anchor.top
+    scrollContainerRef.current.scrollTop += delta
+  })
+  const toggleAllSections = (allNames: string[], anchorEl: HTMLElement) => {
+    scrollAnchorRef.current = { el: anchorEl, top: anchorEl.getBoundingClientRect().top }
+    setCollapsedSections(prev => prev.size === allNames.length ? new Set() : new Set(allNames))
+  }
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
+  const [previewFaceIndex, setPreviewFaceIndex] = useState(0)
   const [readyCardInteractionKey, setReadyCardInteractionKey] = useState<string | null>(null)
 
   // New: ownership, tabs, settings, primer, version-viewing
@@ -236,6 +316,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [diffOpen, setDiffOpen] = useState(false)
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
   const [reverting, setReverting] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
@@ -336,12 +417,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         const effectiveId = c.printing_scryfall_id || c.scryfall_id
         const effSf = sfMap.get(effectiveId) ?? baseSf
         const finish = (c.finish ?? 'nonfoil') as 'nonfoil' | 'foil' | 'etched'
+        const faceImages = getCardFaceImages(effSf)
         return {
           ...c,
           oracle_id: oracleId,
           finish,
           printing_scryfall_id: c.printing_scryfall_id ?? null,
-          image_url: effSf?.image_uris?.normal,
+          image_url: getCardImageUrl(effSf),
+          face_images: faceImages,
           type_line: effSf?.type_line || '',
           mana_cost: effSf?.mana_cost || '',
           cmc: cmcOf(effSf),
@@ -363,10 +446,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       const coverId = deckData.cover_image_scryfall_id || null
       if (coverId) {
         const inDeck = sfMap.get(coverId)
-        if (inDeck?.image_uris?.normal) setCoverImageUrl(inDeck.image_uris.normal)
+        const inDeckCoverUrl = getCardImageUrl(inDeck)
+        if (inDeckCoverUrl) setCoverImageUrl(inDeckCoverUrl)
         else {
           const fetched = await getCard(coverId)
-          if (gen === fetchGenRef.current) setCoverImageUrl(fetched?.image_uris?.normal ?? null)
+          if (gen === fetchGenRef.current) setCoverImageUrl(getCardImageUrl(fetched) ?? null)
         }
       } else {
         setCoverImageUrl(null)
@@ -417,7 +501,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         quantity: 1,
         zone: 'mainboard',
         tags: [],
-        image_url: card.image_uris?.normal,
+        image_url: getCardImageUrl(card),
+        face_images: getCardFaceImages(card),
         type_line: card.type_line || '',
         mana_cost: card.mana_cost || '',
         cmc: cmcOf(card),
@@ -640,6 +725,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       const oracleId = c.oracle_id ?? baseSf?.oracle_id ?? null
       const effectiveId = c.printing_scryfall_id || c.scryfall_id
       const effSf = sfMap.get(effectiveId) ?? baseSf
+      const faceImages = getCardFaceImages(effSf)
       return {
         id: `snap-${i}`,
         deck_id: deckId,
@@ -651,7 +737,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         quantity: c.quantity,
         zone: c.zone,
         tags: c.tags,
-        image_url: effSf?.image_uris?.normal,
+        image_url: getCardImageUrl(effSf),
+        face_images: faceImages,
         type_line: effSf?.type_line || '',
         mana_cost: effSf?.mana_cost || '',
         cmc: cmcOf(effSf),
@@ -667,7 +754,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     })
 
     const coverId = snap.deck.cover_image_scryfall_id
-    const coverImageUrlSnap = coverId ? (sfMap.get(coverId)?.image_uris?.normal ?? null) : null
+    const coverImageUrlSnap = coverId ? (getCardImageUrl(sfMap.get(coverId)) ?? null) : null
 
     return {
       versionId: row.id,
@@ -795,13 +882,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     sorted.forEach(c => {
       let key = 'Other'
       if (grouping === 'type') {
-        if (c.type_line?.includes('Creature')) key = 'Creature'
-        else if (c.type_line?.includes('Instant')) key = 'Instant'
-        else if (c.type_line?.includes('Sorcery')) key = 'Sorcery'
-        else if (c.type_line?.includes('Artifact')) key = 'Artifact'
-        else if (c.type_line?.includes('Enchantment')) key = 'Enchantment'
-        else if (c.type_line?.includes('Planeswalker')) key = 'Planeswalker'
-        else if (c.type_line?.includes('Land')) key = 'Land'
+        key = getCardTypeGroup(c.type_line)
       } else if (grouping === 'mana') {
         key = `Mana Value ${c.cmc || 0}`
       }
@@ -835,6 +916,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }, [cardsLoading, cardInteractionKey, grouping, viewMode])
 
   const showClickedPreview = (card: DeckCard, groupName: string) => {
+    setPreviewFaceIndex(0)
     setClickedPreview({ card, groupName })
     void ensurePrintingsLoaded(card)
   }
@@ -1081,9 +1163,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         onMouseEnter={() => setSelectedResultIdx(idx)}
                         onClick={() => handleAddCard(card)}
                       >
-                        {card.image_uris && (
+                        {getCardImageUrl(card, "small") && (
                           <img
-                            src={card.image_uris.small ?? card.image_uris.normal}
+                            src={getCardImageUrl(card, "small")}
                             alt=""
                             className="w-7 h-auto rounded shrink-0"
                             draggable={false}
@@ -1125,6 +1207,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   isPublic={!!deck.is_public}
                   isOwner={isOwner}
                   onVisibilityChange={(pub) => setDeck({ ...deck, is_public: pub })}
+                  onImportClick={isOwner && !viewing ? () => setImportOpen(true) : undefined}
                 />
               )}
             </div>
@@ -1148,73 +1231,71 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
       {/* Workspace */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-      <div className="flex-1 overflow-y-auto bg-background/20 min-w-0">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-background/20 min-w-0">
         <div className="p-6 max-w-7xl mx-auto space-y-8">
         {tab === 'decklist' && (<>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            {commanderCards.length > 0 ? (
-              <div className="order-2 flex flex-wrap justify-end gap-3 lg:order-2">
-                {commanderCards.map(c => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className="group relative flex w-56 items-center gap-3 rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left shadow-lg transition hover:border-yellow-300"
-                    onClick={() => showClickedPreview(c, 'Commander')}
-                  >
-                    {c.image_url ? (
-                      <img src={c.image_url} alt={c.name} className="h-28 rounded-lg border border-border/60" draggable={false} />
-                    ) : (
-                      <div className="flex h-28 aspect-[5/7] items-center justify-center rounded-lg border border-border/40 bg-muted/40">
-                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
-                        <Crown className="h-3 w-3" /> Commander
-                      </div>
-                      <ManaText text={c.name} className="truncate text-sm font-semibold text-foreground" />
-                      <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{c.type_line}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="hidden lg:block" />
-            )}
-            <div className="flex flex-wrap items-center justify-end gap-2 lg:order-1">
-              <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">
-                Card size
-                <input
-                  type="range"
-                  min={MIN_CARD_SIZE}
-                  max={MAX_CARD_SIZE}
-                  step={4}
-                  value={cardSize}
-                  onChange={(e) => setCardSize(Number(e.target.value))}
-                  className="w-28 accent-primary"
-                />
-                <span className="w-8 text-right font-mono text-[11px]">{cardSize}</span>
-              </label>
-              <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
-                <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
-                  <SelectValue placeholder="Group by" />
-                </SelectTrigger>
-                <SelectContent className="bg-card border-border text-foreground">
-                  <SelectItem value="none">No Grouping</SelectItem>
-                  <SelectItem value="type">By Type</SelectItem>
-                  <SelectItem value="mana">By Mana Cost</SelectItem>
-                  <SelectItem value="tag">By Tags</SelectItem>
-                </SelectContent>
-              </Select>
-              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
-                <TabsList className="h-7 bg-transparent">
-                  <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
-                  <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
-                  <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">
+              Card size
+              <input
+                type="range"
+                min={MIN_CARD_SIZE}
+                max={MAX_CARD_SIZE}
+                step={4}
+                value={cardSize}
+                onChange={(e) => setCardSize(Number(e.target.value))}
+                className="w-28 accent-primary"
+              />
+              <span className="w-8 text-right font-mono text-[11px]">{cardSize}</span>
+            </label>
+            <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingMode)}>
+              <SelectTrigger className="w-32 bg-card border-border h-8 text-foreground">
+                <SelectValue placeholder="Group by" />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border text-foreground">
+                <SelectItem value="none">No Grouping</SelectItem>
+                <SelectItem value="type">By Type</SelectItem>
+                <SelectItem value="mana">By Mana Cost</SelectItem>
+                <SelectItem value="tag">By Tags</SelectItem>
+              </SelectContent>
+            </Select>
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
+              <TabsList className="h-7 bg-transparent">
+                <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><LayoutGrid className="w-3.5 h-3.5" /></TabsTrigger>
+                <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><StackIcon className="w-3.5 h-3.5" /></TabsTrigger>
+                <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
+          {/* Commanders */}
+          {commanderCards.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {commanderCards.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="group flex w-64 items-center gap-3 rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left shadow-lg transition hover:border-yellow-300 overflow-hidden"
+                  onClick={() => showClickedPreview(c, 'Commander')}
+                >
+                  {primaryDeckCardImage(c) ? (
+                    <CardThumbnail card={c} className="h-24 shrink-0" imageClassName="h-24 w-auto rounded-lg border border-border/60" overlayClassName="rounded-lg" />
+                  ) : (
+                    <div className="flex h-24 aspect-[5/7] shrink-0 items-center justify-center rounded-lg border border-border/40 bg-muted/40">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
+                      <Crown className="h-3 w-3" /> Commander
+                    </div>
+                    <div className="truncate text-sm font-semibold text-foreground">{c.name}</div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">{c.type_line}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
           {cardsLoading && cards.length === 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
               {Array.from({ length: 12 }).map((_, i) => (
@@ -1233,12 +1314,21 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             })
             .map(([groupName, groupCards]) => (
             <DroppableTagGroup key={groupName} id={groupName} enabled={!cardDragDisabled && groupName !== 'Untagged'}>
-              <h3 className="text-xl font-bold border-b border-border pb-2 mb-4 text-foreground">
-                {groupName}{' '}
-                <span className="text-sm font-normal text-muted-foreground ml-2">
-                  ({groupCards.reduce((a, c) => a + c.quantity, 0)})
-                </span>
-              </h3>
+              <button
+                type="button"
+                onClick={() => toggleSection(groupName)}
+                onDoubleClick={(e) => { e.preventDefault(); toggleAllSections(Object.keys(groupedCards), e.currentTarget) }}
+                className="flex w-full items-center gap-2 border-b border-border pb-2 mb-4 text-left group"
+              >
+                <ChevronDown className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 ${collapsedSections.has(groupName) ? '-rotate-90' : ''}`} />
+                <h3 className="text-xl font-bold text-foreground">
+                  {groupName}{' '}
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    ({groupCards.reduce((a, c) => a + c.quantity, 0)})
+                  </span>
+                </h3>
+              </button>
+              {collapsedSections.has(groupName) ? null : (<>
 
               {/* ── VISUAL VIEW ── */}
               {viewMode === 'visual' && (
@@ -1261,31 +1351,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           }`}
                           style={{ width: cardSize }}
                         >
-                          <div
+                          <button
+                            type="button"
                             className="absolute inset-0 z-10 cursor-grab bg-transparent p-0 text-left active:cursor-grabbing"
-                            role="button"
-                            tabIndex={0}
                             aria-label={`Preview ${c.name}`}
                             onClick={(e) => {
                               e.stopPropagation()
                               showClickedPreview(c, groupName)
                             }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                showClickedPreview(c, groupName)
-                              }
-                            }}
                           />
-                          {c.image_url
-                            ? <>
-                                <img src={c.image_url} alt={c.name} className="w-full h-full object-cover" />
-                                {(c.finish === 'foil' || c.finish === 'etched') && (
-                                  <div className="absolute inset-0 pointer-events-none foil-overlay" />
-                                )}
-                              </>
-                            : <div className="w-full h-full flex items-center justify-center bg-card/50"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground/40" /></div>
-                          }
+                          <CardThumbnail card={c} className="h-full w-full" imageClassName="h-full w-full object-cover" overlayClassName="rounded-none" />
                           {commanderIds.includes(c.scryfall_id) && (
                             <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg">
                               <Crown className="w-2.5 h-2.5" /> CMD
@@ -1453,15 +1528,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                     showClickedPreview(card, groupName)
                                   }}
                                 />
-                                {card.image_url
-                                  ? <div className="relative w-full">
-                                      <img src={card.image_url} alt={card.name} className="w-full rounded-xl border border-black/60 shadow-xl" draggable={false} />
-                                      {(card.finish === 'foil' || card.finish === 'etched') && (
-                                        <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
-                                      )}
-                                    </div>
-                                  : <div className="w-full aspect-[5/7] rounded-xl border border-border/40 bg-card/50 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground/40" /></div>
-                                }
+                                <CardThumbnail card={card} imageClassName="w-full rounded-xl border border-black/60 shadow-xl" />
                                 {card.quantity > 1 && (
                                   <div className="absolute top-2 right-2 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
                                     {card.quantity}x
@@ -1509,7 +1576,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
-                        {c.image_url && <img src={c.image_url} alt="" className="h-9 rounded border border-border/50" draggable={false} />}
+                        {(c.face_images?.[0] || c.image_url) && <CardThumbnail card={c} className="h-9 shrink-0" imageClassName="h-9 w-auto rounded border border-border/50" overlayClassName="rounded" />}
                         <ManaText text={c.name} className="font-medium cursor-pointer hover:text-primary transition-colors truncate" />
                         <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
                       </div>
@@ -1523,6 +1590,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   ))}
                 </div>
               )}
+            </>)}
             </DroppableTagGroup>
           ))}
           </DndContext>
@@ -1597,6 +1665,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       )}
 
 
+      {isOwner && (
+        <ImportDecklistDialog
+          deckId={deckId}
+          currentCards={cards}
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          onImported={() => void fetchDeck()}
+        />
+      )}
+
       <Dialog open={diffOpen && !!diffTarget} onOpenChange={(open) => { setDiffOpen(open); if (!open) setDiffTarget(null) }}>
         <DialogContent overlayClassName="bg-background/95 supports-backdrop-filter:backdrop-blur-none" className="max-h-[88vh] overflow-y-auto border border-border bg-background text-foreground shadow-2xl sm:max-w-6xl">
           <DialogHeader>
@@ -1626,7 +1704,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-start gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <CardArt card={clickedPreview.card} imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl" />
+            <CardArt
+              card={clickedPreview.card}
+              imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl"
+              faceIndex={previewFaceIndex}
+              onFlip={() => setPreviewFaceIndex(i => i + 1)}
+            />
             {renderPreviewActionPanel(clickedPreview.card, clickedPreview.groupName)}
           </div>
         </div>

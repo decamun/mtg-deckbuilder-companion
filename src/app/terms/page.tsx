@@ -12,7 +12,7 @@ export default function TermsOfService() {
       <div>
         <BackButton />
         <h1 className="text-3xl font-bold mb-2 mt-4">Terms of Service</h1>
-        <p className="text-muted-foreground text-sm">Last updated: April 26, 2026</p>
+        <p className="text-muted-foreground text-sm">Last updated: May 2, 2026</p>
       </div>
 
       <section className="space-y-3">
@@ -82,9 +82,20 @@ export default function TermsOfService() {
           <li>Use the Service for any unlawful purpose</li>
           <li>Attempt to gain unauthorized access to any part of the Service or its infrastructure</li>
           <li>Scrape, crawl, or otherwise systematically extract data from the Service without permission</li>
+          <li>Bypass, share, or resell API keys, agent quotas, or other access controls</li>
+          <li>Use automation in a way that exceeds published limits or degrades the Service</li>
           <li>Interfere with or disrupt the integrity or performance of the Service</li>
           <li>Impersonate any person or entity or misrepresent your affiliation with any person or entity</li>
         </ul>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Automation and API Access</h2>
+        <p className="text-muted-foreground leading-relaxed">
+          API keys and MCP access are for your own account and decks. We may rate limit, disable,
+          rotate, or revoke keys that are shared, leaked, used to bypass quotas, or used for abusive
+          automation.
+        </p>
       </section>
 
       <section className="space-y-3">

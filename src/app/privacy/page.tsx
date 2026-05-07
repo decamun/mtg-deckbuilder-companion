@@ -12,15 +12,16 @@ export default function PrivacyPolicy() {
         <div>
           <BackButton />
           <h1 className="text-3xl font-bold mb-2 mt-4">Privacy Policy</h1>
-          <p className="text-muted-foreground text-sm">Last updated: April 26, 2026</p>
+          <p className="text-muted-foreground text-sm">Last updated: May 2, 2026</p>
         </div>
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">What we collect</h2>
           <p className="text-muted-foreground leading-relaxed">
             When you create an account or sign in with Google or Facebook, we receive your email
-            address and display name from that provider. We store this alongside any decks and card
-            lists you create within idlebrew.
+            address and display name from that provider. We store this alongside any decks, card
+            lists, primers, deck versions, MCP/API-key metadata, and agent usage records you create
+            within idlebrew.
           </p>
           <p className="text-muted-foreground leading-relaxed">
             We do not collect payment information, physical addresses, or any data beyond what is
@@ -31,9 +32,15 @@ export default function PrivacyPolicy() {
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">How we use your data</h2>
           <p className="text-muted-foreground leading-relaxed">
-            Your data is used solely to provide the idlebrew service — authenticating your sessions
-            and storing your deck lists. We do not sell, rent, or share your personal information
-            with third parties for marketing purposes.
+            Your data is used solely to provide the idlebrew service — authenticating your sessions,
+            storing your deck lists, powering AI-assisted deck edits, and protecting usage limits.
+            We do not sell, rent, or share your personal information with third parties for
+            marketing purposes.
+          </p>
+          <p className="text-muted-foreground leading-relaxed">
+            Decks are public by default so you can share and host them on idlebrew. Public deck pages
+            may include deck names, descriptions, card lists, primers, and deck history. You can
+            change a deck&apos;s visibility in its settings.
           </p>
         </section>
 
@@ -56,6 +63,18 @@ export default function PrivacyPolicy() {
               card data (scryfall.com/docs/privacy)
             </li>
             <li>
+              <span className="font-medium text-foreground">EDHREC</span> — commander average deck
+              and recommendation data used during brew creation (edhrec.com/privacy)
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Vercel AI Gateway and model providers</span>{" "}
+              — AI-assisted deck-building requests and responses
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Vercel Analytics and Speed Insights</span>{" "}
+              — aggregate product analytics and performance measurement
+            </li>
+            <li>
               <span className="font-medium text-foreground">Google</span> — optional sign-in
               (policies.google.com/privacy)
             </li>
@@ -69,9 +88,9 @@ export default function PrivacyPolicy() {
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Data retention</h2>
           <p className="text-muted-foreground leading-relaxed">
-            Your account and deck data are retained for as long as your account is active. If you
-            request deletion, all personal data and deck content associated with your account will
-            be permanently removed within 30 days.
+            Your account, deck data, deck versions, and API-key audit metadata are retained for as
+            long as your account is active. If you request deletion, all personal data and deck
+            content associated with your account will be permanently removed within 30 days.
           </p>
         </section>
 
