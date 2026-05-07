@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai'
 import { createClient } from '@/lib/supabase/server'
+import { getServiceClient } from '@/lib/supabase/service'
 import {
   getUserTier,
   TIER_LIMITS,
@@ -186,7 +187,8 @@ export async function POST(request: Request) {
     )
   }
 
-  const quota = await checkQuota(supabase, user.id, tier)
+  const serviceClient = getServiceClient()
+  const quota = await checkQuota(serviceClient, user.id, tier)
   if (!quota.ok) {
     return NextResponse.json(
       {
@@ -214,7 +216,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: msg }, { status: 404 })
   }
 
-  const quotaLog = await recordCall(supabase, user.id, modelId)
+  const quotaLog = await recordCall(serviceClient, user.id, modelId)
   if (!quotaLog.ok) {
     console.error('[agent-chat] quota logging failed (non-fatal)', {
       userId: user.id,
