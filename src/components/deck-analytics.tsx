@@ -340,23 +340,12 @@ function StatsLine({
           <Stat key={t} label={t === 'Sorcery' ? 'Sorceries' : `${t}s`} value={String(stats.typeCounts[t])} />
         ))}
       {stats.typeCounts.Land > 0 && (
-        <>
-          {stats.basicLandCount > 0 && (
-            <Stat label="Basic Lands" value={String(stats.basicLandCount)} />
-          )}
-          <Stat
-            label="Lands"
-            value={String(stats.typeCounts.Land)}
-            hint={stats.mdfcLandCount > 0 ? 'no MDFC' : undefined}
-          />
-          {stats.mdfcLandCount > 0 && (
-            <Stat
-              label="Lands"
-              value={String(stats.typeCounts.Land + stats.mdfcLandCount)}
-              hint="w/ MDFC"
-            />
-          )}
-        </>
+        <LandStat
+          total={stats.typeCounts.Land + stats.mdfcLandCount}
+          landsNoMdfc={stats.typeCounts.Land}
+          basicLandCount={stats.basicLandCount}
+          mdfcLandCount={stats.mdfcLandCount}
+        />
       )}
       {stats.onCurve.length > 0 && (
         <div className="flex flex-col justify-center min-w-[180px]">
@@ -371,6 +360,46 @@ function StatsLine({
               <ManaText text={`T${c.cmc} · ${c.name}`} className="text-xs text-muted-foreground truncate" />
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LandStat({
+  total,
+  landsNoMdfc,
+  basicLandCount,
+  mdfcLandCount,
+}: {
+  total: number
+  landsNoMdfc: number
+  basicLandCount: number
+  mdfcLandCount: number
+}) {
+  const hasDetail = basicLandCount > 0 || mdfcLandCount > 0
+  return (
+    <div className="group relative flex flex-col justify-center min-w-[64px]">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Lands</div>
+      <div className="text-lg font-semibold tabular-nums">{total}</div>
+      {hasDetail && (
+        <div className="pointer-events-none absolute bottom-full left-0 mb-2 z-10 hidden group-hover:flex flex-col gap-1 rounded-md border border-border bg-popover px-3 py-2 shadow-md text-sm whitespace-nowrap">
+          {basicLandCount > 0 && (
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Basic</span>
+              <span className="tabular-nums font-medium">{basicLandCount}</span>
+            </div>
+          )}
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">Non-basic</span>
+            <span className="tabular-nums font-medium">{landsNoMdfc - basicLandCount}</span>
+          </div>
+          {mdfcLandCount > 0 && (
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">MDFC</span>
+              <span className="tabular-nums font-medium">{mdfcLandCount}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
