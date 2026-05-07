@@ -214,13 +214,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: msg }, { status: 404 })
   }
 
-  // Record quota and fetch commander cards in parallel — both are independent of each other.
-  const [, commanderCards] = await Promise.all([
-    recordCall(supabase, user.id, modelId),
-    deck.commander_scryfall_ids.length > 0
-      ? getCardsByIds(deck.commander_scryfall_ids)
-      : Promise.resolve([] as ScryfallCard[]),
-  ])
+  const quotaLog = await recordCall(supabase, user.id, modelId)
+  if (!quotaLog.ok) {
+    console.error('[agent-chat] quota logging failed', {
+      userId: user.id,
+      modelId,
+      error: quotaLog.error,
+    })
+    return NextResponse.json(
+      { message: 'Agent quota logging is temporarily unavailable.' },
+      { status: 503, headers: { 'Retry-After': '60' } }
+    )
+  }
+
+  const commanderCards = deck.commander_scryfall_ids.length > 0
+    ? await getCardsByIds(deck.commander_scryfall_ids)
+    : []
 
   const tools = buildDeckAgentTools(supabase, user.id, body.deckId)
   const isHaiku = modelId === 'anthropic/claude-haiku-4.5'
