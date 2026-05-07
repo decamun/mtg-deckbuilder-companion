@@ -17,6 +17,8 @@ export interface VersionSnapshot {
     name: string
     description: string | null
     format: string | null
+    budget_usd?: number | string | null
+    bracket?: number | null
     commanders: string[]
     cover_image_scryfall_id: string | null
     is_public: boolean
@@ -41,7 +43,7 @@ export interface DeckVersionRow {
 async function buildSnapshot(deckId: string): Promise<VersionSnapshot | null> {
   const { data: deck, error: deckErr } = await supabase
     .from("decks")
-    .select("name, description, format, commander_scryfall_ids, cover_image_scryfall_id, is_public, primer_markdown")
+    .select("name, description, format, budget_usd, bracket, commander_scryfall_ids, cover_image_scryfall_id, is_public, primer_markdown")
     .eq("id", deckId)
     .single()
   if (deckErr || !deck) return null
@@ -58,6 +60,8 @@ async function buildSnapshot(deckId: string): Promise<VersionSnapshot | null> {
       name: deck.name,
       description: deck.description ?? null,
       format: deck.format ?? null,
+      budget_usd: deck.budget_usd ?? null,
+      bracket: deck.bracket ?? null,
       commanders: deck.commander_scryfall_ids ?? [],
       cover_image_scryfall_id: deck.cover_image_scryfall_id ?? null,
       is_public: !!deck.is_public,
