@@ -276,6 +276,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     if (next.has(name)) next.delete(name); else next.add(name)
     return next
   })
+  const toggleAllSections = (allNames: string[]) => setCollapsedSections(prev =>
+    prev.size === allNames.length ? new Set() : new Set(allNames)
+  )
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
   const [previewFaceIndex, setPreviewFaceIndex] = useState(0)
   const [readyCardInteractionKey, setReadyCardInteractionKey] = useState<string | null>(null)
@@ -1304,6 +1307,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               <button
                 type="button"
                 onClick={() => toggleSection(groupName)}
+                onDoubleClick={(e) => { e.preventDefault(); toggleAllSections(Object.keys(groupedCards)) }}
                 className="flex w-full items-center gap-2 border-b border-border pb-2 mb-4 text-left group"
               >
                 <ChevronDown className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 ${collapsedSections.has(groupName) ? '-rotate-90' : ''}`} />
