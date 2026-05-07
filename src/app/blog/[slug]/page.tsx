@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { BLOG_POSTS } from "@/lib/blog"
+import { BlogPostMarkdown } from "@/components/blog/BlogPostMarkdown"
 import { ArrowLeft } from "lucide-react"
 
 export async function generateStaticParams() {
@@ -58,13 +59,17 @@ export default async function BlogPostPage({
         <p className="mb-8 text-lg italic text-muted-foreground">
           {post.excerpt}
         </p>
-        <div className="flex flex-col gap-5">
-          {post.body.map((paragraph, i) => (
-            <p key={i} className="leading-relaxed text-foreground/90">
-              {paragraph}
-            </p>
-          ))}
-        </div>
+        {post.markdown ? (
+          <BlogPostMarkdown markdown={post.markdown} />
+        ) : (
+          <div className="flex flex-col gap-5">
+            {post.body.map((paragraph, i) => (
+              <p key={i} className="leading-relaxed text-foreground/90">
+                {paragraph}
+              </p>
+            ))}
+          </div>
+        )}
       </article>
     </main>
   )
