@@ -347,7 +347,7 @@ export function createMcpServer(context: McpContext) {
     { deck_id: z.string().describe('UUID of the deck') },
     async ({ deck_id }) => {
       try {
-        const deck = await deckService.getDeck(supabase, userId, deck_id)
+        const deck = await decks.getDeck(deck_id)
         return ok(deck.primer_markdown || '(no primer)')
       } catch (e) {
         return errFromException('get_primer failed', e)
@@ -367,7 +367,7 @@ export function createMcpServer(context: McpContext) {
     },
     async ({ deck_id, markdown }) => {
       try {
-        const row = await deckService.setPrimer(supabase, userId, deck_id, markdown)
+        const row = await decks.setPrimer(deck_id, markdown)
         return ok(`Primer saved (${row.primer_markdown.length} chars)`)
       } catch (e) {
         return errFromException('set_primer failed', e)
@@ -388,7 +388,7 @@ export function createMcpServer(context: McpContext) {
     },
     async ({ deck_id, old_string, new_string }) => {
       try {
-        const row = await deckService.patchPrimer(supabase, userId, deck_id, old_string, new_string)
+        const row = await decks.patchPrimer(deck_id, old_string, new_string)
         return ok(`Primer patched (${row.primer_markdown.length} chars)`)
       } catch (e) {
         return errFromException('patch_primer failed', e)
