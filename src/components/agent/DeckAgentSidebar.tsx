@@ -31,6 +31,8 @@ interface Props {
   open: boolean
   onClose: () => void
   onOpen: () => void
+  /** Called when an assistant turn finishes streaming (after server-side tools have run). Syncs deck UI with DB. */
+  onAssistantResponseFinished?: () => void
 }
 
 interface LimitsResponse {
@@ -91,7 +93,7 @@ const MIN_WIDTH = 240
 const MAX_WIDTH = 720
 const DEFAULT_WIDTH = 320
 
-export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
+export function DeckAgentSidebar({ deckId, open, onClose, onOpen, onAssistantResponseFinished }: Props) {
   const [model, setModel] = useState<ModelId>(DEFAULT_MODEL)
   const [reasoning, setReasoning] = useState(false)
   const [draft, setDraft] = useState("")
@@ -149,6 +151,9 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
     onError: (err) => {
       const msg = err instanceof Error ? err.message : "Agent error"
       toast.error(msg)
+    },
+    onFinish: () => {
+      onAssistantResponseFinished?.()
     },
   })
 

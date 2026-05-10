@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useLayoutEffect, use, useRef, useMemo, type CSSProperties, type ReactNode } from "react"
+import { useState, useEffect, useLayoutEffect, use, useRef, useMemo, useCallback, type CSSProperties, type ReactNode } from "react"
 import { motion, type MotionProps } from "framer-motion"
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
@@ -366,7 +366,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [clickedPreview])
 
-  const fetchDeck = async () => {
+  const fetchDeck = useCallback(async () => {
     const gen = ++fetchGenRef.current
 
     const { data: { user: viewer } } = await supabase.auth.getUser()
@@ -456,23 +456,21 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         setCoverImageUrl(null)
       }
     }
-  }
+  }, [deckId])
 
   useEffect(() => {
-    void Promise.resolve().then(fetchDeck)
-    const channel = supabase.channel('schema-db-changes')
+    void Promise.resolve().then(() => void fetchDeck())
+    const channel = supabase
+      .channel(`deck-workspace:${deckId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'decks', filter: `id=eq.${deckId}` }, () => {
-        fetchDeck()
+        void fetchDeck()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'deck_cards', filter: `deck_id=eq.${deckId}` }, () => {
-        fetchDeck()
+        void fetchDeck()
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-    // fetchDeck intentionally reads latest component state through the current
-    // render; resubscribe only when the deck id changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deckId])
+  }, [deckId, fetchDeck])
 
   const addToDeck = async (card: ScryfallCard) => {
     const existing = cards.find(c => c.scryfall_id === card.id)
@@ -1643,6 +1641,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           open={agentOpen}
           onClose={() => setAgentOpen(false)}
           onOpen={() => setAgentOpen(true)}
+          onAssistantResponseFinished={() => void fetchDeck()}
         />
       )}
       </div>
