@@ -12,6 +12,18 @@ type FeedbackFormProps = {
   siteKey: string | undefined
 }
 
+function turnstileErrorToast(code: string) {
+  // https://developers.cloudflare.com/turnstile/troubleshooting/client-side-errors/error-codes/
+  if (code === "110200") {
+    toast.error(
+      "Captcha can’t run on this hostname yet (Turnstile error 110200). In Cloudflare Dashboard → Turnstile → your widget → Hostname Management, add this site’s domain.",
+      { duration: 12_000 }
+    )
+    return
+  }
+  toast.error("Captcha could not load. Refresh the page or try again.")
+}
+
 export function FeedbackForm({ siteKey }: FeedbackFormProps) {
   const turnstileRef = useRef<TurnstileInstance>(null)
   const [message, setMessage] = useState("")
@@ -119,9 +131,9 @@ export function FeedbackForm({ siteKey }: FeedbackFormProps) {
           options={{ theme: "dark" }}
           onSuccess={setToken}
           onExpire={() => setToken(null)}
-          onError={() => {
+          onError={(code) => {
             setToken(null)
-            toast.error("Captcha could not load. Refresh the page or try again.")
+            turnstileErrorToast(String(code))
           }}
         />
       </div>
