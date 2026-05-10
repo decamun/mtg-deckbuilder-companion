@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { User, LogOut, ChevronDown, Settings } from "lucide-react"
+import { User, LogOut, ChevronDown, Settings, Heart } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import { LoginDialog } from "@/components/LoginDialog"
 
@@ -165,6 +165,10 @@ export function TopNav() {
                 <DropdownMenuItem onClick={() => router.push("/profile")}>
                   <Settings className="h-4 w-4" />
                   Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/decks/liked")}>
+                  <Heart className="h-4 w-4" />
+                  Liked decks
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut}>
