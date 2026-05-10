@@ -34,6 +34,17 @@ export function getCenteredCardCrop(width: number, height: number) {
   }
 }
 
+/** Same rectangle as `getCenteredCardCrop`, as % of full frame (for UI overlays). */
+export function getCenteredCardCropPercents(width: number, height: number) {
+  const c = getCenteredCardCrop(width, height)
+  return {
+    left: (c.sx / width) * 100,
+    top: (c.sy / height) * 100,
+    width: (c.sw / width) * 100,
+    height: (c.sh / height) * 100,
+  }
+}
+
 export function getArtCrop(width: number, height: number) {
   return {
     sx: width * 0.09,

@@ -27,6 +27,7 @@ import {
   confidenceFromScores,
   getArtCrop,
   getCenteredCardCrop,
+  getCenteredCardCropPercents,
   hammingDistance,
   hashesForCanvas,
   hashesFromImageLikeCapture,
@@ -314,6 +315,10 @@ export function ScannerLabClient() {
   }, [lastRanked])
 
   const cropGuide = videoDims ? getCenteredCardCrop(videoDims.w, videoDims.h) : null
+  const aimOverlayPercents = useMemo(() => {
+    if (!videoDims) return null
+    return getCenteredCardCropPercents(videoDims.w, videoDims.h)
+  }, [videoDims])
   const artOnPreview =
     lastCropMeta && lastPreviewUrl
       ? getArtCrop(lastCropMeta.outW, lastCropMeta.outH)
@@ -497,9 +502,14 @@ export function ScannerLabClient() {
             <CardDescription>Align a card like the deck dialog, then capture — or feed a still photo.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="relative overflow-hidden rounded-xl border border-border bg-black">
+            <div
+              className="relative w-full overflow-hidden rounded-xl border border-border bg-black"
+              style={{
+                aspectRatio: videoDims ? `${videoDims.w} / ${videoDims.h}` : "3 / 4",
+              }}
+            >
               {cameraError ? (
-                <div className="flex aspect-video flex-col items-center justify-center gap-2 p-6 text-center text-sm text-white">
+                <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-white">
                   <AlertTriangle className="h-8 w-8 text-amber-300" />
                   {cameraError}
                 </div>
@@ -507,14 +517,24 @@ export function ScannerLabClient() {
                 <>
                   <video
                     ref={videoRef}
-                    className="aspect-video w-full object-cover"
+                    className="block h-full w-full object-contain"
                     playsInline
                     muted
                     onLoadedMetadata={e => onVideoFrameInfo(e.currentTarget)}
                     onResize={e => onVideoFrameInfo(e.currentTarget)}
                   />
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <div className="aspect-[5/7] h-[86%] rounded-2xl border-2 border-primary/80 shadow-[0_0_0_999px_rgba(0,0,0,0.35)]" />
+                  <div className="pointer-events-none absolute inset-0">
+                    {aimOverlayPercents && (
+                      <div
+                        className="absolute rounded-2xl border-2 border-primary/80 shadow-[0_0_0_999px_rgba(0,0,0,0.35)]"
+                        style={{
+                          left: `${aimOverlayPercents.left}%`,
+                          top: `${aimOverlayPercents.top}%`,
+                          width: `${aimOverlayPercents.width}%`,
+                          height: `${aimOverlayPercents.height}%`,
+                        }}
+                      />
+                    )}
                   </div>
                 </>
               )}
@@ -581,20 +601,25 @@ export function ScannerLabClient() {
             </CardHeader>
             <CardContent className="space-y-3">
               {lastPreviewUrl && (
-                <div className="relative inline-block max-w-full overflow-hidden rounded-lg border border-border">
-                  <img src={lastPreviewUrl} alt="Last capture" className="max-h-[360px] w-auto" />
-                  {artOnPreview && (
-                    <div
-                      className="pointer-events-none absolute border-2 border-cyan-400/90 bg-cyan-400/10"
-                      style={{
-                        left: `${(artOnPreview.sx / lastCropMeta!.outW) * 100}%`,
-                        top: `${(artOnPreview.sy / lastCropMeta!.outH) * 100}%`,
-                        width: `${(artOnPreview.sw / lastCropMeta!.outW) * 100}%`,
-                        height: `${(artOnPreview.sh / lastCropMeta!.outH) * 100}%`,
-                      }}
-                      title="Art crop used for artHash"
-                    />
-                  )}
+                <div className="space-y-2">
+                  <div className="relative inline-block max-w-full overflow-hidden rounded-lg border border-border">
+                    <img src={lastPreviewUrl} alt="Last capture" className="block max-h-[360px] w-auto" />
+                    {artOnPreview && lastCropMeta && (
+                      <div
+                        className="pointer-events-none absolute border-2 border-cyan-400/90 bg-cyan-400/10"
+                        style={{
+                          left: `${(artOnPreview.sx / lastCropMeta.outW) * 100}%`,
+                          top: `${(artOnPreview.sy / lastCropMeta.outH) * 100}%`,
+                          width: `${(artOnPreview.sw / lastCropMeta.outW) * 100}%`,
+                          height: `${(artOnPreview.sh / lastCropMeta.outH) * 100}%`,
+                        }}
+                        title="Art crop used for artHash (inner band on the card)"
+                      />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Orange guide in the camera matches this full frame; cyan is only the inner art rectangle used for the art half of the hash (often wider than tall).
+                  </p>
                 </div>
               )}
               {lastHashInfo && (
