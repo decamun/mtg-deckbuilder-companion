@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import type { McpContext } from './mcp-context'
+import { buildDeckStatsReport } from './deck-stats'
 import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfall'
 
 /**
@@ -149,6 +150,25 @@ export function createMcpServer(context: McpContext) {
         )
       } catch (e) {
         return errFromException('get_decklist failed', e)
+      }
+    }
+  )
+
+  server.tool(
+    'get_deck_stats',
+    'Full deck statistics aligned with the deck editor: total/mainboard/commander card counts, USD sum (when prices exist),' +
+      ' Commander / EDH format hints (banned cards, color identity, singleton copies, bracket game-changer caps),' +
+      ' and the Analytics tab metrics (avg CMC, type counts, lands breakdown, mana curve grid, opening probabilities, color balance).' +
+      ' Non-EDH formats currently omit format hints.',
+    { deck_id: z.string().describe('UUID of the deck') },
+    async ({ deck_id }) => {
+      try {
+        const deck = await decks.getDeck(deck_id)
+        const rows = await decks.getDecklist(deck_id)
+        const report = await buildDeckStatsReport(deck, rows)
+        return json('Deck stats:', report)
+      } catch (e) {
+        return errFromException('get_deck_stats failed', e)
       }
     }
   )
