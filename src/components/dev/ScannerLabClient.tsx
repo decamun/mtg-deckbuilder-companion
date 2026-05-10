@@ -456,7 +456,7 @@ export function ScannerLabClient() {
           <code className="text-[11px]">deck-scanner-rgb.ts</code>, continuous scanning, and references from Scryfall or your decks.
         </p>
         <p className="max-w-3xl rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-950 dark:text-amber-100">
-          <strong className="font-medium">Geometry:</strong> references and captures both hash the same camera-aligned 320×448 card crop so distances are comparable.
+          <strong className="font-medium">Geometry:</strong> after the centered 5:7 slot, frames are passed through a <strong className="font-normal">texture high-pass + Sobel edge bounding box</strong> (with 5:7 clamp) when signal is strong enough; otherwise the slot crop is kept. This targets playmat gradients and loose framing before pHash/RGB.
         </p>
       </div>
 

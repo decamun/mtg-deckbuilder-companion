@@ -3,6 +3,8 @@
  * Kept framework-free so `/scanner-lab` and `DeckScannerDialog` can share logic.
  */
 
+import { refineCardCanvasByEdges } from "@/lib/deck-scanner-card-refine"
+
 export type HashBits = Uint8Array
 
 export const HASH_WIDTH = 9
@@ -226,7 +228,7 @@ export function captureFrameFromVideo(
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
   ctx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, canvas.width, canvas.height)
-  return canvas
+  return refineCardCanvasByEdges(canvas)
 }
 
 export function hashesForCanvas(canvas: HTMLCanvasElement): { fullHash: HashBits; artHash: HashBits } {
@@ -249,7 +251,7 @@ export function captureFrameFromImageElement(img: HTMLImageElement, outWidth = 3
   const ctx = canvas.getContext("2d")
   if (!ctx) throw new Error("Could not get canvas context")
   ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, canvas.width, canvas.height)
-  return canvas
+  return refineCardCanvasByEdges(canvas)
 }
 
 /** Same resize + hash regions as a camera capture, but from a loaded printing image. */
