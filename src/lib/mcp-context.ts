@@ -17,6 +17,8 @@ export interface McpContext {
     setCardFinish: (deckCardId: string, finish: deckService.Finish) => Promise<deckService.DeckCardRow>
     setCommanders: (deckId: string, scryfallIds: string[]) => Promise<deckService.DeckRow>
     setCoverImage: (deckId: string, scryfallId: string | null) => Promise<deckService.DeckRow>
+    setPrimer: (deckId: string, markdown: string) => Promise<deckService.DeckRow>
+    patchPrimer: (deckId: string, oldString: string, newString: string) => Promise<deckService.DeckRow>
   }
 }
 
@@ -44,6 +46,10 @@ export function createMcpContext(supabase: SupabaseClient, userId: string): McpC
         deckService.setCommanders(supabase, userId, deckId, scryfallIds),
       setCoverImage: (deckId, scryfallId) =>
         deckService.setCoverImage(supabase, userId, deckId, scryfallId),
+      setPrimer: (deckId, markdown) =>
+        deckService.setPrimer(supabase, userId, deckId, markdown),
+      patchPrimer: (deckId, oldString, newString) =>
+        deckService.patchPrimer(supabase, userId, deckId, oldString, newString),
     },
   }
 }
