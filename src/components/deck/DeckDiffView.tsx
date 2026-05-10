@@ -189,7 +189,7 @@ function CardCell({
 }: {
   stack?: CardStack
   status: DiffStatus
-  onMouseEnter: (card: DeckCard) => void
+  onMouseEnter: (card: DeckCard, rect: DOMRect) => void
   onMouseLeave: () => void
 }) {
   if (!stack) {
@@ -204,7 +204,7 @@ function CardCell({
   return (
     <div
       className={`group flex min-h-16 items-center gap-3 rounded-lg border p-2 transition hover:bg-accent/50 ${statusClasses(status, true)}`}
-      onMouseEnter={() => onMouseEnter(card)}
+      onMouseEnter={(e) => onMouseEnter(card, e.currentTarget.getBoundingClientRect())}
       onMouseLeave={onMouseLeave}
     >
       <span className="w-6 shrink-0 text-right font-mono text-sm text-muted-foreground">{quantity}</span>
@@ -241,7 +241,7 @@ function CardCell({
 
 export function DeckDiffView({ before, after }: DeckDiffViewProps) {
   const [changesOnly, setChangesOnly] = useState(true)
-  const [hoverCard, setHoverCard] = useState<DeckCard | null>(null)
+  const [hoverPreview, setHoverPreview] = useState<{ card: DeckCard; x: number; y: number } | null>(null)
 
   const allEntries = useMemo(() => buildDiff(before.cards, after.cards), [before.cards, after.cards])
   const entries = changesOnly ? allEntries.filter(entry => entry.status !== "unchanged") : allEntries
@@ -256,11 +256,11 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
     return Array.from(groups.entries())
   }, [entries])
 
-  const showHoverPreview = (card: DeckCard) => {
-    if (primaryCardImage(card)) setHoverCard(card)
+  const showHoverPreview = (card: DeckCard, rect: DOMRect) => {
+    if (primaryCardImage(card)) setHoverPreview({ card, x: rect.right, y: rect.top + rect.height / 2 })
   }
 
-  const hideHoverPreview = () => setHoverCard(null)
+  const hideHoverPreview = () => setHoverPreview(null)
 
   return (
     <div className="relative space-y-4">
@@ -327,11 +327,12 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
         </div>
       )}
 
-      {hoverCard && createPortal(
+      {hoverPreview && createPortal(
         <div
-          className="pointer-events-none fixed right-4 top-1/2 z-[100] -translate-y-1/2 drop-shadow-2xl"
+          className="pointer-events-none fixed z-[100] -translate-y-1/2 drop-shadow-2xl"
+          style={{ left: hoverPreview.x + 8, top: hoverPreview.y }}
         >
-          <CardArtPreview card={hoverCard} />
+          <CardArtPreview card={hoverPreview.card} />
         </div>,
         document.body
       )}
