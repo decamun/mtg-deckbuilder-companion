@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, use, useRef, useMemo, useCallback
 import { motion, type MotionProps } from "framer-motion"
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
-import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2, ChevronDown } from "lucide-react"
+import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2, ChevronDown, GripVertical } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -80,9 +80,15 @@ Welcome to the primer for **${deckName}**.
 - _What does an ideal opening hand look like?_
 `
 
+/** Where to render the tag-drag handle (listeners must not cover the whole card: PointerSensor
+ *  attaches document pointer listeners and can preventDefault on move, which breaks Base UI
+ *  hover submenus and other mousemove-driven interactions). */
+type TagDragHandlePlacement = "overlay" | "inline"
+
 function DraggableDeckCard({
   id,
   disabled,
+  tagDragHandlePlacement = "overlay",
   className,
   style,
   animate,
@@ -92,6 +98,7 @@ function DraggableDeckCard({
 }: {
   id: string
   disabled: boolean
+  tagDragHandlePlacement?: TagDragHandlePlacement
   className?: string
   style?: CSSProperties
   animate?: MotionProps["animate"]
@@ -99,13 +106,32 @@ function DraggableDeckCard({
   onClick?: (event: React.MouseEvent<HTMLDivElement>) => void
   children: ReactNode
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id, disabled })
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useDraggable({ id, disabled })
   const dragStyle: CSSProperties = {
     ...style,
     transform: CSS.Translate.toString(transform),
     opacity: isDragging ? 0.7 : style?.opacity,
     zIndex: isDragging ? 1000 : style?.zIndex,
   }
+
+  const dragHandle = !disabled ? (
+    <button
+      type="button"
+      ref={setActivatorNodeRef}
+      aria-label="Drag onto a tag group to assign this card"
+      title="Drag onto a tag group to assign this card"
+      className={
+        tagDragHandlePlacement === "inline"
+          ? "flex h-9 w-7 shrink-0 cursor-grab items-center justify-center rounded-md border border-border/60 bg-muted/40 text-muted-foreground shadow-sm active:cursor-grabbing hover:bg-accent hover:text-accent-foreground"
+          : "absolute left-0 top-1/2 z-30 flex h-16 w-5 -translate-y-1/2 cursor-grab items-center justify-center rounded-r-md border border-border/60 bg-background/90 text-muted-foreground shadow-md active:cursor-grabbing hover:bg-accent hover:text-accent-foreground"
+      }
+      onClick={(e) => e.stopPropagation()}
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical className="h-4 w-4" aria-hidden />
+    </button>
+  ) : null
 
   return (
     <motion.div
@@ -115,10 +141,10 @@ function DraggableDeckCard({
       animate={animate}
       transition={transition}
       onClick={onClick}
-      {...(!disabled ? attributes : {})}
-      {...(!disabled ? listeners : {})}
     >
+      {tagDragHandlePlacement === "inline" ? dragHandle : null}
       {children}
+      {tagDragHandlePlacement === "overlay" ? dragHandle : null}
     </motion.div>
   )
 }
@@ -1472,7 +1498,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         <DraggableDeckCard
                           id={c.id}
                           disabled={cardDragDisabled}
-                          className={`relative rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing shadow-xl group aspect-[5/7] transition-all ${
+                          className={`relative rounded-xl overflow-hidden border shadow-xl group aspect-[5/7] transition-all ${
                             commanderIds.includes(c.scryfall_id)
                               ? 'border-yellow-400/80 ring-2 ring-yellow-400/40 hover:border-yellow-300'
                               : coverImageId === c.scryfall_id
@@ -1483,7 +1509,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         >
                           <button
                             type="button"
-                            className="absolute inset-0 z-10 cursor-grab bg-transparent p-0 text-left active:cursor-grabbing"
+                            className="absolute inset-0 z-10 cursor-pointer bg-transparent p-0 text-left"
                             aria-label={`Preview ${c.name}`}
                             onClick={(e) => {
                               e.stopPropagation()
@@ -1692,7 +1718,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 key={card.id}
                                 id={card.id}
                                 disabled={cardDragDisabled}
-                                className="absolute w-full cursor-grab active:cursor-grabbing group"
+                                className="absolute w-full group"
                                 style={dragStyle}
                               >
                                 <motion.div
@@ -1705,7 +1731,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 >
                                 <button
                                   type="button"
-                                  className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
+                                  className="absolute inset-0 z-10 cursor-pointer bg-transparent p-0 text-left"
                                   aria-label={`Preview ${card.name}`}
                                   onClick={(e) => {
                                     e.stopPropagation()
@@ -1752,7 +1778,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       key={c.id}
                       id={c.id}
                       disabled={cardDragDisabled}
-                      className="flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing"
+                      tagDragHandlePlacement="inline"
+                      className="flex items-center justify-between gap-2 p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative"
                       onClick={(e) => {
                         e.stopPropagation()
                         showClickedPreview(c, groupName)
