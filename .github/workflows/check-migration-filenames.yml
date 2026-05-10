@@ -1,0 +1,24 @@
+name: Check migration filenames
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'scripts/check-migration-filenames.mjs'
+      - '.github/workflows/check-migration-filenames.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Validate added migration filenames
+        run: node scripts/check-migration-filenames.mjs
