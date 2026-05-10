@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { Badge } from "@/components/ui/badge"
 import { ManaText } from "@/components/mana/ManaText"
@@ -39,11 +39,6 @@ type DiffEntry = {
   sortName: string
 }
 
-type FloatingPreview = {
-  card: DeckCard
-  x: number
-  y: number
-}
 
 interface DeckDiffViewProps {
   before: DiffSide
@@ -51,8 +46,6 @@ interface DeckDiffViewProps {
 }
 
 const TYPE_ORDER = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land", "Other"]
-const HOVER_PREVIEW_DELAY_MS = 750
-const HOVER_PREVIEW_MAX_VISIBLE_MS = 30_000
 
 function typeGroup(card: DeckCard | undefined): string {
   return getCardTypeGroup(card?.type_line)
@@ -192,13 +185,11 @@ function CardCell({
   stack,
   status,
   onMouseEnter,
-  onMouseMove,
   onMouseLeave,
 }: {
   stack?: CardStack
   status: DiffStatus
-  onMouseEnter: (card: DeckCard, event: React.MouseEvent<HTMLDivElement>) => void
-  onMouseMove: (card: DeckCard, event: React.MouseEvent<HTMLDivElement>) => void
+  onMouseEnter: (card: DeckCard, rect: DOMRect) => void
   onMouseLeave: () => void
 }) {
   if (!stack) {
@@ -213,8 +204,7 @@ function CardCell({
   return (
     <div
       className={`group flex min-h-16 items-center gap-3 rounded-lg border p-2 transition hover:bg-accent/50 ${statusClasses(status, true)}`}
-      onMouseEnter={(event) => onMouseEnter(card, event)}
-      onMouseMove={(event) => onMouseMove(card, event)}
+      onMouseEnter={(e) => onMouseEnter(card, e.currentTarget.getBoundingClientRect())}
       onMouseLeave={onMouseLeave}
     >
       <span className="w-6 shrink-0 text-right font-mono text-sm text-muted-foreground">{quantity}</span>
@@ -251,8 +241,7 @@ function CardCell({
 
 export function DeckDiffView({ before, after }: DeckDiffViewProps) {
   const [changesOnly, setChangesOnly] = useState(true)
-  const [hoverPreview, setHoverPreview] = useState<FloatingPreview | null>(null)
-  const [hoverPreviewTimer, setHoverPreviewTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
+  const [hoverPreview, setHoverPreview] = useState<{ card: DeckCard; x: number; y: number } | null>(null)
 
   const allEntries = useMemo(() => buildDiff(before.cards, after.cards), [before.cards, after.cards])
   const entries = changesOnly ? allEntries.filter(entry => entry.status !== "unchanged") : allEntries
@@ -267,40 +256,17 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
     return Array.from(groups.entries())
   }, [entries])
 
-  useEffect(() => {
-    return () => {
-      if (hoverPreviewTimer) clearTimeout(hoverPreviewTimer)
+  const showHoverPreview = (card: DeckCard, rect: DOMRect) => {
+    if (primaryCardImage(card)) {
+      const previewWidth = 256 + 8 // w-64 + gap
+      const x = window.innerWidth - rect.right >= previewWidth
+        ? rect.right + 8
+        : rect.left - previewWidth
+      setHoverPreview({ card, x, y: rect.top + rect.height / 2 })
     }
-  }, [hoverPreviewTimer])
-
-  useEffect(() => {
-    if (!hoverPreview) return
-    const timer = setTimeout(() => setHoverPreview(null), HOVER_PREVIEW_MAX_VISIBLE_MS)
-    return () => clearTimeout(timer)
-  }, [hoverPreview])
-
-  const clearHoverPreview = () => {
-    if (hoverPreviewTimer) {
-      clearTimeout(hoverPreviewTimer)
-      setHoverPreviewTimer(null)
-    }
-    setHoverPreview(null)
   }
 
-  const scheduleHoverPreview = (card: DeckCard, event: React.MouseEvent<HTMLDivElement>) => {
-    if (!primaryCardImage(card)) return
-    if (hoverPreviewTimer) clearTimeout(hoverPreviewTimer)
-    const timer = setTimeout(() => {
-      setHoverPreview({ card, x: event.clientX, y: event.clientY })
-      setHoverPreviewTimer(null)
-    }, HOVER_PREVIEW_DELAY_MS)
-    setHoverPreviewTimer(timer)
-  }
-
-  const moveHoverPreview = (card: DeckCard, event: React.MouseEvent<HTMLDivElement>) => {
-    clearHoverPreview()
-    scheduleHoverPreview(card, event)
-  }
+  const hideHoverPreview = () => setHoverPreview(null)
 
   return (
     <div className="relative space-y-4">
@@ -349,16 +315,14 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
                       <CardCell
                         stack={entry.before}
                         status={entry.status}
-                        onMouseEnter={scheduleHoverPreview}
-                        onMouseMove={moveHoverPreview}
-                        onMouseLeave={clearHoverPreview}
+                        onMouseEnter={showHoverPreview}
+                        onMouseLeave={hideHoverPreview}
                       />
                       <CardCell
                         stack={entry.after}
                         status={entry.status}
-                        onMouseEnter={scheduleHoverPreview}
-                        onMouseMove={moveHoverPreview}
-                        onMouseLeave={clearHoverPreview}
+                        onMouseEnter={showHoverPreview}
+                        onMouseLeave={hideHoverPreview}
                       />
                     </div>
                   </div>
@@ -371,8 +335,8 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
 
       {hoverPreview && createPortal(
         <div
-          className="pointer-events-none fixed z-[100] drop-shadow-2xl"
-          style={{ left: hoverPreview.x, top: hoverPreview.y, transform: "translate(-50%, -50%)" }}
+          className="pointer-events-none fixed z-[100] -translate-y-1/2 drop-shadow-2xl"
+          style={{ left: hoverPreview.x, top: hoverPreview.y }}
         >
           <CardArtPreview card={hoverPreview.card} />
         </div>,
