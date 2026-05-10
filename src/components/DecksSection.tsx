@@ -225,8 +225,7 @@ function DecksSectionContent() {
     if (warmCache?.length) {
       warmScryfallForDeckRows(deck, warmCache)
     }
-    const freshCache = getPrefetchedDeckCards(deck.id, 30_000)
-    if (freshCache?.length) {
+    if (getPrefetchedDeckCards(deck.id, 30_000)?.length) {
       return
     }
     void (async () => {
