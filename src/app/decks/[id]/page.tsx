@@ -117,6 +117,8 @@ function DraggableDeckCard({
   animate,
   transition,
   onClick,
+  onMouseEnter,
+  onMouseLeave,
   title,
   children,
 }: {
@@ -127,6 +129,8 @@ function DraggableDeckCard({
   animate?: MotionProps["animate"]
   transition?: MotionProps["transition"]
   onClick?: (event: React.MouseEvent<HTMLDivElement>) => void
+  onMouseEnter?: (event: React.MouseEvent<HTMLDivElement>) => void
+  onMouseLeave?: (event: React.MouseEvent<HTMLDivElement>) => void
   title?: string
   children: ReactNode
 }) {
@@ -146,6 +150,8 @@ function DraggableDeckCard({
       animate={animate}
       transition={transition}
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       title={title}
       {...(!disabled ? attributes : {})}
       {...(!disabled ? listeners : {})}
@@ -354,6 +360,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [reverting, setReverting] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [formatHintsListOpen, setFormatHintsListOpen] = useState(false)
+  const [deckFormatHintHoverId, setDeckFormatHintHoverId] = useState<string | null>(null)
+  const [previewFormatHintsHovered, setPreviewFormatHintsHovered] = useState(false)
 
   const [deckTitleEditing, setDeckTitleEditing] = useState(false)
   const [deckTitleDraft, setDeckTitleDraft] = useState("")
@@ -1089,6 +1097,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const showClickedPreview = (card: DeckCard, groupName: string) => {
     setPreviewFaceIndex(0)
+    setPreviewFormatHintsHovered(false)
     setClickedPreview({ card, groupName })
     void ensurePrintingsLoaded(card)
   }
@@ -1596,7 +1605,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         <DraggableDeckCard
                           id={c.id}
                           disabled={cardDragDisabled}
-                          className={`relative rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing shadow-xl group aspect-[5/7] transition-all ${visualDeckCardChrome(c, {
+                          onMouseEnter={vlist && vlist.length > 0 ? () => setDeckFormatHintHoverId(c.id) : undefined}
+                          onMouseLeave={vlist && vlist.length > 0 ? () => setDeckFormatHintHoverId((prev) => (prev === c.id ? null : prev)) : undefined}
+                          className={`relative rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing shadow-xl aspect-[5/7] transition-all ${visualDeckCardChrome(c, {
                             commanderIds: displayedCommanderIds,
                             coverImageId: displayedCoverImageId,
                             violations: vlist,
@@ -1627,7 +1638,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                             </div>
                           )}
                           {c.quantity > 1 && (
-                            <div className="absolute top-2 right-8 bg-background/80 text-foreground px-1.5 py-0.5 rounded text-xs font-bold border border-border group-hover:opacity-0 transition-opacity">
+                            <div
+                              className={`absolute top-2 right-8 bg-background/80 text-foreground px-1.5 py-0.5 rounded text-xs font-bold border border-border transition-opacity ${
+                                vlist && vlist.length > 0 && deckFormatHintHoverId === c.id ? 'opacity-0' : 'opacity-100'
+                              }`}
+                            >
                               x{c.quantity}
                             </div>
                           )}
@@ -1643,7 +1658,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                             {formatPrice(c.price_usd)}
                           </div>
                           {vlist && vlist.length > 0 && (
-                            <div className="pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto opacity-0 shadow-lg transition-opacity duration-300 ease-out group-hover:opacity-100">
+                            <div
+                              className={`pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
+                                deckFormatHintHoverId === c.id ? 'opacity-100' : 'opacity-0'
+                              }`}
+                            >
                               <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
                                 <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
                                 <ul className="space-y-0.5">
@@ -1909,7 +1928,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       key={c.id}
                       id={c.id}
                       disabled={cardDragDisabled}
-                      className={`flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing${listV?.length ? ' border-l-4 border-l-red-500' : ''}`}
+                      onMouseEnter={listV && listV.length > 0 ? () => setDeckFormatHintHoverId(c.id) : undefined}
+                      onMouseLeave={listV && listV.length > 0 ? () => setDeckFormatHintHoverId((prev) => (prev === c.id ? null : prev)) : undefined}
+                      className={`flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg relative cursor-grab active:cursor-grabbing${listV?.length ? ' border-l-4 border-l-red-500' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation()
                         showClickedPreview(c, groupName)
@@ -1928,7 +1949,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         {renderThreeDotMenu(c, groupName, 'end')}
                       </div>
                       {listV && listV.length > 0 && (
-                        <div className="pointer-events-none absolute inset-x-2 top-1/2 z-30 max-h-[calc(100%-0.5rem)] -translate-y-1/2 overflow-y-auto opacity-0 shadow-lg transition-opacity duration-300 ease-out group-hover:opacity-100">
+                        <div
+                          className={`pointer-events-none absolute inset-x-2 top-1/2 z-30 max-h-[calc(100%-0.5rem)] -translate-y-1/2 overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
+                            deckFormatHintHoverId === c.id ? 'opacity-100' : 'opacity-0'
+                          }`}
+                        >
                           <div className="ml-auto w-[min(100%,22rem)] rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-[10px] leading-snug text-red-100">
                             <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
                             <ul className="space-y-0.5">
@@ -2121,15 +2146,25 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             className="absolute left-1/2 top-1/2 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 -translate-y-1/2 items-start gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="group relative flex w-80 shrink-0 flex-col items-center">
+            <div
+              className="relative flex w-80 shrink-0 flex-col items-center"
+              onMouseEnter={() => {
+                if (pv?.length) setPreviewFormatHintsHovered(true)
+              }}
+              onMouseLeave={() => setPreviewFormatHintsHovered(false)}
+            >
               <CardArt
                 card={clickedPreviewCard}
                 imageClassName={`w-80 rounded-xl border shadow-2xl ${pv?.length ? 'border-red-500/70' : 'border-border/50'}`}
                 faceIndex={previewFaceIndex}
                 onFlip={() => setPreviewFaceIndex(i => i + 1)}
               />
-              {pv && pv.length > 0 && isFormatValidationImplemented(displayedFormat) && (
-                <div className="pointer-events-none absolute inset-x-2 bottom-3 z-20 max-h-[45%] overflow-y-auto opacity-0 shadow-lg transition-opacity duration-300 ease-out group-hover:opacity-100">
+              {pv && pv.length > 0 && (
+                <div
+                  className={`pointer-events-none absolute inset-x-2 bottom-3 z-20 max-h-[45%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
+                    previewFormatHintsHovered ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
                   <div className="rounded-lg border border-red-600 bg-zinc-950 px-3 py-2 text-xs text-red-100">
                     <div className="font-semibold text-red-300">Format hints</div>
                     <ul className="mt-1 list-disc space-y-0.5 pl-4">
