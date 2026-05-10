@@ -257,7 +257,13 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
   }, [entries])
 
   const showHoverPreview = (card: DeckCard, rect: DOMRect) => {
-    if (primaryCardImage(card)) setHoverPreview({ card, x: rect.left, y: rect.top + rect.height / 2 })
+    if (primaryCardImage(card)) {
+      const previewWidth = 256 + 8 // w-64 + gap
+      const x = window.innerWidth - rect.right >= previewWidth
+        ? rect.right + 8
+        : rect.left - previewWidth
+      setHoverPreview({ card, x, y: rect.top + rect.height / 2 })
+    }
   }
 
   const hideHoverPreview = () => setHoverPreview(null)
@@ -330,7 +336,7 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
       {hoverPreview && createPortal(
         <div
           className="pointer-events-none fixed z-[100] -translate-y-1/2 drop-shadow-2xl"
-          style={{ left: hoverPreview.x - 256 - 8, top: hoverPreview.y }}
+          style={{ left: hoverPreview.x, top: hoverPreview.y }}
         >
           <CardArtPreview card={hoverPreview.card} />
         </div>,
