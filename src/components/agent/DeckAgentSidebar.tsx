@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { toast } from "sonner"
-import { Send, Square, Trash2, Sparkles, Brain, PanelRightClose, PanelRightOpen, Bell } from "lucide-react"
+import { Send, Square, Trash2, Sparkles, Brain, PanelRightClose, PanelRightOpen, Bell, Network } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -231,6 +232,7 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
     )
   }
 
+  const isMcpMode = model === 'use-mcp'
   const modelDesc = MODEL_DESCRIPTORS[model]
   const reasoningAvailable = modelDesc.reasoning
   const proSubscribed = Boolean(limits?.idlebrewProSubscribed)
@@ -273,32 +275,34 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
             allowedModels={allowedModels}
             onLockedModelClick={() => setSubscribeOpen(true)}
           />
-          <Button
-            variant={reasoning ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              if (!reasoningAvailable) {
-                if (proSubscribed) {
-                  toast.info("Choose a smarter model to enable thinking.")
-                } else {
-                  setSubscribeOpen(true)
+          {!isMcpMode && (
+            <Button
+              variant={reasoning ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                if (!reasoningAvailable) {
+                  if (proSubscribed) {
+                    toast.info("Choose a smarter model to enable thinking.")
+                  } else {
+                    setSubscribeOpen(true)
+                  }
+                  return
                 }
-                return
+                setReasoning((r) => !r)
+              }}
+              className={`h-8 gap-1 px-2 text-xs ${reasoningAvailable ? "" : "opacity-50"}`}
+              title={
+                reasoningAvailable
+                  ? "Toggle thinking"
+                  : proSubscribed
+                    ? "Choose a smarter model to enable thinking"
+                    : "Subscribe to unlock smarter models"
               }
-              setReasoning((r) => !r)
-            }}
-            className={`h-8 gap-1 px-2 text-xs ${reasoningAvailable ? "" : "opacity-50"}`}
-            title={
-              reasoningAvailable
-                ? "Toggle thinking"
-                : proSubscribed
-                  ? "Choose a smarter model to enable thinking"
-                  : "Subscribe to unlock smarter models"
-            }
-            aria-disabled={!reasoningAvailable}
-          >
-            <Brain className="h-3 w-3" /> Think
-          </Button>
+              aria-disabled={!reasoningAvailable}
+            >
+              <Brain className="h-3 w-3" /> Think
+            </Button>
+          )}
         </div>
         {limits && (
           <p className="mt-1.5 text-[10px] text-muted-foreground">
@@ -309,57 +313,90 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen }: Props) {
         )}
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-4">
-        {messages.length === 0 && !error && (
-          <div className="text-sm text-muted-foreground">
-            <p className="mb-2 font-medium text-foreground">Ask me to:</p>
-            <ul className="list-disc space-y-1 pl-5 text-xs">
-              <li>Find ramp under 3 mana for my colors</li>
-              <li>Tag every wincon and tutor in this deck</li>
-              <li>Swap all my Sol Ring printings to LEA</li>
-              <li>Add 5 budget green removal spells</li>
-              <li>Write a primer for this deck</li>
-            </ul>
+      {isMcpMode ? (
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
+          <div className="flex flex-col items-center gap-2 py-4 text-center">
+            <Network className="h-8 w-8 text-primary/60" />
+            <p className="font-semibold text-foreground">Using your MCP connection</p>
+            <p className="text-xs text-muted-foreground">
+              Connect an MCP-aware client to control this deck from your AI assistant.
+            </p>
           </div>
-        )}
-
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
-
-        {error && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            {error.message}
+          <div className="rounded-md border border-border bg-muted/40 p-3">
+            <p className="mb-1 text-xs text-muted-foreground">MCP server URL</p>
+            <code className="break-all font-mono text-xs text-foreground">
+              https://idlebrew.com/api/mcp
+            </code>
           </div>
-        )}
-      </div>
-
-      <footer className="shrink-0 border-t border-border bg-background/30 p-3">
-        <Textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault()
-              handleSend()
-            }
-          }}
-          placeholder="Ask the agent… (Shift+Enter for newline)"
-          className="mb-2 min-h-[68px] resize-none text-sm"
-          disabled={isStreaming}
-        />
-        <div className="flex items-center justify-end gap-2">
-          {isStreaming ? (
-            <Button size="sm" variant="outline" onClick={stop}>
-              <Square className="h-3.5 w-3.5" /> Stop
-            </Button>
-          ) : (
-            <Button size="sm" onClick={handleSend} disabled={!draft.trim()}>
-              <Send className="h-3.5 w-3.5" /> Send
-            </Button>
-          )}
+          <p className="text-xs text-muted-foreground">
+            Generate an API key in your{" "}
+            <Link href="/profile" className="text-primary underline underline-offset-2">
+              profile settings
+            </Link>
+            {", then follow the setup guide to connect Claude Desktop, Claude Code, or Cursor."}
+          </p>
+          <Link
+            href="/blog/connecting-idlebrew-mcp"
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            Step-by-step setup guide →
+          </Link>
         </div>
-      </footer>
+      ) : (
+        <>
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-4">
+            {messages.length === 0 && !error && (
+              <div className="text-sm text-muted-foreground">
+                <p className="mb-2 font-medium text-foreground">Ask me to:</p>
+                <ul className="list-disc space-y-1 pl-5 text-xs">
+                  <li>Find ramp under 3 mana for my colors</li>
+                  <li>Tag every wincon and tutor in this deck</li>
+                  <li>Swap all my Sol Ring printings to LEA</li>
+                  <li>Add 5 budget green removal spells</li>
+                  <li>Write a primer for this deck</li>
+                </ul>
+              </div>
+            )}
+
+            {messages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
+
+            {error && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {error.message}
+              </div>
+            )}
+          </div>
+
+          <footer className="shrink-0 border-t border-border bg-background/30 p-3">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSend()
+                }
+              }}
+              placeholder="Ask the agent… (Shift+Enter for newline)"
+              className="mb-2 min-h-[68px] resize-none text-sm"
+              disabled={isStreaming}
+            />
+            <div className="flex items-center justify-end gap-2">
+              {isStreaming ? (
+                <Button size="sm" variant="outline" onClick={stop}>
+                  <Square className="h-3.5 w-3.5" /> Stop
+                </Button>
+              ) : (
+                <Button size="sm" onClick={handleSend} disabled={!draft.trim()}>
+                  <Send className="h-3.5 w-3.5" /> Send
+                </Button>
+              )}
+            </div>
+          </footer>
+        </>
+      )}
       <Dialog open={subscribeOpen} onOpenChange={setSubscribeOpen}>
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
