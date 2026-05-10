@@ -12,30 +12,31 @@ On **Vercel → Production** environment, set:
 
 `NEXT_PUBLIC_SITE_URL=https://idlebrew.app` (no trailing slash)
 
-That keeps OAuth return URLs on your **custom domain** after login. If you omit it on Production, the app falls back to this deployment’s **`VERCEL_URL`** (`*.vercel.app`), which is wrong for users who browse **idlebrew.app** unless you always use the Vercel hostname.
+That keeps post-login redirects aligned with your **custom domain**.
 
-### Previews: OAuth without setting a variable per branch
+### Previews: OAuth without wildcards in Google Cloud Console
 
-The auth callback uses **`VERCEL_URL`** automatically when **`NEXT_PUBLIC_SITE_URL` is unset** (Vercel injects `VERCEL_URL` for every deployment). So **Preview** builds redirect back to **`https://<that-deployment>.vercel.app`**, which is what you want for branch QA.
+**Google only registers one Authorized redirect URI:**  
+`https://<project-ref>.supabase.co/auth/v1/callback`  
+(from Supabase Dashboard → Authentication → Providers → Google). You do **not** register each `*.vercel.app` URL with Google.
 
-You do **not** need `NEXT_PUBLIC_SITE_URL` on Preview unless you want to override that behavior.
+The **`redirect_to`** parameter (your app’s `/auth/callback`) is validated only by **Supabase** — add a wildcard there, for example:
 
-### Supabase Auth: allow preview redirect URLs
+- `https://*-.vercel.app/**`  
+  (see [Redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls))
 
-Supabase must accept `/auth/callback` on preview hosts. In **Supabase Dashboard → Authentication → URL configuration**:
+### How the app picks URLs now
 
-1. Set **Site URL** to your primary site (e.g. `https://idlebrew.app`) or leave as production default.
-2. Under **Redirect URLs**, add at least one pattern that matches Vercel previews, for example:
-   - `http://localhost:3000/**` (local)
-   - `https://*.vercel.app/**` — if the dashboard accepts this wildcard (common on hosted Supabase).
+- **Client `redirectTo`:** `NEXT_PUBLIC_SITE_URL/auth/callback` when set; otherwise **`window.location.origin`** on the preview — matches the deployment you opened.
+- **Server redirect after code exchange:** **`x-forwarded-host`** / **`x-forwarded-proto`** from the platform edge (Supabase’s recommended pattern), **not** `VERCEL_URL` and **not** `NEXT_PUBLIC_SUPABASE_URL`. Session cookies are scoped to the **app** host that served `/auth/callback`; they cannot be issued for `*.supabase.co` without changing the whole auth flow.
 
-If wildcards are not available, add your team’s stable preview pattern or paste a one-off preview URL when testing a given PR.
+### Optional: one fixed OAuth callback URL
 
-Without a matching redirect URL, Supabase will reject the OAuth round-trip even when the app builds the correct `redirect_to`.
+Set **`NEXT_PUBLIC_AUTH_CALLBACK_URL`** (full URL to `/auth/callback`) if every deployment should use the same redirect target (e.g. always production). Tradeoff: previews would complete OAuth on that host unless you omit this variable.
 
-### Google / Facebook developer consoles
+### Why not `NEXT_PUBLIC_SUPABASE_URL` as `redirect_to`?
 
-OAuth goes **through Supabase** first (`…supabase.co/auth/v1/callback`), so you usually **do not** register every preview URL with Google or Meta—only what Supabase documents for your project. If you use a **custom OAuth flow** that bypasses Supabase, you would need per-environment redirect URIs there as well.
+PKCE + `@supabase/ssr` expect your **Next.js route** at **`/auth/callback`** to run **`exchangeCodeForSession`**. The hosted Auth URLs under **`…supabase.co/auth/v1/`** are for the IdP → Supabase hop (Google’s redirect URI), not as the final **application** landing URL for code exchange. Using the API origin as `redirect_to` would not load your app’s callback handler.
 
 ---
 

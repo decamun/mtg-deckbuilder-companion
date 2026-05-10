@@ -37,6 +37,12 @@ const callbackRoute = await import('node:fs/promises').then((fs) =>
 )
 assertIncludes(callbackRoute, 'getTrustedRedirectOrigin')
 
+const trustedSite = await import('node:fs/promises').then((fs) =>
+  fs.readFile('src/lib/trusted-site-url.ts', 'utf8')
+)
+assertIncludes(trustedSite, 'x-forwarded-host')
+assert.equal(trustedSite.includes('process.env.VERCEL_URL'), false)
+
 const launchMigration = await import('node:fs/promises').then((fs) =>
   fs.readFile('supabase/migrations/20260510120000_social_launch_indexes_rls_and_advisor.sql', 'utf8')
 )

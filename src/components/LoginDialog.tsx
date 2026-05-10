@@ -15,6 +15,7 @@ import {
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { getOAuthCallbackUrl, getPasswordResetRedirectUrl } from "@/lib/oauth-callback-url"
 
 
 type Mode = "auth" | "forgot"
@@ -66,7 +67,7 @@ function LoginDialogContent({ open, onOpenChange }: LoginDialogProps) {
     setLoading(true)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: getPasswordResetRedirectUrl(),
       })
       if (error) throw error
       toast.success("Password reset email sent! Check your inbox.", { duration: 8000 })
@@ -82,7 +83,7 @@ function LoginDialogContent({ open, onOpenChange }: LoginDialogProps) {
   const handleGoogleOAuth = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: getOAuthCallbackUrl() },
     })
     if (error) toast.error(error.message)
   }
@@ -90,7 +91,7 @@ function LoginDialogContent({ open, onOpenChange }: LoginDialogProps) {
   const handleDiscordOAuth = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "discord",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: getOAuthCallbackUrl() },
     })
     if (error) toast.error(error.message)
   }
