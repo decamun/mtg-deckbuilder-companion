@@ -221,9 +221,13 @@ function DecksSectionContent() {
 
   const warmDeckNavigation = (deck: Deck) => {
     router.prefetch(`/decks/${deck.id}`)
-    const cached = getPrefetchedDeckCards(deck.id, 120_000)
-    if (cached?.length) {
-      warmScryfallForDeckRows(deck, cached)
+    const warmCache = getPrefetchedDeckCards(deck.id, 120_000)
+    if (warmCache?.length) {
+      warmScryfallForDeckRows(deck, warmCache)
+    }
+    const freshCache = getPrefetchedDeckCards(deck.id, 30_000)
+    if (freshCache?.length) {
+      return
     }
     void (async () => {
       const { data, error } = await supabase
