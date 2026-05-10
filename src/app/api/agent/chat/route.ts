@@ -216,15 +216,11 @@ export async function POST(request: Request) {
 
   const quotaLog = await recordCall(supabase, user.id, modelId)
   if (!quotaLog.ok) {
-    console.error('[agent-chat] quota logging failed', {
+    console.error('[agent-chat] quota logging failed (non-fatal)', {
       userId: user.id,
       modelId,
       error: quotaLog.error,
     })
-    return NextResponse.json(
-      { message: 'Agent quota logging is temporarily unavailable.' },
-      { status: 503, headers: { 'Retry-After': '60' } }
-    )
   }
 
   const commanderCards = deck.commander_scryfall_ids.length > 0
