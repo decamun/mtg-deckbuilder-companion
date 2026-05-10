@@ -18,6 +18,7 @@ import {
   getPartnerKind,
   partnerHelperText,
 } from "@/lib/commander-pairing"
+import { colorIdentityScryfallClause } from "@/lib/deck-format-validation"
 import {
   BRACKET_GC_LIMIT,
   BRACKET_LABELS,
@@ -66,11 +67,6 @@ function toEDHRECSlug(name: string): string {
     .replace(/\s+/g, "-")
     .replace(/-{2,}/g, "-")
     .replace(/^-|-$/g, "")
-}
-
-function colorIdentitySearch(colors: string[]): string {
-  const uniqueColors = [...new Set(colors)].join("").toLowerCase()
-  return uniqueColors ? `id<=${uniqueColors}` : "id=c"
 }
 
 function cardToBrewRow(deckId: string, card: ScryfallCard): BrewDeckRow {
@@ -462,7 +458,7 @@ export function BrewSection() {
             ...skipNames,
             ...edhrecFiltered.map((c) => c.name.toLowerCase()),
           ])
-          const colorQuery = colorIdentitySearch(combinedColors)
+          const colorQuery = colorIdentityScryfallClause(combinedColors)
           const fallbackSlotCount = Math.max(1, missingNonLandSlots)
           const remainingBudget =
             opts.budgetUsd === null

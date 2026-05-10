@@ -44,6 +44,9 @@ export interface DeckCard {
   cmc?: number
   colors?: string[]
   oracle_text?: string
+  /** From Scryfall; used for Commander format hints in the deck editor. */
+  color_identity?: string[]
+  legalities?: Record<string, string>
   produced_mana?: string[]
   set_code?: string
   collector_number?: string
