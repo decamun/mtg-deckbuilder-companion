@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { supabase } from "@/lib/supabase/client"
 import { searchCards, getCardsByIds, getCard, getPrintingsByOracleId, cmcOf, getCardFaceImages, getCardImageUrl, type ScryfallCard, type ScryfallPrinting } from "@/lib/scryfall"
 import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/types"
+import { validateProjectedDeckForDeck, type DeckCardMinimal } from "@/lib/deck-format-validation"
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -519,7 +520,47 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }, [deckId, fetchDeck])
 
   const addToDeck = async (card: ScryfallCard) => {
+    if (!deck) return
+
     const existing = cards.find(c => c.scryfall_id === card.id)
+
+    const projected: DeckCardMinimal[] = existing
+      ? cards.map(c =>
+          c.id === existing.id
+            ? {
+                scryfall_id: c.scryfall_id,
+                oracle_id: c.oracle_id ?? card.oracle_id ?? null,
+                quantity: c.quantity + 1,
+                zone: c.zone,
+              }
+            : {
+                scryfall_id: c.scryfall_id,
+                oracle_id: c.oracle_id,
+                quantity: c.quantity,
+                zone: c.zone,
+              }
+        )
+      : [
+          ...cards.map(c => ({
+            scryfall_id: c.scryfall_id,
+            oracle_id: c.oracle_id,
+            quantity: c.quantity,
+            zone: c.zone,
+          })),
+          {
+            scryfall_id: card.id,
+            oracle_id: card.oracle_id ?? null,
+            quantity: 1,
+            zone: "mainboard",
+          },
+        ]
+
+    const violation = await validateProjectedDeckForDeck(deck, commanderIds, [], projected, [card])
+    if (violation) {
+      toast.error(violation)
+      return
+    }
+
     const versionSince = new Date().toISOString()
     if (existing) {
       const nextQuantity = existing.quantity + 1
@@ -1771,6 +1812,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       {isOwner && (
         <ImportDecklistDialog
           deckId={deckId}
+          deckFormat={deck?.format ?? null}
+          commanderScryfallIds={commanderIds}
           currentCards={cards}
           open={importOpen}
           onOpenChange={setImportOpen}

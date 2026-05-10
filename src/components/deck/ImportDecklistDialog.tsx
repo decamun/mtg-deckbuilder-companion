@@ -19,10 +19,13 @@ import { resolveDecklist } from "@/lib/decklist-import"
 import { DeckDiffView } from "@/components/deck/DeckDiffView"
 import { toast } from "sonner"
 import { pickPrice } from "@/lib/format"
+import { validateProjectedDeckForDeck, type DeckCardMinimal } from "@/lib/deck-format-validation"
 import type { DeckCard } from "@/lib/types"
 
 interface Props {
   deckId: string
+  deckFormat: string | null
+  commanderScryfallIds: string[]
   currentCards: DeckCard[]
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -33,6 +36,8 @@ type Step = "input" | "processing" | "diff"
 
 export function ImportDecklistDialog({
   deckId,
+  deckFormat,
+  commanderScryfallIds,
   currentCards,
   open,
   onOpenChange,
@@ -122,17 +127,6 @@ export function ImportDecklistDialog({
       }
     }
 
-    const { error: deleteError } = await supabase
-      .from("deck_cards")
-      .delete()
-      .eq("deck_id", deckId)
-
-    if (deleteError) {
-      toast.error(`Failed to clear deck: ${deleteError.message}`)
-      setApplying(false)
-      return
-    }
-
     const inserts = proposedCards.map((c) => ({
       deck_id: deckId,
       scryfall_id: c.scryfall_id,
@@ -144,6 +138,37 @@ export function ImportDecklistDialog({
       zone: c.zone,
       tags: tagsByName.get(c.name.toLowerCase()) ?? [],
     }))
+
+    const projected: DeckCardMinimal[] = proposedCards.map((c) => ({
+      scryfall_id: c.scryfall_id,
+      oracle_id: c.oracle_id,
+      quantity: c.quantity,
+      zone: c.zone,
+    }))
+
+    const deckViolation = await validateProjectedDeckForDeck(
+      { format: deckFormat },
+      commanderScryfallIds,
+      [],
+      projected,
+      []
+    )
+    if (deckViolation) {
+      toast.error(deckViolation)
+      setApplying(false)
+      return
+    }
+
+    const { error: deleteError } = await supabase
+      .from("deck_cards")
+      .delete()
+      .eq("deck_id", deckId)
+
+    if (deleteError) {
+      toast.error(`Failed to clear deck: ${deleteError.message}`)
+      setApplying(false)
+      return
+    }
 
     const { error: insertError } = await supabase.from("deck_cards").insert(inserts)
 

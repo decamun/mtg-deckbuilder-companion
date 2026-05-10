@@ -30,6 +30,8 @@ export interface ScryfallCard {
   cmc?: number
   colors?: string[]
   color_identity?: string[]
+  /** Play format keys → legality string (e.g. commander → legal | banned | not_legal) */
+  legalities?: Record<string, string>
   image_uris?: ScryfallImageUris
   card_faces?: ScryfallCardFace[]
   set?: string

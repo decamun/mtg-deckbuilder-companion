@@ -25,41 +25,114 @@ function emitModule(sourcePath, outPath, replacements = []) {
 }
 
 emitModule('src/lib/scryfall.ts', 'scryfall.mjs')
+emitModule('src/lib/commander-pairing.ts', 'commander-pairing.mjs', [
+  ['from "./scryfall"', 'from "./scryfall.mjs"'],
+])
+emitModule('src/lib/deck-format-validation.ts', 'deck-format-validation.mjs', [
+  ["from './scryfall'", "from './scryfall.mjs'"],
+  ["from './commander-pairing'", "from './commander-pairing.mjs'"],
+])
 emitModule('src/lib/deck-service.ts', 'deck-service.mjs', [
   ["import { getCard } from './scryfall';", "import { getCard } from './scryfall.mjs';"],
+  ["from './deck-format-validation'", "from './deck-format-validation.mjs'"],
 ])
 
 const service = await import(pathToFileURL(join(tmp, 'deck-service.mjs')).href)
 
 const cardsById = new Map([
-  ['base-id', {
-    id: 'base-id',
-    oracle_id: 'oracle-1',
-    name: 'Canonical Card',
-    type_line: 'Creature - Human',
-    mana_cost: '{1}{W}',
-    oracle_text: '',
-  }],
-  ['printing-id', {
-    id: 'printing-id',
-    oracle_id: 'oracle-1',
-    name: 'Canonical Card',
-    type_line: 'Creature - Human',
-    mana_cost: '{1}{W}',
-    oracle_text: '',
-  }],
-  ['other-printing-id', {
-    id: 'other-printing-id',
-    oracle_id: 'oracle-2',
-    name: 'Other Card',
-    type_line: 'Artifact',
-    mana_cost: '{2}',
-    oracle_text: '',
-  }],
+  [
+    'base-id',
+    {
+      id: 'base-id',
+      oracle_id: 'oracle-1',
+      name: 'Canonical Card',
+      type_line: 'Creature - Human',
+      mana_cost: '{1}{W}',
+      oracle_text: '',
+      color_identity: ['W'],
+      legalities: { commander: 'legal' },
+    },
+  ],
+  [
+    'printing-id',
+    {
+      id: 'printing-id',
+      oracle_id: 'oracle-1',
+      name: 'Canonical Card',
+      type_line: 'Creature - Human',
+      mana_cost: '{1}{W}',
+      oracle_text: '',
+      color_identity: ['W'],
+      legalities: { commander: 'legal' },
+    },
+  ],
+  [
+    'other-printing-id',
+    {
+      id: 'other-printing-id',
+      oracle_id: 'oracle-2',
+      name: 'Other Card',
+      type_line: 'Artifact',
+      mana_cost: '{2}',
+      oracle_text: '',
+      color_identity: [],
+      legalities: { commander: 'legal' },
+    },
+  ],
+  [
+    'sol-ring-id',
+    {
+      id: 'sol-ring-id',
+      oracle_id: 'oracle-sol',
+      name: 'Sol Ring',
+      type_line: 'Artifact',
+      mana_cost: '{1}',
+      oracle_text: '',
+      color_identity: [],
+      legalities: { commander: 'legal' },
+    },
+  ],
+  [
+    'banned-id',
+    {
+      id: 'banned-id',
+      oracle_id: 'oracle-ban',
+      name: 'Banned Card',
+      type_line: 'Sorcery',
+      mana_cost: '{B}',
+      oracle_text: '',
+      color_identity: ['B'],
+      legalities: { commander: 'banned' },
+    },
+  ],
 ])
 
-globalThis.fetch = async (url) => {
-  const id = String(url).split('/').pop()
+function cardByOracleId(oracleId) {
+  for (const c of cardsById.values()) {
+    if (c.oracle_id === oracleId) return c
+  }
+  return undefined
+}
+
+globalThis.fetch = async (url, init) => {
+  const u = String(url)
+  if (u.includes('/cards/collection')) {
+    const body = JSON.parse(init?.body ?? '{}')
+    const identifiers = body.identifiers ?? []
+    const data = []
+    for (const idObj of identifiers) {
+      let card
+      if (idObj.id) card = cardsById.get(idObj.id)
+      else if (idObj.oracle_id) card = cardByOracleId(idObj.oracle_id)
+      if (card) data.push(card)
+    }
+    return {
+      ok: true,
+      json: async () => ({ data, not_found: [] }),
+      text: async () => JSON.stringify({ data, not_found: [] }),
+    }
+  }
+  const id = u.split('/').pop()?.split('?')[0]
   const card = cardsById.get(id)
   return {
     ok: Boolean(card),
@@ -73,8 +146,7 @@ function makeQuery(table, state) {
     select() {
       return query
     },
-    eq(column, value) {
-      state.filters.push({ table, column, value })
+    eq() {
       return query
     },
     gte(column, value) {
@@ -118,6 +190,12 @@ function makeQuery(table, state) {
       }
       return { data: null, error: null }
     },
+    then(onFulfilled, onRejected) {
+      if (table === 'deck_cards') {
+        return Promise.resolve({ data: state.deckCardRows ?? [], error: null }).then(onFulfilled, onRejected)
+      }
+      return Promise.resolve({ data: null, error: null }).then(onFulfilled, onRejected)
+    },
   }
   return query
 }
@@ -128,7 +206,7 @@ function makeSupabase(overrides = {}) {
       id: 'deck-1',
       user_id: 'user-1',
       name: 'Deck',
-      format: 'commander',
+      format: null,
       description: null,
       is_public: false,
       cover_image_scryfall_id: null,
@@ -136,6 +214,7 @@ function makeSupabase(overrides = {}) {
       primer_markdown: '',
       created_at: new Date(0).toISOString(),
     },
+    deckCardRows: [],
     existingCard: null,
     latestVersion: { id: 'version-1' },
     operations: [],
@@ -222,6 +301,75 @@ function makeSupabase(overrides = {}) {
   const update = supabase.state.operations.find((op) => op.table === 'decks' && op.type === 'update')
   assert.deepEqual(update.values.commander_scryfall_ids, ['base-id'])
   assert.deepEqual(row.commander_scryfall_ids, ['base-id'])
+}
+
+{
+  const supabase = makeSupabase({
+    deck: {
+      id: 'deck-1',
+      user_id: 'user-1',
+      name: 'Deck',
+      format: 'edh',
+      description: null,
+      is_public: false,
+      cover_image_scryfall_id: null,
+      commander_scryfall_ids: [],
+      primer_markdown: '',
+      created_at: new Date(0).toISOString(),
+    },
+  })
+  await assert.rejects(
+    service.setCommanders(supabase, 'user-1', 'deck-1', ['base-id']),
+    /cannot be your commander/
+  )
+  assert.equal(supabase.state.operations.some((op) => op.table === 'decks'), false)
+}
+
+{
+  const supabase = makeSupabase({
+    deck: {
+      id: 'deck-1',
+      user_id: 'user-1',
+      name: 'Deck',
+      format: 'edh',
+      description: null,
+      is_public: false,
+      cover_image_scryfall_id: null,
+      commander_scryfall_ids: [],
+      primer_markdown: '',
+      created_at: new Date(0).toISOString(),
+    },
+  })
+  await assert.rejects(
+    service.addCard(supabase, 'user-1', 'deck-1', {
+      scryfall_id: 'banned-id',
+      quantity: 1,
+    }),
+    /banned in Commander/
+  )
+  assert.equal(supabase.state.operations.some((op) => op.table === 'deck_cards'), false)
+}
+
+{
+  const supabase = makeSupabase({
+    deck: {
+      id: 'deck-1',
+      user_id: 'user-1',
+      name: 'Deck',
+      format: 'edh',
+      description: null,
+      is_public: false,
+      cover_image_scryfall_id: null,
+      commander_scryfall_ids: [],
+      primer_markdown: '',
+      created_at: new Date(0).toISOString(),
+    },
+  })
+  const row = await service.addCard(supabase, 'user-1', 'deck-1', {
+    scryfall_id: 'sol-ring-id',
+    quantity: 1,
+  })
+  assert.equal(row.name, 'Sol Ring')
 }
 
 {

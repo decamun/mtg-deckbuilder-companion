@@ -1,5 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getCard, type ScryfallCard } from './scryfall'
+import {
+  validateProjectedDeckForDeck,
+  validateCommandersForDeck,
+  type DeckCardMinimal,
+} from './deck-format-validation'
 
 /**
  * Deck mutation service.
@@ -83,6 +88,37 @@ async function loadOwnedDeckCard(
   if (!card) throw new DeckServiceError('Deck card not found', 'not_found')
   const deck = await loadOwnedDeck(supabase, userId, card.deck_id)
   return { card: card as DeckCardRow, deck }
+}
+
+async function loadDeckCards(supabase: SupabaseClient, deckId: string): Promise<DeckCardRow[]> {
+  const { data, error } = await supabase.from('deck_cards').select('*').eq('deck_id', deckId)
+  if (error) throw new DeckServiceError(error.message, 'db_error')
+  return (data ?? []) as DeckCardRow[]
+}
+
+function deckCardRowToMinimal(row: DeckCardRow): DeckCardMinimal {
+  return {
+    scryfall_id: row.scryfall_id,
+    oracle_id: row.oracle_id,
+    quantity: row.quantity,
+    zone: row.zone ?? 'mainboard',
+  }
+}
+
+async function enforceProjectedDeckFormat(
+  deck: DeckRow,
+  commanderCards: ScryfallCard[],
+  projected: DeckCardMinimal[],
+  seedCards: ScryfallCard[] = []
+): Promise<void> {
+  const msg = await validateProjectedDeckForDeck(
+    deck,
+    deck.commander_scryfall_ids ?? [],
+    commanderCards,
+    projected,
+    seedCards
+  )
+  if (msg) throw new DeckServiceError(msg, 'invalid')
 }
 
 async function getLatestVersionId(
@@ -242,7 +278,7 @@ export async function addCard(
   deckId: string,
   input: AddCardInput
 ): Promise<DeckCardRow> {
-  await loadOwnedDeck(supabase, userId, deckId)
+  const deck = await loadOwnedDeck(supabase, userId, deckId)
   const quantity = input.quantity ?? 1
   if (quantity < 1) throw new DeckServiceError('quantity must be >= 1', 'invalid')
   const versionSince = new Date().toISOString()
@@ -252,19 +288,40 @@ export async function addCard(
     : null
   if (printingCard) assertSameOracle(scryfallCard, printingCard)
 
-  const { data: existing, error: existingErr } = await supabase
-    .from('deck_cards')
-    .select('*')
-    .eq('deck_id', deckId)
-    .eq('scryfall_id', scryfallCard.id)
-    .maybeSingle()
-  if (existingErr) throw new DeckServiceError(existingErr.message, 'db_error')
+  const allRows = await loadDeckCards(supabase, deckId)
+  const existing = allRows.find((r) => r.scryfall_id === scryfallCard.id)
+
+  let projected: DeckCardMinimal[]
+  if (existing) {
+    projected = allRows.map((r) =>
+      r.id === existing.id
+        ? {
+            scryfall_id: r.scryfall_id,
+            oracle_id: r.oracle_id ?? scryfallCard.oracle_id ?? null,
+            quantity: r.quantity + quantity,
+            zone: r.zone ?? 'mainboard',
+          }
+        : deckCardRowToMinimal(r)
+    )
+  } else {
+    projected = [
+      ...allRows.map(deckCardRowToMinimal),
+      {
+        scryfall_id: scryfallCard.id,
+        oracle_id: scryfallCard.oracle_id ?? input.oracle_id ?? null,
+        quantity,
+        zone: 'mainboard',
+      },
+    ]
+  }
+
+  await enforceProjectedDeckFormat(deck, [], projected, [scryfallCard])
 
   if (existing) {
     const { data, error } = await supabase
       .from('deck_cards')
-      .update({ quantity: (existing as DeckCardRow).quantity + quantity })
-      .eq('id', (existing as DeckCardRow).id)
+      .update({ quantity: existing.quantity + quantity })
+      .eq('id', existing.id)
       .select()
       .single()
     if (error) throw new DeckServiceError(error.message, 'db_error')
@@ -272,7 +329,7 @@ export async function addCard(
       supabase,
       userId,
       deckId,
-      `Increased ${(existing as DeckCardRow).name} to ${(existing as DeckCardRow).quantity + quantity}`,
+      `Increased ${existing.name} to ${existing.quantity + quantity}`,
       versionSince
     )
     return data as DeckCardRow
@@ -314,9 +371,22 @@ export async function setCardQuantity(
   deckCardId: string,
   quantity: number
 ): Promise<DeckCardRow | null> {
-  const { card } = await loadOwnedDeckCard(supabase, userId, deckCardId)
+  const { card, deck } = await loadOwnedDeckCard(supabase, userId, deckCardId)
   if (quantity < 0) throw new DeckServiceError('quantity must be >= 0', 'invalid')
   const versionSince = new Date().toISOString()
+
+  const allRows = await loadDeckCards(supabase, card.deck_id)
+  let projected: DeckCardMinimal[]
+  if (quantity === 0) {
+    projected = allRows.filter((r) => r.id !== deckCardId).map(deckCardRowToMinimal)
+  } else {
+    projected = allRows.map((r) =>
+      r.id === deckCardId ? { ...deckCardRowToMinimal(r), quantity } : deckCardRowToMinimal(r)
+    )
+  }
+
+  await enforceProjectedDeckFormat(deck, [], projected, [])
+
   if (quantity === 0) {
     const { error } = await supabase.from('deck_cards').delete().eq('id', deckCardId)
     if (error) throw new DeckServiceError(error.message, 'db_error')
@@ -439,7 +509,7 @@ export async function setCommanders(
   deckId: string,
   scryfallIds: string[]
 ): Promise<DeckRow> {
-  await loadOwnedDeck(supabase, userId, deckId)
+  const deck = await loadOwnedDeck(supabase, userId, deckId)
   if (scryfallIds.length > 2) {
     throw new DeckServiceError('A deck can have at most 2 commanders', 'invalid')
   }
@@ -449,6 +519,14 @@ export async function setCommanders(
   )
   const dedup = Array.from(new Set(commanderCards.map((card) => card.id)))
   const versionSince = new Date().toISOString()
+
+  const cmdErr = await validateCommandersForDeck(deck, commanderCards)
+  if (cmdErr) throw new DeckServiceError(cmdErr, 'invalid')
+
+  const deckRows = await loadDeckCards(supabase, deckId)
+  const projected = deckRows.map(deckCardRowToMinimal)
+  await enforceProjectedDeckFormat(deck, commanderCards, projected, [])
+
   const { data, error } = await supabase
     .from('decks')
     .update({ commander_scryfall_ids: dedup })
