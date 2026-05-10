@@ -95,8 +95,10 @@ function DecksSectionContent() {
     setDecks(populatedDecks)
     setLoading(false)
 
+    // Cap background prefetch: `fetchDecks` orders by `created_at` desc — warm only the five newest.
+    const decksToPrefetch = populatedDecks.slice(0, 5)
     void Promise.all(
-      populatedDecks.map((d) =>
+      decksToPrefetch.map((d) =>
         supabase
           .from("deck_cards")
           .select("*")
