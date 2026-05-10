@@ -69,12 +69,14 @@ Add the idlebrew entry to \`mcpServers\`:
 {
   "mcpServers": {
     "idlebrew": {
-      "type": "streamable-http",
+      "type": "http",
       "url": "https://idlebrew.com/api/mcp"
     }
   }
 }
 \`\`\`
+
+Use \`"type": "http"\` exactly here — Claude Desktop rejects \`"streamable-http"\` as an invalid server type.
 
 If you already have other servers in \`mcpServers\`, add \`"idlebrew"\` alongside them; do not replace the whole file.
 
@@ -203,6 +205,8 @@ After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shi
 **429 Too Many Requests** — The server enforces a limit of 120 requests per minute per credential. Wait a minute and retry, or break your work into smaller prompts.
 
 **Tools not appearing after a config change** — Claude Desktop requires a full quit-and-reopen. Cursor requires **Reload Window**. Claude Code picks up changes at the next session start; run \`claude mcp list\` to confirm the entry exists before opening a session.
+
+**"Skipped invalid MCP server config entries" in Claude logs** — Re-check the Claude Desktop JSON shape. For remote idlebrew connections, the server block must use \`"type": "http"\` with the MCP URL.
 
 **Wrong deck being modified** — Each connection is scoped to the account that authorized it. Confirm you are logged in to the same idlebrew account that owns the deck. To switch accounts, revoke the connection on the profile page and re-authorize from the client.
 `,
