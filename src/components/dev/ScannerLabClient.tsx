@@ -15,6 +15,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  applyPreferredAutofocus,
+  describeCameraFocusCapabilities,
+  nudgeAutofocusBeforeCapture,
+  openCardCameraStream,
+  readCameraFocusSetting,
+} from "@/lib/camera-device"
 import { getCardImageUrl, getCardsByIds, getCardsCollection, type ScryfallCard } from "@/lib/scryfall"
 import {
   DEFAULT_MATCH_THRESHOLDS,
@@ -93,6 +100,7 @@ export function ScannerLabClient() {
   const [lastPick, setLastPick] = useState<PickMatchResult | null>(null)
   const [capturing, setCapturing] = useState(false)
   const [videoDims, setVideoDims] = useState<{ w: number; h: number } | null>(null)
+  const [cameraFocusDebug, setCameraFocusDebug] = useState<string | null>(null)
 
   const okReferences = useMemo(
     () => referenceRows.filter((r): r is Extract<ReferenceRow, { status: "ok" }> => r.status === "ok").map(r => r.ref),
@@ -120,22 +128,25 @@ export function ScannerLabClient() {
         return
       }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        })
+        const stream = await openCardCameraStream()
         if (cancelled) {
           stream.getTracks().forEach(t => t.stop())
           return
         }
         streamRef.current = stream
+        const applied = await applyPreferredAutofocus(stream)
+        const caps = describeCameraFocusCapabilities(stream)
+        const current = readCameraFocusSetting(stream)
+        if (!cancelled) {
+          setCameraFocusDebug(`apply: ${applied} · modes: ${caps} · setting: ${current}`)
+        }
         if (videoRef.current) {
           videoRef.current.srcObject = stream
           await videoRef.current.play()
           onVideoFrameInfo(videoRef.current)
         }
         setCameraError(null)
-        pushLog("info", "Camera stream started.")
+        pushLog("info", `Camera started · autofocus ${applied} (focusMode setting: ${current})`)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         setCameraError(msg)
@@ -145,6 +156,7 @@ export function ScannerLabClient() {
     void startCamera()
     return () => {
       cancelled = true
+      setCameraFocusDebug(null)
       streamRef.current?.getTracks().forEach(t => t.stop())
       streamRef.current = null
     }
@@ -252,7 +264,7 @@ export function ScannerLabClient() {
     [gapThreshold, matchThreshold, okReferences, pushLog]
   )
 
-  const captureFromVideo = useCallback(() => {
+  const captureFromVideo = useCallback(async () => {
     const video = videoRef.current
     if (!video) {
       pushLog("error", "Video element missing.")
@@ -264,6 +276,11 @@ export function ScannerLabClient() {
     }
     setCapturing(true)
     try {
+      const stream = streamRef.current
+      if (stream) {
+        await nudgeAutofocusBeforeCapture(stream)
+        await new Promise(r => setTimeout(r, 260))
+      }
       const canvas = captureFrameFromVideo(video)
       if (!canvas) {
         pushLog("error", "Video not ready (dimensions or readyState).")
@@ -364,6 +381,11 @@ export function ScannerLabClient() {
               <div className="text-muted-foreground">
                 centered card crop (normalized): sx {cropGuide.sx.toFixed(0)} sy {cropGuide.sy.toFixed(0)} sw{" "}
                 {cropGuide.sw.toFixed(0)} sh {cropGuide.sh.toFixed(0)}
+              </div>
+            )}
+            {cameraFocusDebug && (
+              <div className="text-muted-foreground">
+                <span className="text-foreground">camera focus:</span> {cameraFocusDebug}
               </div>
             )}
           </CardContent>
