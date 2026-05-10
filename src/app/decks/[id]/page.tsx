@@ -326,6 +326,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
   const [previewFaceIndex, setPreviewFaceIndex] = useState(0)
   const [readyCardInteractionKey, setReadyCardInteractionKey] = useState<string | null>(null)
+  /** After closing a ⋮ menu in the format-hints dialog, ignore row clicks for a short window (ghost click-through). */
+  const formatHintsMenuClosedAtRef = useRef(0)
 
   // New: ownership, tabs, settings, primer, version-viewing
   const [isOwner, setIsOwner] = useState(false)
@@ -642,6 +644,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const deleteCard = async (id: string) => {
+    if (clickedPreview?.card.id === id) setClickedPreview(null)
     const card = cards.find(c => c.id === id)
     if (!card) return
     const versionSince = new Date().toISOString()
@@ -1171,16 +1174,30 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             <DropdownMenuSeparator className="bg-border" />
           </>
         )}
-        <DropdownMenuItem className="text-destructive" onClick={() => deleteCard(c.id)}>Remove from Deck</DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-destructive"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            void deleteCard(c.id)
+          }}
+        >
+          Remove from Deck
+        </DropdownMenuItem>
       </>
     )
   }
 
   // Render as a plain function (not a component) so React doesn't remount it on parent re-renders
-  const renderThreeDotMenu = (c: DeckCard, groupName: string, align: 'start' | 'end' = 'end') => {
+  const renderThreeDotMenu = (c: DeckCard, groupName: string, align: 'start' | 'end' = 'end', fromFormatHintsDialog = false) => {
     if (!isOwner || viewing) return null
     return (
-      <DropdownMenu onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(c) }}>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) void ensurePrintingsLoaded(c)
+          else if (fromFormatHintsDialog) formatHintsMenuClosedAtRef.current = performance.now()
+        }}
+      >
         <DropdownMenuTrigger
           aria-label={`Open options for ${c.name}`}
           className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-foreground/25 bg-background/95 text-foreground opacity-100 shadow-lg ring-2 ring-background/80 transition-colors hover:bg-accent hover:text-accent-foreground data-[popup-open]:bg-accent data-[popup-open]:text-accent-foreground"
@@ -2022,13 +2039,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                 return (
                   <div
                     key={c.id}
-                    className={`flex cursor-pointer items-center justify-between border-b border-border p-2 last:border-0 hover:bg-accent/50${hintLines.length ? ' border-l-4 border-l-red-500' : ''}`}
-                    onClick={() => {
-                      setFormatHintsListOpen(false)
-                      showClickedPreview(c, gn)
-                    }}
+                    className={`flex items-center justify-between border-b border-border p-2 last:border-0 hover:bg-accent/50${hintLines.length ? ' border-l-4 border-l-red-500' : ''}`}
                   >
-                    <div className="relative z-0 flex min-w-0 flex-1 items-center gap-3">
+                    <div
+                      className="relative z-0 flex min-w-0 flex-1 cursor-pointer items-center gap-3"
+                      onClick={() => {
+                        if (performance.now() - formatHintsMenuClosedAtRef.current < 450) return
+                        setFormatHintsListOpen(false)
+                        showClickedPreview(c, gn)
+                      }}
+                    >
                       <span className="w-4 shrink-0 text-right font-mono text-muted-foreground">{c.quantity}</span>
                       {(c.face_images?.[0] || c.image_url) && (
                         <CardThumbnail
@@ -2048,7 +2068,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       <span className="w-16 text-right font-mono text-xs text-muted-foreground tabular-nums">
                         {formatPrice(c.price_usd)}
                       </span>
-                      {renderThreeDotMenu(c, gn, 'end')}
+                      {renderThreeDotMenu(c, gn, 'end', true)}
                     </div>
                   </div>
                 )
