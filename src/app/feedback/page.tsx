@@ -4,7 +4,7 @@ import { FeedbackForm } from "@/components/feedback/FeedbackForm"
 
 export const metadata: Metadata = {
   title: "Feedback — idlebrew",
-  description: "Send feedback to the idlebrew team.",
+  description: "Share ideas and help us improve idlebrew.",
 }
 
 export default function FeedbackPage() {
@@ -15,16 +15,27 @@ export default function FeedbackPage() {
       <div>
         <BackButton />
         <h1 className="text-3xl font-bold mb-2 mt-4">Feedback</h1>
-        <p className="text-muted-foreground leading-relaxed">
-          Share bugs, suggestions, or general thoughts. Messages are sent to{" "}
-          <a
-            href="mailto:feedback@idlebrew.app"
-            className="text-primary hover:underline"
-          >
-            feedback@idlebrew.app
-          </a>
-          . Please complete the verification below so we can reduce spam.
-        </p>
+        <div className="space-y-4 text-muted-foreground leading-relaxed">
+          <p className="text-foreground/90 text-lg leading-snug">
+            Thank you for being an idlebrew adopter. We&apos;d love to hear how we can make things
+            better!
+          </p>
+          <p>
+            Whether it&apos;s a bug, a rough edge, or an idea for the brew workflow or assistant,
+            your note goes straight to our team at{" "}
+            <a
+              href="mailto:feedback@idlebrew.app"
+              className="text-primary hover:underline"
+            >
+              feedback@idlebrew.app
+            </a>
+            . Add your email below if you&apos;d like a reply.
+          </p>
+          <p className="text-sm">
+            Complete the quick verification before sending — it helps us keep spam out so we can
+            focus on real feedback.
+          </p>
+        </div>
       </div>
 
       <FeedbackForm siteKey={siteKey} />
