@@ -2,6 +2,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import * as deckService from './deck-service'
+import { buildDeckStatsReport } from './deck-stats'
 import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfall'
 
 /** Names of tools that persist deck changes — client refreshes the editor after each completes. */
@@ -104,6 +105,18 @@ export function buildDeckAgentTools(
           finish: c.finish,
           tags: c.tags,
         }))
+      },
+    }),
+
+    get_deck_stats: tool({
+      description:
+        'Full statistics for this deck (matches the deck editor Analytics tab and format hints): counts, USD sum,' +
+        ' format violations for Commander/EDH (and empty hints for other formats), mana curve, probabilities, color balance.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const deck = await deckService.getDeck(supabase, userId, deckId)
+        const rows = await deckService.getDecklist(supabase, userId, deckId)
+        return buildDeckStatsReport(deck, rows)
       },
     }),
 
