@@ -58,7 +58,11 @@ import { formatPrice, pickPrice } from "@/lib/format"
 import { ManaText } from "@/components/mana/ManaText"
 import { getCardTypeGroup } from "@/lib/card-types"
 import { isFormatValidationImplemented, validateDeckForFormat } from "@/lib/deck-format-validation"
-import { getPrefetchedDeckCards, warmScryfallForDeckRows } from "@/lib/deck-prefetch-cache"
+import {
+  getPrefetchedDeckCards,
+  storePrefetchedDeckCards,
+  warmScryfallForDeckRows,
+} from "@/lib/deck-prefetch-cache"
 
 type DeckCardRow = Omit<DeckCard, "image_url" | "face_images" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
 
@@ -533,6 +537,7 @@ export default function DeckWorkspaceClient({
     }
 
     if (cardsData) {
+      storePrefetchedDeckCards(deckId, cardsData)
       const prefetchedRows = getPrefetchedDeckCards(deckId, 120_000)
       if (prefetchedRows?.length) {
         warmScryfallForDeckRows(deckData, prefetchedRows)

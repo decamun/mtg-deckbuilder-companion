@@ -224,7 +224,6 @@ function DecksSectionContent() {
     const cached = getPrefetchedDeckCards(deck.id, 120_000)
     if (cached?.length) {
       warmScryfallForDeckRows(deck, cached)
-      return
     }
     void (async () => {
       const { data, error } = await supabase
