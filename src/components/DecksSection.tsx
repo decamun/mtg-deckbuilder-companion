@@ -34,6 +34,12 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { getCardsByIds, getCardImageUrl } from "@/lib/scryfall"
 import { resolveDecklist } from "@/lib/decklist-import"
+import {
+  getPrefetchedDeckCards,
+  storePrefetchedDeckCards,
+  warmScryfallForDeckRows,
+  type DeckCardDbRow,
+} from "@/lib/deck-prefetch-cache"
 import type { Deck } from "@/lib/types"
 import Link from "next/link"
 
@@ -88,6 +94,19 @@ function DecksSectionContent() {
 
     setDecks(populatedDecks)
     setLoading(false)
+
+    void Promise.all(
+      populatedDecks.map((d) =>
+        supabase
+          .from("deck_cards")
+          .select("*")
+          .eq("deck_id", d.id)
+          .then(({ data, error }) => {
+            if (error || !data?.length) return
+            storePrefetchedDeckCards(d.id, data as DeckCardDbRow[])
+          })
+      )
+    )
   }
 
   useEffect(() => {
@@ -196,6 +215,24 @@ function DecksSectionContent() {
     )
     toast.success("Deck renamed")
     closeRenameDialog()
+  }
+
+  const warmDeckNavigation = (deck: Deck) => {
+    router.prefetch(`/decks/${deck.id}`)
+    const cached = getPrefetchedDeckCards(deck.id, 120_000)
+    if (cached?.length) {
+      warmScryfallForDeckRows(deck, cached)
+      return
+    }
+    void (async () => {
+      const { data, error } = await supabase
+        .from("deck_cards")
+        .select("*")
+        .eq("deck_id", deck.id)
+      if (error || !data?.length) return
+      storePrefetchedDeckCards(deck.id, data as DeckCardDbRow[])
+      warmScryfallForDeckRows(deck, data as DeckCardDbRow[])
+    })()
   }
 
   const handleDuplicate = async (deckId: string, e: React.MouseEvent) => {
@@ -410,6 +447,7 @@ function DecksSectionContent() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               key={deck.id}
+              onPointerEnter={() => warmDeckNavigation(deck)}
               onClick={() => router.push(`/decks/${deck.id}`)}
               className="group relative cursor-pointer"
             >
