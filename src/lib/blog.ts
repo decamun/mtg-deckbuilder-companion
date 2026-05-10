@@ -12,9 +12,9 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     slug: "connecting-idlebrew-mcp",
     title: "Connecting to idlebrew via MCP",
-    date: "2026-05-06",
+    date: "2026-05-10",
     excerpt:
-      "idlebrew exposes your decks over the Model Context Protocol, so Claude Desktop, Claude Code, Cursor, and any other MCP-aware tool can read and edit your cards without opening a browser.",
+      "idlebrew exposes your decks over the Model Context Protocol. Claude Desktop and Cursor sign in with OAuth (no key needed), and Claude Code uses an API key — both work without installing any local bridge.",
     body: [],
     markdown: `
 ## What idlebrew exposes over MCP
@@ -31,9 +31,20 @@ Once connected your assistant can search Scryfall, list your decks, read full de
 
 ---
 
-## Step 1 — Create an API key
+## Two ways to connect
 
-Go to your **Profile** page and scroll to the **API keys (MCP)** section. Click **New key**, give it a recognizable name (for example \`Claude Desktop — laptop\` or \`Cursor — work machine\`), and click **Create key**.
+idlebrew supports two authentication paths and you don't need to install anything for either.
+
+- **OAuth (recommended for desktop apps).** Claude Desktop and Cursor sign in via a normal browser-based flow — the same way you'd authorize any third-party app. No keys to copy, no headers to configure. Use this for **Step 2** and **Step 4**.
+- **API key (for CLI tools).** Claude Code and other command-line tools work better with a static Bearer token. Create a key in your profile and pass it as a header. Use this for **Step 3**.
+
+---
+
+## Step 1 — (API-key path only) Create an API key
+
+Skip this step if you're connecting Claude Desktop or Cursor — those use OAuth and don't need a key.
+
+For Claude Code or other CLI tools: go to your **Profile** page and scroll to **API keys (MCP)**. Click **New key**, give it a recognizable name (for example \`Claude Code — laptop\`), and click **Create key**.
 
 The full key is shown exactly once. Copy it immediately and store it somewhere safe — a password manager is ideal. The key starts with \`idlb_\` and acts as you: any client holding it can read and modify your decks.
 
@@ -41,29 +52,7 @@ The full key is shown exactly once. Copy it immediately and store it somewhere s
 
 ---
 
-## A note on OAuth and remote MCP servers
-
-You may see an error in Claude Desktop or Cursor that mentions a **client ID** or says the MCP server "failed to start." This is not a bug in your configuration. Newer MCP clients attempt OAuth 2.0 negotiation when connecting to any remote HTTP server — they try to register themselves as OAuth clients before sending your Bearer token. The idlebrew server uses simple Bearer-token auth rather than a full OAuth flow, so that negotiation fails.
-
-The fix is **mcp-remote**, a small local bridge that runs as a stdio process (which all MCP clients support natively) and relays traffic to the HTTP server with your Bearer token attached. The client sees a normal stdio MCP server; mcp-remote handles the HTTP connection on its behalf.
-
-The steps below use mcp-remote for Claude Desktop and Cursor. Claude Code has its own HTTP transport that works without the bridge.
-
----
-
-## Step 2 — Connect Claude Desktop
-
-### Install mcp-remote (one time)
-
-mcp-remote is an npm package. You do not need to install it globally — the \`npx -y\` invocation in the config will download and run it automatically on first use.
-
-If you prefer a permanent install:
-
-\`\`\`bash
-npm install -g mcp-remote
-\`\`\`
-
-### Edit the config file
+## Step 2 — Connect Claude Desktop (OAuth, no key required)
 
 Claude Desktop reads from a JSON config file on disk. Find it at:
 
@@ -80,30 +69,26 @@ Add the idlebrew entry to \`mcpServers\`:
 {
   "mcpServers": {
     "idlebrew": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "https://idlebrew.com/api/mcp",
-        "--header",
-        "Authorization:Bearer YOUR_KEY"
-      ]
+      "type": "streamable-http",
+      "url": "https://idlebrew.com/api/mcp"
     }
   }
 }
 \`\`\`
 
-Replace \`YOUR_KEY\` with the key you copied in Step 1. Note there is **no space** between \`Authorization:\` and \`Bearer\` in the header string — this is required by mcp-remote's argument parser. If you already have other servers in \`mcpServers\`, add \`"idlebrew"\` alongside them; do not replace the whole file.
+If you already have other servers in \`mcpServers\`, add \`"idlebrew"\` alongside them; do not replace the whole file.
 
-**Fully quit and reopen Claude Desktop** (a new conversation alone is not enough). Open a new chat and click the tools icon (the plug symbol). You should see idlebrew tools listed — \`list_decks\`, \`get_decklist\`, \`add_card\`, and others. Try asking:
+**Fully quit and reopen Claude Desktop** (a new conversation alone is not enough). On first connect a browser tab will open at \`idlebrew.com/oauth/authorize\` asking you to sign in and approve access. After you click **Authorize**, the tab redirects back to Claude Desktop and the idlebrew tools appear in the tools panel (the plug icon). Try asking:
 
 > *"List my idlebrew decks."*
 
+You can revoke this connection later from your idlebrew profile page; doing so logs out the desktop client immediately.
+
 ---
 
-## Step 3 — Connect Claude Code
+## Step 3 — Connect Claude Code (API key)
 
-Claude Code (the CLI tool) has its own HTTP transport that sends headers directly without OAuth negotiation, so mcp-remote is not needed.
+Claude Code (the CLI tool) has its own HTTP transport that sends headers directly. Use the API key from Step 1 here.
 
 ### Option A: CLI command (quickest)
 
@@ -158,9 +143,7 @@ Once connected you can prompt Claude Code with things like:
 
 ---
 
-## Step 4 — Connect Cursor
-
-Cursor also requires the mcp-remote bridge for remote HTTP servers.
+## Step 4 — Connect Cursor (OAuth, no key required)
 
 **Project-level** — create or edit \`.cursor/mcp.json\` at the root of your project:
 
@@ -168,14 +151,8 @@ Cursor also requires the mcp-remote bridge for remote HTTP servers.
 {
   "mcpServers": {
     "idlebrew": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "https://idlebrew.com/api/mcp",
-        "--header",
-        "Authorization:Bearer YOUR_KEY"
-      ]
+      "type": "streamable-http",
+      "url": "https://idlebrew.com/api/mcp"
     }
   }
 }
@@ -185,7 +162,7 @@ Cursor also requires the mcp-remote bridge for remote HTTP servers.
 
 You can also use the GUI: open **Cursor Settings → MCP → Add new global MCP server** and paste the JSON block into the editor.
 
-After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shift+P\` / \`Cmd+Shift+P\`). In Cursor's Agent chat the idlebrew tools will be available immediately. Verify with:
+After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shift+P\` / \`Cmd+Shift+P\`). Cursor will open a browser tab to \`idlebrew.com/oauth/authorize\` for sign-in. After authorizing, the tab returns to Cursor and the idlebrew tools become available in the Agent chat. Verify with:
 
 > *"What decks do I have on idlebrew?"*
 
@@ -217,15 +194,17 @@ After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shi
 
 ## Troubleshooting
 
-**"Failed to start MCP" / "must be provided a client id"** — Claude Desktop or Cursor is trying to do OAuth negotiation. Make sure you are using the mcp-remote config from Step 2 / Step 4, not a direct \`streamable-http\` URL entry. The OAuth error only appears when the client tries to connect to the HTTP URL without the bridge.
+**Browser tab didn't open** (Claude Desktop / Cursor OAuth) — The client should open \`idlebrew.com/oauth/authorize\` automatically on first connect. If nothing happens, fully quit the client and reopen it. If your default browser is set to something the OS doesn't recognize, set a real browser as default and retry.
 
-**401 Unauthorized** — The key is missing, inactive, or the header is malformed. In mcp-remote configs check there is no space between \`Authorization:\` and \`Bearer\`. In Claude Code configs confirm the header reads \`Authorization: Bearer YOUR_KEY\` with exactly one space after the colon. Check that the key is still active on your Profile page.
+**OAuth tab loops or shows "Unknown client"** — Each Claude Desktop or Cursor install registers itself dynamically the first time it connects. If the metadata gets out of sync, delete the idlebrew entry from your config, fully quit the client, then re-add the entry. The next connect will register a fresh client.
 
-**429 Too Many Requests** — The server enforces a limit of 120 requests per minute per key. Wait a minute and retry, or break your work into smaller prompts.
+**401 Unauthorized** (Claude Code, API-key path) — The key is missing, inactive, or the header is malformed. Confirm the header reads \`Authorization: Bearer YOUR_KEY\` with exactly one space after the colon. Check that the key is still active on your Profile page.
+
+**429 Too Many Requests** — The server enforces a limit of 120 requests per minute per credential. Wait a minute and retry, or break your work into smaller prompts.
 
 **Tools not appearing after a config change** — Claude Desktop requires a full quit-and-reopen. Cursor requires **Reload Window**. Claude Code picks up changes at the next session start; run \`claude mcp list\` to confirm the entry exists before opening a session.
 
-**Wrong deck being modified** — Each key is scoped to the account that created it. Confirm you are logged in to the same idlebrew account that owns the deck.
+**Wrong deck being modified** — Each connection is scoped to the account that authorized it. Confirm you are logged in to the same idlebrew account that owns the deck. To switch accounts, revoke the connection on the profile page and re-authorize from the client.
 `,
   },
   {

@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { createMcpServer } from '@/lib/mcp'
 import { resolveMcpAuth } from '@/lib/mcp-auth'
+import { getBaseUrl } from '@/lib/oauth-config'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -11,16 +12,28 @@ export const runtime = 'nodejs'
  * to a fresh server instance scoped to the authenticated user.
  *
  * Auth precedence:
- *   1. Authorization: Bearer idlb_... (API-key, service-role client)
- *   2. Supabase session cookie (browser, RLS active)
+ *   1. Authorization: Bearer idlb_*    — API key (CLI / Claude Code)
+ *   2. Authorization: Bearer idlboat_* — OAuth access token (Claude Desktop / Cursor)
+ *   3. Supabase session cookie         — browser
+ *
+ * On 401, advertises the OAuth protected resource metadata URL so MCP clients
+ * can run dynamic client registration and the auth-code+PKCE flow per the MCP
+ * Authorization spec (RFC 9728 + RFC 7591 + RFC 6749).
  */
 async function handle(request: Request): Promise<Response> {
   const auth = await resolveMcpAuth(request)
   if (auth.userId === null) {
     const status = auth.reason === 'rate_limited' ? 429 : 401
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (status === 401) {
+      const base = getBaseUrl(request)
+      const resourceMetadata = `${base}/.well-known/oauth-protected-resource/api/mcp`
+      headers['WWW-Authenticate'] =
+        `Bearer realm="idlebrew", resource_metadata="${resourceMetadata}"`
+    }
     return new Response(JSON.stringify({ message: 'Unauthorized' }), {
       status,
-      headers: { 'Content-Type': 'application/json' },
+      headers,
     })
   }
 

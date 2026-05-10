@@ -2,13 +2,15 @@ import { createClient as createSessionClient } from '@/lib/supabase/server'
 import { getServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { createMcpContext, type McpContext } from '@/lib/mcp-context'
+import { resolveAccessToken, TOKEN_PREFIX } from '@/lib/oauth-store'
 
 export interface McpAuthOk {
   userId: string
   context: McpContext
-  /** "api_key" or "session". Lets handlers tell the two paths apart for logging. */
-  mode: 'api_key' | 'session'
+  /** Distinguishes the auth path used so route handlers can log accordingly. */
+  mode: 'api_key' | 'oauth' | 'session'
   apiKeyId: string | null
+  oauthClientId: string | null
 }
 
 export interface McpAuthFail {
@@ -46,16 +48,38 @@ async function sha256Hex(input: string): Promise<string> {
 /**
  * Resolve the caller of an MCP request to a user-scoped tool context.
  *
- * Priority: Authorization: Bearer idlb_... → session cookie.
+ * Priority: Authorization: Bearer <token> → session cookie. Bearer tokens come
+ * in two flavors:
+ *   - idlb_*    — long-lived API keys created on the profile page (legacy / CLI)
+ *   - idlboat_* — OAuth access tokens issued via /oauth/token (Claude Desktop)
  *
- * API-key auth still needs a service-role client for key lookup, but tools only
- * receive bound helper functions that apply explicit user_id ownership checks.
+ * Both paths use the service-role client because RLS bypass is intentional;
+ * tools receive bound helper functions that apply explicit user_id checks.
  */
 export async function resolveMcpAuth(request: Request): Promise<McpAuthResult> {
   const ipHash = await coarseIpHash(request)
   const authHeader = request.headers.get('authorization')
   if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
     const raw = authHeader.slice(7).trim()
+    if (raw.startsWith(TOKEN_PREFIX)) {
+      const oauthLimit = checkRateLimit(`mcp:oauth-ip:${ipHash}`, MCP_KEY_RATE_LIMIT)
+      if (!oauthLimit.ok) {
+        return { userId: null, context: null, mode: 'unauthorized', reason: 'rate_limited' }
+      }
+      const token = await resolveAccessToken(raw)
+      if (!token) {
+        checkRateLimit(`mcp:invalid:${ipHash}`, MCP_INVALID_KEY_RATE_LIMIT)
+        return { userId: null, context: null, mode: 'unauthorized', reason: 'invalid_token' }
+      }
+      const service = getServiceClient()
+      return {
+        userId: token.user_id,
+        context: createMcpContext(service, token.user_id),
+        mode: 'oauth',
+        apiKeyId: null,
+        oauthClientId: token.client_id,
+      }
+    }
     if (!raw.startsWith(KEY_PREFIX)) {
       checkRateLimit(`mcp:invalid:${ipHash}`, MCP_INVALID_KEY_RATE_LIMIT)
       return { userId: null, context: null, mode: 'unauthorized', reason: 'invalid_key' }
@@ -95,6 +119,7 @@ export async function resolveMcpAuth(request: Request): Promise<McpAuthResult> {
       context: createMcpContext(service, data.user_id),
       mode: 'api_key',
       apiKeyId: data.id,
+      oauthClientId: null,
     }
   }
 
@@ -111,6 +136,7 @@ export async function resolveMcpAuth(request: Request): Promise<McpAuthResult> {
     context: createMcpContext(supabase, user.id),
     mode: 'session',
     apiKeyId: null,
+    oauthClientId: null,
   }
 }
 
