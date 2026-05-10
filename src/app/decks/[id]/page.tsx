@@ -1520,14 +1520,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       <ContextMenuContent className="w-56 bg-white border-border text-foreground">
                         <ContextMenuItem
                           onClick={() => setAsCommander(c.scryfall_id)}
-                          className={commanderIds.includes(c.scryfall_id) ? 'text-yellow-400 focus:text-yellow-300 focus:bg-yellow-400/10' : ''}
+                          className={commanderIds.includes(c.scryfall_id) ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10 focus:text-yellow-300 focus:bg-yellow-400/10' : ''}
                         >
                           <Crown className="w-3.5 h-3.5 mr-2" />
                           {commanderIds.includes(c.scryfall_id) ? 'Remove as Commander' : 'Set as Commander'}
                         </ContextMenuItem>
                         <ContextMenuItem
                           onClick={() => setAsCoverImage(c.scryfall_id)}
-                          className={coverImageId === c.scryfall_id ? 'text-blue-400 focus:text-blue-300 focus:bg-blue-400/10' : ''}
+                          className={coverImageId === c.scryfall_id ? 'text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 focus:text-blue-300 focus:bg-blue-400/10' : ''}
                         >
                           <ImageIcon className="w-3.5 h-3.5 mr-2" />
                           {coverImageId === c.scryfall_id ? 'Remove Cover Image' : 'Set as Cover Image'}
@@ -1599,13 +1599,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         <ContextMenuSeparator className="bg-border" />
                         {grouping === 'tag' && groupName !== 'Untagged' && (
                           <>
-                            <ContextMenuItem className="text-orange-400 focus:text-orange-300 focus:bg-orange-400/10" onClick={() => removeTag(c.id, groupName)}>
+                            <ContextMenuItem className="text-orange-400 hover:text-orange-300 hover:bg-orange-400/10 focus:text-orange-300 focus:bg-orange-400/10" onClick={() => removeTag(c.id, groupName)}>
                               Remove from &apos;{groupName}&apos;
                             </ContextMenuItem>
                             <ContextMenuSeparator className="bg-border" />
                           </>
                         )}
-                        <ContextMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10" onClick={() => deleteCard(c.id)}>
+                        <ContextMenuItem className="text-destructive hover:text-destructive hover:bg-destructive/10 focus:text-destructive focus:bg-destructive/10" onClick={() => deleteCard(c.id)}>
                           Remove from Deck
                         </ContextMenuItem>
                       </ContextMenuContent>
