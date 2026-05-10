@@ -43,6 +43,7 @@ export default function RootLayout({
             <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
             <a href="/terms" className="hover:text-foreground transition-colors">Terms of Service</a>
             <a href="/data-deletion" className="hover:text-foreground transition-colors">Data Deletion</a>
+            <a href="/feedback" className="hover:text-foreground transition-colors">Feedback</a>
           </nav>
         </footer>
         <Analytics />
