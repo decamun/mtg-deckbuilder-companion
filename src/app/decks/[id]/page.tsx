@@ -351,6 +351,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
   const [reverting, setReverting] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [formatHintsListOpen, setFormatHintsListOpen] = useState(false)
 
   const [deckTitleEditing, setDeckTitleEditing] = useState(false)
   const [deckTitleDraft, setDeckTitleDraft] = useState("")
@@ -988,6 +989,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     return violationsByCardId
   }, [displayedCards, displayedCommanderIds, displayedFormat, displayedBracket])
 
+  const formatHintCardList = useMemo(
+    () =>
+      displayedCards
+        .filter((c) => (formatViolationMap.get(c.id)?.length ?? 0) > 0)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [displayedCards, formatViolationMap]
+  )
+
   const getGroupedCards = () => {
     const sorted = [...displayedCards].sort((a, b) => {
       if (sorting === 'name') return a.name.localeCompare(b.name)
@@ -1028,6 +1037,19 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const groupedCards = getGroupedCards()
+
+  /** Group label for a card — matches list view sections so ⋮ menu tag actions stay coherent. */
+  const editorGroupNameForCard = (c: DeckCard): string => {
+    if (grouping === 'none') return 'All Cards'
+    if (grouping === 'type') return getCardTypeGroup(c.type_line)
+    if (grouping === 'mana') return `Mana Value ${c.cmc || 0}`
+    if (grouping === 'tag') {
+      if (!c.tags?.length) return 'Untagged'
+      return c.tags[0]
+    }
+    return 'All Cards'
+  }
+
   const commanderCards = displayedCommanderIds
     .map(id => displayedCards.find(c => c.scryfall_id === id))
     .filter((c): c is DeckCard => Boolean(c))
@@ -1456,12 +1478,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               </TabsList>
             </Tabs>
             {formatViolationMap.size > 0 && isFormatValidationImplemented(displayedFormat) && (
-              <span
-                className="text-xs text-red-400/90 max-w-[14rem] leading-snug"
-                title="Hover a highlighted card to read format hints."
+              <button
+                type="button"
+                onClick={() => setFormatHintsListOpen(true)}
+                className="max-w-[14rem] cursor-pointer rounded px-0.5 text-left text-xs leading-snug text-red-400/90 hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
+                title="Show cards with format hints"
               >
-                Format hints · {formatViolationMap.size} card{formatViolationMap.size === 1 ? '' : 's'} ({displayedFormat === 'edh' ? 'EDH' : displayedFormat})
-              </span>
+                Format hints · {formatViolationMap.size} card{formatViolationMap.size === 1 ? '' : 's'} (
+                {displayedFormat === 'edh' ? 'EDH' : displayedFormat ?? 'format'})
+              </button>
             )}
           </div>
           {/* Commanders */}
@@ -1977,6 +2002,61 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           onImported={() => void fetchDeck()}
         />
       )}
+
+      <Dialog open={formatHintsListOpen} onOpenChange={setFormatHintsListOpen}>
+        <DialogContent className="flex max-h-[min(88vh,720px)] flex-col border border-border bg-card text-foreground sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Format hints</DialogTitle>
+            <DialogDescription>
+              {formatHintCardList.length} card{formatHintCardList.length === 1 ? '' : 's'} that do not match{' '}
+              {displayedFormat === 'edh' ? 'EDH' : 'the selected'} construction hints.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-card/50">
+            {formatHintCardList.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground">No cards to show.</p>
+            ) : (
+              formatHintCardList.map((c) => {
+                const hintLines = formatViolationMap.get(c.id) ?? []
+                const gn = editorGroupNameForCard(c)
+                return (
+                  <div
+                    key={c.id}
+                    className={`flex cursor-pointer items-center justify-between border-b border-border p-2 last:border-0 hover:bg-accent/50${hintLines.length ? ' border-l-4 border-l-red-500' : ''}`}
+                    onClick={() => {
+                      setFormatHintsListOpen(false)
+                      showClickedPreview(c, gn)
+                    }}
+                  >
+                    <div className="relative z-0 flex min-w-0 flex-1 items-center gap-3">
+                      <span className="w-4 shrink-0 text-right font-mono text-muted-foreground">{c.quantity}</span>
+                      {(c.face_images?.[0] || c.image_url) && (
+                        <CardThumbnail
+                          card={c}
+                          className="h-9 shrink-0"
+                          imageClassName="h-9 w-auto rounded border border-border/50"
+                          overlayClassName="rounded"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <ManaText text={c.name} className="truncate font-medium text-foreground" />
+                        <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
+                        <p className="mt-0.5 line-clamp-2 text-[11px] text-red-300/95">{hintLines.join(' · ')}</p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="w-16 text-right font-mono text-xs text-muted-foreground tabular-nums">
+                        {formatPrice(c.price_usd)}
+                      </span>
+                      {renderThreeDotMenu(c, gn, 'end')}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={diffOpen && !!diffTarget} onOpenChange={(open) => { setDiffOpen(open); if (!open) setDiffTarget(null) }}>
         <DialogContent overlayClassName="bg-background/95 supports-backdrop-filter:backdrop-blur-none" className="max-h-[88vh] overflow-y-auto border border-border bg-background text-foreground shadow-2xl sm:max-w-6xl">
