@@ -3,7 +3,7 @@
  * packed in 32 bytes (Moss-style RGB separation, browser-friendly).
  */
 
-import { captureFrameFromImageElement, loadImage } from "@/lib/deck-scanner-visual"
+import { captureFrameFromImageElement, loadImageQueued } from "@/lib/deck-scanner-visual"
 
 export const RGB_DHASH_PACK_BYTES = 32
 const DOWNSAMPLE_W = 17
@@ -93,7 +93,7 @@ export function computeRgbDhash256FromCanvas(canvas: HTMLCanvasElement): { r: Ui
 }
 
 export async function buildRgbScannerReference(id: string, name: string, imageUrl: string): Promise<RgbScannerReference> {
-  const img = await loadImage(imageUrl)
+  const img = await loadImageQueued(imageUrl)
   const canvas = captureFrameFromImageElement(img)
   const { r, g, b } = computeRgbDhash256FromCanvas(canvas)
   return {

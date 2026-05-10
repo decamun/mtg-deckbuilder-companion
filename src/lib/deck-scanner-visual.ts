@@ -102,6 +102,23 @@ export function loadImage(url: string): Promise<HTMLImageElement> {
   })
 }
 
+/** Gap between finishing one Scryfall image load and starting the next (CDN / 429 mitigation). */
+const SCRYFALL_IMAGE_LOAD_GAP_MS = 140
+
+let imageLoadTail: Promise<void> = Promise.resolve()
+
+/**
+ * Serialize cross-origin Scryfall art loads. Bursting many `<img>` requests
+ * often returns 429; browsers surface that as a generic image load failure.
+ */
+export function loadImageQueued(url: string): Promise<HTMLImageElement> {
+  const scheduled = imageLoadTail.then(() => loadImage(url))
+  imageLoadTail = scheduled
+    .then(() => new Promise<void>(resolve => setTimeout(resolve, SCRYFALL_IMAGE_LOAD_GAP_MS)))
+    .catch(() => undefined)
+  return scheduled
+}
+
 export function confidenceFromScores(score: number, runnerUpScore: number | null): number {
   const gap = runnerUpScore == null ? GAP_THRESHOLD : runnerUpScore - score
   const scoreComponent = Math.max(0, 1 - score / 32)
@@ -175,7 +192,7 @@ export async function buildScannerReference(
   name: string,
   imageUrl: string
 ): Promise<ScannerReference> {
-  const img = await loadImage(imageUrl)
+  const img = await loadImageQueued(imageUrl)
   const w = img.naturalWidth
   const h = img.naturalHeight
   const fullHash = computeDHash(img, w, h)

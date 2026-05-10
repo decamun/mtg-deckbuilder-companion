@@ -6,7 +6,7 @@ export async function loadUserDeckScryfallPrintings(
   supabase: SupabaseClient,
   userId: string,
   deckNameQuery: string
-): Promise<{ deckId: string; deckName: string; cards: ScryfallCard[] }> {
+): Promise<{ deckId: string; deckName: string; cards: ScryfallCard[]; rowCount: number }> {
   const q = deckNameQuery.trim().toLowerCase()
   if (!q) throw new Error("Enter a deck name.")
 
@@ -25,12 +25,13 @@ export async function loadUserDeckScryfallPrintings(
   const ids = [...new Set(rows.map(r => r.printing_scryfall_id || r.scryfall_id))]
   const sf = await getCardsByIds(ids)
   const map = new Map(sf.map(c => [c.id, c]))
-  const cards: ScryfallCard[] = []
+  const uniqueByPrinting = new Map<string, ScryfallCard>()
   for (const row of rows) {
     const id = row.printing_scryfall_id || row.scryfall_id
     const c = map.get(id)
-    if (c) cards.push(c)
+    if (c && !uniqueByPrinting.has(c.id)) uniqueByPrinting.set(c.id, c)
   }
+  const cards = [...uniqueByPrinting.values()]
 
-  return { deckId: partial.id, deckName: partial.name, cards }
+  return { deckId: partial.id, deckName: partial.name, cards, rowCount: rows.length }
 }

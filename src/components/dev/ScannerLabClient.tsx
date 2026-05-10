@@ -176,6 +176,7 @@ export function ScannerLabClient() {
       setLastHashInfo(null)
       const rows: ReferenceRow[] = []
       pushLog("info", `${label}: loading ${cards.length} printings…`)
+      const builtByImageUrl = new Map<string, RgbScannerReference>()
       for (const card of cards) {
         const imageUrl = getCardImageUrl(card, "normal")
         const id = card.id
@@ -184,14 +185,31 @@ export function ScannerLabClient() {
           rows.push({ status: "error", id, name, message: "No image_uris on this card (token?)" })
           continue
         }
+        const cached = builtByImageUrl.get(imageUrl)
+        if (cached) {
+          rows.push({
+            status: "ok",
+            ref: {
+              ...cached,
+              id,
+              name,
+              r: new Uint8Array(cached.r),
+              g: new Uint8Array(cached.g),
+              b: new Uint8Array(cached.b),
+            },
+          })
+          pushLog("info", `Reference OK (shared art): ${name}`)
+          continue
+        }
         try {
           const ref = await buildRgbScannerReference(id, name, imageUrl)
+          builtByImageUrl.set(imageUrl, ref)
           rows.push({ status: "ok", ref })
           pushLog("info", `Reference OK: ${name} (${ref.imageWidth}×${ref.imageHeight}) · RGB 256-bit`)
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e)
           rows.push({ status: "error", id, name, imageUrl, message })
-          pushLog("warn", `Reference failed: ${name} — ${message} (CORS or blocked image?)`)
+          pushLog("warn", `Reference failed: ${name} — ${message} (throttle/CORS/offline?)`)
         }
       }
       setReferenceRows(rows)
@@ -250,8 +268,11 @@ export function ScannerLabClient() {
         pushLog("error", "Log in to load a deck from Your Decks.")
         return
       }
-      const { deckName, cards } = await loadUserDeckScryfallPrintings(supabase, user.id, name)
-      pushLog("info", `Resolved deck "${deckName}" (${cards.length} printings).`)
+      const { deckName, cards, rowCount } = await loadUserDeckScryfallPrintings(supabase, user.id, name)
+      pushLog(
+        "info",
+        `Resolved deck "${deckName}": ${cards.length} unique printings (${rowCount} deck rows). Building references with paced image loads…`
+      )
       await buildFromCards(`Deck: ${deckName}`, cards)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
