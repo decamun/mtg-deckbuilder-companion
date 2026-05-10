@@ -34,6 +34,7 @@ import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type D
 import { formatPrice, pickPrice } from "@/lib/format"
 import { ManaText } from "@/components/mana/ManaText"
 import { getCardTypeGroup } from "@/lib/card-types"
+import { isFormatValidationImplemented, validateDeckForFormat } from "@/lib/deck-format-validation"
 
 type DeckCardRow = Omit<DeckCard, "image_url" | "face_images" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
 
@@ -41,7 +42,15 @@ type ViewingSnapshotState = {
   versionId: string
   label: string
   cards: DeckCard[]
-  deckMeta: { name: string; description: string | null; format: string | null; commanders: string[]; cover_image_scryfall_id: string | null; is_public: boolean }
+  deckMeta: {
+    name: string
+    description: string | null
+    format: string | null
+    bracket: number | null
+    commanders: string[]
+    cover_image_scryfall_id: string | null
+    is_public: boolean
+  }
   primerMarkdown: string
   coverImageUrl: string | null
 }
@@ -80,6 +89,26 @@ Welcome to the primer for **${deckName}**.
 - _What does an ideal opening hand look like?_
 `
 
+function visualDeckCardChrome(
+  card: DeckCard,
+  opts: {
+    commanderIds: readonly string[]
+    coverImageId: string | null
+    violations: readonly string[] | undefined
+  }
+): string {
+  if (opts.violations && opts.violations.length > 0) {
+    return 'border-red-500/85 ring-2 ring-red-500/45 hover:border-red-400'
+  }
+  if (opts.commanderIds.includes(card.scryfall_id)) {
+    return 'border-yellow-400/80 ring-2 ring-yellow-400/40 hover:border-yellow-300'
+  }
+  if (opts.coverImageId === card.scryfall_id) {
+    return 'border-blue-400/80 ring-2 ring-blue-400/40 hover:border-blue-300'
+  }
+  return 'border-border hover:border-primary/50'
+}
+
 function DraggableDeckCard({
   id,
   disabled,
@@ -88,6 +117,7 @@ function DraggableDeckCard({
   animate,
   transition,
   onClick,
+  title,
   children,
 }: {
   id: string
@@ -97,6 +127,7 @@ function DraggableDeckCard({
   animate?: MotionProps["animate"]
   transition?: MotionProps["transition"]
   onClick?: (event: React.MouseEvent<HTMLDivElement>) => void
+  title?: string
   children: ReactNode
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id, disabled })
@@ -115,6 +146,7 @@ function DraggableDeckCard({
       animate={animate}
       transition={transition}
       onClick={onClick}
+      title={title}
       {...(!disabled ? attributes : {})}
       {...(!disabled ? listeners : {})}
     >
@@ -134,6 +166,8 @@ function mergeDeckCardRow(current: DeckCard, row: DeckCardRow): DeckCard {
     oracle_text: current.oracle_text,
     cmc: current.cmc,
     colors: current.colors,
+    color_identity: current.color_identity,
+    legalities: current.legalities,
     produced_mana: current.produced_mana,
     set_code: current.set_code,
     collector_number: current.collector_number,
@@ -475,6 +509,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           mana_cost: effSf?.mana_cost || '',
           cmc: cmcOf(effSf),
           colors: effSf?.colors ?? [],
+          color_identity: effSf?.color_identity ?? [],
+          legalities: effSf?.legalities,
           oracle_text: effSf?.oracle_text || '',
           produced_mana: effSf?.produced_mana ?? [],
           set_code: effSf?.set,
@@ -551,6 +587,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         mana_cost: card.mana_cost || '',
         cmc: cmcOf(card),
         colors: card.colors ?? [],
+        color_identity: card.color_identity ?? [],
+        legalities: card.legalities,
+        oracle_text: card.oracle_text || '',
         set_code: card.set,
         collector_number: card.collector_number,
         available_finishes: card.finishes,
@@ -787,6 +826,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         mana_cost: effSf?.mana_cost || '',
         cmc: cmcOf(effSf),
         colors: effSf?.colors ?? [],
+        color_identity: effSf?.color_identity ?? [],
+        legalities: effSf?.legalities,
         oracle_text: effSf?.oracle_text || '',
         produced_mana: effSf?.produced_mana ?? [],
         set_code: effSf?.set,
@@ -804,7 +845,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       versionId: row.id,
       label: row.name ?? new Date(row.created_at).toLocaleString(),
       cards: hydrated,
-      deckMeta: snap.deck,
+      deckMeta: {
+        name: snap.deck.name,
+        description: snap.deck.description ?? null,
+        format: snap.deck.format ?? null,
+        bracket: snap.deck.bracket ?? null,
+        commanders: snap.deck.commanders,
+        cover_image_scryfall_id: snap.deck.cover_image_scryfall_id,
+        is_public: snap.deck.is_public,
+      },
       primerMarkdown: snap.primer_markdown,
       coverImageUrl: coverImageUrlSnap,
     }
@@ -877,8 +926,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   // Declared before getGroupedCards/totalUsd because both reference it.
   const displayedCards = viewing ? viewing.cards : cards
   const displayedCommanderIds = viewing ? viewing.deckMeta.commanders : commanderIds
+  const displayedCoverImageId = viewing ? viewing.deckMeta.cover_image_scryfall_id : coverImageId
   const displayedCoverImageUrl = viewing ? viewing.coverImageUrl : coverImageUrl
   const displayedDeckName = viewing ? viewing.deckMeta.name : (deck?.name || 'Loading...')
+  const displayedFormat = viewing ? viewing.deckMeta.format : deck?.format ?? null
+  const displayedBracket = viewing ? viewing.deckMeta.bracket : deck?.bracket ?? null
   const cardInteractionKey = useMemo(
     () => displayedCards.map(c => `${c.id}:${c.effective_printing_id ?? c.scryfall_id}:${c.quantity}`).join('|'),
     [displayedCards]
@@ -898,6 +950,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     }
     return { sum, anyMissing }
   }, [displayedCards])
+
+  const formatViolationMap = useMemo(() => {
+    const { violationsByCardId } = validateDeckForFormat(displayedFormat, {
+      cards: displayedCards,
+      commanderScryfallIds: displayedCommanderIds,
+      bracket: displayedBracket,
+    })
+    return violationsByCardId
+  }, [displayedCards, displayedCommanderIds, displayedFormat, displayedBracket])
 
   const getGroupedCards = () => {
     const sorted = [...displayedCards].sort((a, b) => {
@@ -1369,6 +1430,14 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                 <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
               </TabsList>
             </Tabs>
+            {formatViolationMap.size > 0 && isFormatValidationImplemented(displayedFormat) && (
+              <span
+                className="text-xs text-red-400/90 max-w-[14rem] leading-snug"
+                title="Cards stay in your deck; red outlines are non-blocking construction hints for the selected format."
+              >
+                {formatViolationMap.size} card{formatViolationMap.size === 1 ? '' : 's'} flagged for {displayedFormat === 'edh' ? 'EDH' : 'this format'}
+              </span>
+            )}
           </div>
           {/* Commanders */}
           {commanderCards.length > 0 && (
@@ -1438,40 +1507,41 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   className="grid justify-start gap-4"
                   style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, ${cardSize}px))` }}
                 >
-                  {groupCards.map(c => (
+                  {groupCards.map(c => {
+                    const vlist = formatViolationMap.get(c.id)
+                    return (
                     <ContextMenu key={c.id}>
                       <ContextMenuTrigger>
                         <DraggableDeckCard
                           id={c.id}
                           disabled={cardDragDisabled}
-                          className={`relative rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing shadow-xl group aspect-[5/7] transition-all ${
-                            commanderIds.includes(c.scryfall_id)
-                              ? 'border-yellow-400/80 ring-2 ring-yellow-400/40 hover:border-yellow-300'
-                              : coverImageId === c.scryfall_id
-                                ? 'border-blue-400/80 ring-2 ring-blue-400/40 hover:border-blue-300'
-                                : 'border-border hover:border-primary/50'
-                          }`}
+                          className={`relative rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing shadow-xl group aspect-[5/7] transition-all ${visualDeckCardChrome(c, {
+                            commanderIds: displayedCommanderIds,
+                            coverImageId: displayedCoverImageId,
+                            violations: vlist,
+                          })}`}
                           style={{ width: cardSize }}
                         >
                           <button
                             type="button"
                             className="absolute inset-0 z-10 cursor-grab bg-transparent p-0 text-left active:cursor-grabbing"
                             aria-label={`Preview ${c.name}`}
+                            title={vlist?.length ? vlist.join(' · ') : undefined}
                             onClick={(e) => {
                               e.stopPropagation()
                               showClickedPreview(c, groupName)
                             }}
                           />
                           <CardThumbnail card={c} className="h-full w-full" imageClassName="h-full w-full object-cover" overlayClassName="rounded-none" />
-                          {commanderIds.includes(c.scryfall_id) && (
+                          {displayedCommanderIds.includes(c.scryfall_id) && (
                             <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg">
                               <Crown className="w-2.5 h-2.5" /> CMD
                             </div>
                           )}
-                          {coverImageId === c.scryfall_id && (
+                          {displayedCoverImageId === c.scryfall_id && (
                             <div
                               className="absolute left-2 bg-blue-400/90 text-blue-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg"
-                              style={{ top: commanderIds.includes(c.scryfall_id) ? '1.75rem' : '0.5rem' }}
+                              style={{ top: displayedCommanderIds.includes(c.scryfall_id) ? '1.75rem' : '0.5rem' }}
                             >
                               <ImageIcon className="w-2.5 h-2.5" /> Cover
                             </div>
@@ -1544,7 +1614,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         </ContextMenuItem>
                       </ContextMenuContent>
                     </ContextMenu>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -1599,6 +1670,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                               && hoveredStack.groupName === groupName
                               && hoveredStack.colIdx === colIdx
                               && itemIdx > hoveredStack.itemIdx
+                            const stackViolations = formatViolationMap.get(card.id)
 
                             const dragStyle: CSSProperties = {
                               top: basePositions[itemIdx],
@@ -1610,11 +1682,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 key={card.id}
                                 id={card.id}
                                 disabled={cardDragDisabled}
+                                title={stackViolations?.length ? stackViolations.join(' · ') : undefined}
                                 className="absolute w-full cursor-grab active:cursor-grabbing group"
                                 style={dragStyle}
                               >
                                 <motion.div
-                                  className="relative"
+                                  className={`relative rounded-xl${stackViolations?.length ? ' ring-2 ring-red-500/55 ring-offset-2 ring-offset-background' : ''}`}
                                   animate={{
                                     y: isHovered ? -12 : isBelow ? stackHoverShift : 0,
                                     scale: isHovered ? 1.05 : 1,
@@ -1636,7 +1709,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                     {card.quantity}x
                                   </div>
                                 )}
-                                {commanderIds.includes(card.scryfall_id) && (
+                                {displayedCommanderIds.includes(card.scryfall_id) && (
                                   <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-0.5 shadow">
                                     <Crown className="w-2.5 h-2.5" /> CMD
                                   </div>
@@ -1665,12 +1738,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               {/* ── LIST VIEW ── */}
               {viewMode === 'list' && (
                 <div className="bg-card/50 rounded-lg border border-border">
-                  {groupCards.map(c => (
+                  {groupCards.map(c => {
+                    const listV = formatViolationMap.get(c.id)
+                    return (
                     <DraggableDeckCard
                       key={c.id}
                       id={c.id}
                       disabled={cardDragDisabled}
-                      className="flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing"
+                      title={listV?.length ? listV.join(' · ') : undefined}
+                      className={`flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing${listV?.length ? ' border-l-4 border-l-red-500/75 bg-red-950/10' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation()
                         showClickedPreview(c, groupName)
@@ -1689,7 +1765,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         {renderThreeDotMenu(c, groupName, 'end')}
                       </div>
                     </DraggableDeckCard>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </>)}
@@ -1796,7 +1873,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       </Dialog>
 
 
-      {clickedPreview && (
+      {clickedPreview && (() => {
+        const pv = formatViolationMap.get(clickedPreview.card.id)
+        return (
         <div
           className="fixed inset-0 z-[80] bg-background/20 backdrop-blur-[1px]"
           onClick={(e) => {
@@ -1804,19 +1883,32 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           }}
         >
           <div
-            className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-start gap-3"
+            className="absolute left-1/2 top-1/2 flex max-w-[min(100vw-2rem,56rem)] -translate-x-1/2 -translate-y-1/2 items-start gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <CardArt
-              card={clickedPreview.card}
-              imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl"
-              faceIndex={previewFaceIndex}
-              onFlip={() => setPreviewFaceIndex(i => i + 1)}
-            />
+            <div className="flex flex-col items-center gap-2">
+              <CardArt
+                card={clickedPreview.card}
+                imageClassName={`w-80 rounded-xl border shadow-2xl ${pv?.length ? 'border-red-500/70' : 'border-border/50'}`}
+                faceIndex={previewFaceIndex}
+                onFlip={() => setPreviewFaceIndex(i => i + 1)}
+              />
+              {pv && pv.length > 0 && isFormatValidationImplemented(displayedFormat) && (
+                <div className="w-80 rounded-lg border border-red-500/35 bg-red-950/25 px-3 py-2 text-xs text-red-100">
+                  <div className="font-semibold text-red-200">Format hints (non-blocking)</div>
+                  <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                    {pv.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
             {renderPreviewActionPanel(clickedPreview.card, clickedPreview.groupName)}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       <Dialog open={revertConfirmOpen} onOpenChange={setRevertConfirmOpen}>
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
