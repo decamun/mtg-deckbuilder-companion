@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useLayoutEffect, use, useRef, useMemo, useCallback, type CSSProperties, type ReactNode } from "react"
-import { motion, type MotionProps } from "framer-motion"
+import { motion } from "framer-motion"
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
 import { Search, LayoutGrid, List, Layers as StackIcon, Crown, Image as ImageIcon, MoreVertical, Settings, Edit as EditIcon, Loader2, ChevronDown } from "lucide-react"
@@ -109,13 +109,30 @@ function visualDeckCardChrome(
   return 'border-border hover:border-primary/50'
 }
 
+/** Tag view lists the same deck row in multiple sections; @dnd-kit requires a unique id per draggable node. */
+function deckCardDragId(grouping: GroupingMode, groupName: string, cardId: string): string {
+  if (grouping === "tag") {
+    return JSON.stringify({ __tagSlot: true as const, group: groupName, cardId })
+  }
+  return cardId
+}
+
+function parseDeckCardDragId(rawId: string, grouping: GroupingMode): string {
+  if (grouping !== "tag") return rawId
+  try {
+    const parsed = JSON.parse(rawId) as { __tagSlot?: boolean; cardId?: string }
+    if (parsed?.__tagSlot && typeof parsed.cardId === "string") return parsed.cardId
+  } catch {
+    /* legacy plain uuid */
+  }
+  return rawId
+}
+
 function DraggableDeckCard({
   id,
   disabled,
   className,
   style,
-  animate,
-  transition,
   onClick,
   onMouseEnter,
   onMouseLeave,
@@ -126,8 +143,6 @@ function DraggableDeckCard({
   disabled: boolean
   className?: string
   style?: CSSProperties
-  animate?: MotionProps["animate"]
-  transition?: MotionProps["transition"]
   onClick?: (event: React.MouseEvent<HTMLDivElement>) => void
   onMouseEnter?: (event: React.MouseEvent<HTMLDivElement>) => void
   onMouseLeave?: (event: React.MouseEvent<HTMLDivElement>) => void
@@ -143,12 +158,10 @@ function DraggableDeckCard({
   }
 
   return (
-    <motion.div
+    <div
       ref={setNodeRef}
       className={className}
       style={dragStyle}
-      animate={animate}
-      transition={transition}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -157,7 +170,7 @@ function DraggableDeckCard({
       {...(!disabled ? listeners : {})}
     >
       {children}
-    </motion.div>
+    </div>
   )
 }
 
@@ -837,7 +850,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const handleTagDragEnd = (event: DragEndEvent) => {
-    const cardId = String(event.active.id)
+    const cardId = parseDeckCardDragId(String(event.active.id), grouping)
     const tag = event.over?.id ? String(event.over.id) : null
     if (tag && grouping === 'tag' && tag !== 'Untagged') {
       void addTag(cardId, tag)
@@ -1603,7 +1616,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                     <ContextMenu key={c.id} onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(c) }}>
                       <ContextMenuTrigger>
                         <DraggableDeckCard
-                          id={c.id}
+                          id={deckCardDragId(grouping, groupName, c.id)}
                           disabled={cardDragDisabled}
                           onMouseEnter={vlist && vlist.length > 0 ? () => setDeckFormatHintHoverId(c.id) : undefined}
                           onMouseLeave={vlist && vlist.length > 0 ? () => setDeckFormatHintHoverId((prev) => (prev === c.id ? null : prev)) : undefined}
@@ -1846,7 +1859,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                             return (
                               <DraggableDeckCard
                                 key={card.id}
-                                id={card.id}
+                                id={deckCardDragId(grouping, groupName, card.id)}
                                 disabled={cardDragDisabled}
                                 className="absolute w-full cursor-grab active:cursor-grabbing group"
                                 style={dragStyle}
@@ -1926,7 +1939,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                     return (
                     <DraggableDeckCard
                       key={c.id}
-                      id={c.id}
+                      id={deckCardDragId(grouping, groupName, c.id)}
                       disabled={cardDragDisabled}
                       onMouseEnter={listV && listV.length > 0 ? () => setDeckFormatHintHoverId(c.id) : undefined}
                       onMouseLeave={listV && listV.length > 0 ? () => setDeckFormatHintHoverId((prev) => (prev === c.id ? null : prev)) : undefined}
