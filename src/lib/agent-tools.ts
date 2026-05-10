@@ -4,6 +4,22 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import * as deckService from './deck-service'
 import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfall'
 
+/** Names of tools that persist deck changes — client refreshes the editor after each completes. */
+export const DECK_AGENT_MUTATING_TOOLS = new Set([
+  'add_card',
+  'remove_card',
+  'set_card_quantity',
+  'add_card_tag',
+  'remove_card_tag',
+  'set_card_tags',
+  'set_card_printing',
+  'set_card_finish',
+  'set_commanders',
+  'set_cover_image',
+  'set_primer',
+  'patch_primer',
+])
+
 /**
  * Tools exposed to the in-app deck-editor agent.
  *

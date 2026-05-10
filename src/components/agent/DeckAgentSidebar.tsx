@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { toast } from "sonner"
@@ -25,14 +25,21 @@ import {
   type ModelId,
 } from "@/lib/agent-quota"
 import { MODEL_DESCRIPTORS } from "@/lib/agent-models"
+import { DECK_AGENT_MUTATING_TOOLS } from "@/lib/agent-tools"
+
+/** Coalesce bursts of tool completions while keeping updates frequent during long turns. */
+const DECK_REFRESH_DEBOUNCE_MS = 80
 
 interface Props {
   deckId: string
   open: boolean
   onClose: () => void
   onOpen: () => void
-  /** Called when an assistant turn finishes streaming (after server-side tools have run). Syncs deck UI with DB. */
-  onAssistantResponseFinished?: () => void
+  /**
+   * Reload deck workspace state from the database.
+   * Called after each mutating tool completes (debounced) and once when the assistant stream ends (immediate).
+   */
+  onAssistantResponseFinished?: () => void | Promise<void>
 }
 
 interface LimitsResponse {
@@ -94,6 +101,31 @@ const MAX_WIDTH = 720
 const DEFAULT_WIDTH = 320
 
 export function DeckAgentSidebar({ deckId, open, onClose, onOpen, onAssistantResponseFinished }: Props) {
+  const refreshDeckRef = useRef(onAssistantResponseFinished)
+
+  const syncedMutatingToolCallIdsRef = useRef<Set<string>>(new Set())
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const scheduleDeckRefresh = useCallback(() => {
+    const fn = refreshDeckRef.current
+    if (!fn) return
+    if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
+    refreshDebounceRef.current = setTimeout(() => {
+      refreshDebounceRef.current = null
+      void fn()
+    }, DECK_REFRESH_DEBOUNCE_MS)
+  }, [])
+
+  const flushDeckRefresh = useCallback(() => {
+    const fn = refreshDeckRef.current
+    if (!fn) return
+    if (refreshDebounceRef.current) {
+      clearTimeout(refreshDebounceRef.current)
+      refreshDebounceRef.current = null
+    }
+    void fn()
+  }, [])
+
   const [model, setModel] = useState<ModelId>(DEFAULT_MODEL)
   const [reasoning, setReasoning] = useState(false)
   const [draft, setDraft] = useState("")
@@ -153,9 +185,50 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen, onAssistantRes
       toast.error(msg)
     },
     onFinish: () => {
-      onAssistantResponseFinished?.()
+      flushDeckRefresh()
     },
   })
+
+  useEffect(() => {
+    refreshDeckRef.current = onAssistantResponseFinished
+  }, [onAssistantResponseFinished])
+
+  useEffect(() => {
+    return () => {
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (messages.length === 0) syncedMutatingToolCallIdsRef.current.clear()
+  }, [messages.length])
+
+  useEffect(() => {
+    if (!onAssistantResponseFinished) return
+
+    for (const m of messages) {
+      if (m.role !== "assistant") continue
+      for (let pi = 0; pi < m.parts.length; pi++) {
+        const part = m.parts[pi]
+        if (typeof part.type !== "string" || !part.type.startsWith("tool-")) continue
+        const toolName = part.type.replace(/^tool-/, "")
+        if (!DECK_AGENT_MUTATING_TOOLS.has(toolName)) continue
+
+        const tp = part as {
+          toolCallId?: string
+          state?: string
+          preliminary?: boolean
+        }
+        if (tp.preliminary) continue
+        if (tp.state !== "output-available" && tp.state !== "output-error") continue
+
+        const dedupeId = tp.toolCallId ?? `${m.id}:${pi}:${toolName}`
+        if (syncedMutatingToolCallIdsRef.current.has(dedupeId)) continue
+        syncedMutatingToolCallIdsRef.current.add(dedupeId)
+        scheduleDeckRefresh()
+      }
+    }
+  }, [messages, onAssistantResponseFinished, scheduleDeckRefresh])
 
   useEffect(() => {
     if (!open) return

@@ -1641,7 +1641,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           open={agentOpen}
           onClose={() => setAgentOpen(false)}
           onOpen={() => setAgentOpen(true)}
-          onAssistantResponseFinished={() => void fetchDeck()}
+          onAssistantResponseFinished={fetchDeck}
         />
       )}
       </div>
