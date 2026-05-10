@@ -1,5 +1,5 @@
 /**
- * Deck construction hints for the deck editor (non-blocking).
+ * Deck construction hints for the deck editor.
  *
  * Validates against the deck's chosen format; only EDH / Commander is
  * implemented today — add new branches in `validateDeckForFormat`.

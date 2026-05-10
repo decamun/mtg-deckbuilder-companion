@@ -1458,9 +1458,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             {formatViolationMap.size > 0 && isFormatValidationImplemented(displayedFormat) && (
               <span
                 className="text-xs text-red-400/90 max-w-[14rem] leading-snug"
-                title="Cards stay in your deck; red outlines are non-blocking construction hints for the selected format."
+                title="Hover a highlighted card to read format hints."
               >
-                {formatViolationMap.size} card{formatViolationMap.size === 1 ? '' : 's'} flagged for {displayedFormat === 'edh' ? 'EDH' : 'this format'}
+                Format hints · {formatViolationMap.size} card{formatViolationMap.size === 1 ? '' : 's'} ({displayedFormat === 'edh' ? 'EDH' : displayedFormat})
               </span>
             )}
           </div>
@@ -1553,7 +1553,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                             type="button"
                             className="absolute inset-0 z-10 cursor-grab bg-transparent p-0 text-left active:cursor-grabbing"
                             aria-label={`Preview ${c.name}`}
-                            title={vlist?.length ? vlist.join(' · ') : undefined}
                             onClick={(e) => {
                               e.stopPropagation()
                               showClickedPreview(c, groupName)
@@ -1589,6 +1588,20 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           <div className="absolute bottom-1 right-1 z-20 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
                             {formatPrice(c.price_usd)}
                           </div>
+                          {vlist && vlist.length > 0 && (
+                            <div className="pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto opacity-0 shadow-lg transition-opacity duration-300 ease-out group-hover:opacity-100">
+                              <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
+                                <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
+                                <ul className="space-y-0.5">
+                                  {vlist.map((line) => (
+                                    <li key={line} className="list-disc pl-3.5 marker:text-red-400/90">
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          )}
                           {/* Set/finish indicator (top-left under commander/cover badges) */}
                           {(c.printing_scryfall_id || c.finish !== 'nonfoil') && c.set_code && (
                             <div className="absolute top-2 right-9 bg-background/80 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase border border-border">
@@ -1762,7 +1775,6 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 key={card.id}
                                 id={card.id}
                                 disabled={cardDragDisabled}
-                                title={stackViolations?.length ? stackViolations.join(' · ') : undefined}
                                 className="absolute w-full cursor-grab active:cursor-grabbing group"
                                 style={dragStyle}
                               >
@@ -1784,6 +1796,24 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                   }}
                                 />
                                 <CardThumbnail card={card} imageClassName="w-full rounded-xl border border-black/60 shadow-xl" />
+                                {stackViolations && stackViolations.length > 0 && (
+                                  <div
+                                    className={`pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
+                                      isHovered ? 'opacity-100' : 'opacity-0'
+                                    }`}
+                                  >
+                                    <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
+                                      <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
+                                      <ul className="space-y-0.5">
+                                        {stackViolations.map((line) => (
+                                          <li key={line} className="list-disc pl-3.5 marker:text-red-400/90">
+                                            {line}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  </div>
+                                )}
                                 {card.quantity > 1 && (
                                   <div className="absolute top-2 right-2 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
                                     {card.quantity}x
@@ -1825,25 +1855,38 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                       key={c.id}
                       id={c.id}
                       disabled={cardDragDisabled}
-                      title={listV?.length ? listV.join(' · ') : undefined}
-                      className={`flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing${listV?.length ? ' border-l-4 border-l-red-500/75 bg-red-950/10' : ''}`}
+                      className={`flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative cursor-grab active:cursor-grabbing${listV?.length ? ' border-l-4 border-l-red-500' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation()
                         showClickedPreview(c, groupName)
                       }}
                     >
-                      <div className="flex min-w-0 items-center gap-3">
+                      <div className="relative z-0 flex min-w-0 flex-1 items-center gap-3">
                         <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
                         {(c.face_images?.[0] || c.image_url) && <CardThumbnail card={c} className="h-9 shrink-0" imageClassName="h-9 w-auto rounded border border-border/50" overlayClassName="rounded" />}
                         <ManaText text={c.name} className="font-medium cursor-pointer hover:text-primary transition-colors truncate" />
                         <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
                       </div>
-                      <div className="flex items-center gap-3 ml-auto">
+                      <div className="flex items-center gap-3 ml-auto shrink-0">
                         <span className="text-xs font-mono text-muted-foreground tabular-nums w-16 text-right">
                           {formatPrice(c.price_usd)}
                         </span>
                         {renderThreeDotMenu(c, groupName, 'end')}
                       </div>
+                      {listV && listV.length > 0 && (
+                        <div className="pointer-events-none absolute inset-x-2 top-1/2 z-30 max-h-[calc(100%-0.5rem)] -translate-y-1/2 overflow-y-auto opacity-0 shadow-lg transition-opacity duration-300 ease-out group-hover:opacity-100">
+                          <div className="ml-auto w-[min(100%,22rem)] rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-[10px] leading-snug text-red-100">
+                            <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
+                            <ul className="space-y-0.5">
+                              {listV.map((line) => (
+                                <li key={line} className="list-disc pl-3.5 text-left marker:text-red-400/90">
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      )}
                     </DraggableDeckCard>
                     )
                   })}
@@ -1966,7 +2009,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             className="absolute left-1/2 top-1/2 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 -translate-y-1/2 items-start gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex flex-col items-center gap-2">
+            <div className="group relative flex w-80 shrink-0 flex-col items-center">
               <CardArt
                 card={clickedPreviewCard}
                 imageClassName={`w-80 rounded-xl border shadow-2xl ${pv?.length ? 'border-red-500/70' : 'border-border/50'}`}
@@ -1974,13 +2017,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                 onFlip={() => setPreviewFaceIndex(i => i + 1)}
               />
               {pv && pv.length > 0 && isFormatValidationImplemented(displayedFormat) && (
-                <div className="w-80 rounded-lg border border-red-500/35 bg-red-950/25 px-3 py-2 text-xs text-red-100">
-                  <div className="font-semibold text-red-200">Format hints (non-blocking)</div>
-                  <ul className="mt-1 list-disc pl-4 space-y-0.5">
-                    {pv.map((r) => (
-                      <li key={r}>{r}</li>
-                    ))}
-                  </ul>
+                <div className="pointer-events-none absolute inset-x-2 bottom-3 z-20 max-h-[45%] overflow-y-auto opacity-0 shadow-lg transition-opacity duration-300 ease-out group-hover:opacity-100">
+                  <div className="rounded-lg border border-red-600 bg-zinc-950 px-3 py-2 text-xs text-red-100">
+                    <div className="font-semibold text-red-300">Format hints</div>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      {pv.map((r) => (
+                        <li key={r}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               )}
             </div>
