@@ -26,6 +26,7 @@ import { ImportDecklistDialog } from "@/components/deck/ImportDecklistDialog"
 import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
 import { DeckDiffView } from "@/components/deck/DeckDiffView"
 import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
+import { DeckLikeButton } from "@/components/deck/DeckLikeButton"
 import { PrimerView } from "@/components/primer/PrimerView"
 import { PrimerEditor } from "@/components/primer/PrimerEditor"
 import { VersionsTab } from "@/components/versions/VersionsTab"
@@ -1459,17 +1460,20 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                 </button>
               )}
               {deck && (
-                <ExportDeckMenu
-                  deckId={deckId}
-                  deckName={displayedDeckName}
-                  cards={displayedCards}
-                  primerMarkdown={viewing ? viewing.primerMarkdown : primerMarkdown}
-                  commanderIds={displayedCommanderIds}
-                  isPublic={!!deck.is_public}
-                  isOwner={isOwner}
-                  onVisibilityChange={(pub) => setDeck({ ...deck, is_public: pub })}
-                  onImportClick={isOwner && !viewing ? () => setImportOpen(true) : undefined}
-                />
+                <>
+                  <DeckLikeButton deckId={deckId} />
+                  <ExportDeckMenu
+                    deckId={deckId}
+                    deckName={displayedDeckName}
+                    cards={displayedCards}
+                    primerMarkdown={viewing ? viewing.primerMarkdown : primerMarkdown}
+                    commanderIds={displayedCommanderIds}
+                    isPublic={!!deck.is_public}
+                    isOwner={isOwner}
+                    onVisibilityChange={(pub) => setDeck({ ...deck, is_public: pub })}
+                    onImportClick={isOwner && !viewing ? () => setImportOpen(true) : undefined}
+                  />
+                </>
               )}
             </div>
           </div>
