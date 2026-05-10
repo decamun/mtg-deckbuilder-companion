@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { toast } from "sonner"
@@ -128,6 +128,15 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen, onAssistantRes
 
   const [model, setModel] = useState<ModelId>(DEFAULT_MODEL)
   const [reasoning, setReasoning] = useState(false)
+  /**
+   * `useChat` instantiates `Chat` once and never swaps in a new `transport`, so the
+   * request body must read latest UI state through a ref synced in `useLayoutEffect`
+   * (before paint / before follow-up microtasks from `sendMessage`).
+   */
+  const sendContextRef = useRef({ deckId, model, reasoning })
+  useLayoutEffect(() => {
+    sendContextRef.current = { deckId, model, reasoning }
+  }, [deckId, model, reasoning])
   const [draft, setDraft] = useState("")
   const [limits, setLimits] = useState<LimitsResponse | null>(null)
   const [width, setWidth] = useState(DEFAULT_WIDTH)
@@ -161,22 +170,31 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen, onAssistantRes
     document.body.style.userSelect = "none"
   }
 
+  /* `useChat` keeps the initial `Chat` instance and does not adopt a new `transport`
+   * when deps change. We keep one transport and read latest fields from a ref synced
+   * in `useLayoutEffect`. ESLint's `react-hooks/refs` flags ref reads inside the factory
+   * even though `prepareSendMessagesRequest` only runs when the user sends. */
+  /* eslint-disable react-hooks/refs */
   const transport = useMemo(
     () =>
       new DefaultChatTransport<UIMessage>({
         api: "/api/agent/chat",
-        prepareSendMessagesRequest: ({ messages, body }) => ({
-          body: {
-            messages,
-            deckId,
-            modelId: model,
-            enableReasoning: reasoning,
-            ...(body ?? {}),
-          },
-        }),
+        prepareSendMessagesRequest: ({ messages, body }) => {
+          const { deckId: d, model: m, reasoning: r } = sendContextRef.current
+          return {
+            body: {
+              messages,
+              deckId: d,
+              modelId: m,
+              enableReasoning: r,
+              ...(body ?? {}),
+            },
+          }
+        },
       }),
-    [deckId, model, reasoning]
+    []
   )
+  /* eslint-enable react-hooks/refs */
 
   const { messages, sendMessage, stop, status, setMessages, error } = useChat({
     transport,
