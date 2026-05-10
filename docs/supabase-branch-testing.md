@@ -1,90 +1,107 @@
 # Supabase branch-aware testing for cloud agents
 
 When the GitHub integration is enabled, Supabase automatically creates a **preview
-database branch** for every pull request that touches files under `supabase/`.
-That branch gets its own isolated Postgres instance, API URL, and credentials.
+database branch** for pull requests that change files under `supabase/` (for
+example migrations, Edge Functions, `config.toml`, or `seed.sql`). That branch
+gets its own isolated Postgres instance, API URL, and credentials.
 
-Cloud agents should test against their PR's preview branch rather than the
-shared production database. This page explains when that applies, how to
-discover the branch, and what secrets you need.
+Cloud agents should use that preview branch for **any work that needs a
+writable backend, schema isolation, or the service role** (including
+`provision-agent-pro-account.mjs`). Production is reachable with the
+**publishable (anon) key** for client-only smoke tests, but the production
+**service role key is not available** in Cursor Cloud secrets anymore—do not
+assume you can mutate production data or bypass RLS from agent environments.
+
+Vercel still creates a **preview deployment** for every PR. You can test in the
+browser against that URL or against `localhost`; both are fine as long as the
+`NEXT_PUBLIC_SUPABASE_*` variables point at the database you intend (preview
+branch vs production).
+
+---
+
+## Preview branch limitations
+
+Preview databases are **empty**: no production users, decks, or billing state.
+
+**OAuth (Google, GitHub, etc.) is not expected to work** against a preview
+branch: redirect URLs, provider configuration, and secrets are tied to the main
+project. Use **email / password** auth for manual verification: `curl` signup
+with the branch anon key, confirm the disposable user with SQL (see
+`docs/WORKTREE_AGENTS.md`), then sign in through the app UI.
 
 ---
 
 ## When does a preview branch exist?
 
-Supabase creates a branch for a PR when **all three** conditions are true:
+Supabase creates a branch for a PR when **all** of the following are true:
 
 1. The GitHub integration is enabled on the project (it is).
-2. The PR changes at least one file under `supabase/` (migrations, Edge
-   Functions, `config.toml`, or `seed.sql`).
-3. The branch has finished its provisioning workflow (status `ACTIVE_HEALTHY`).
+2. The PR changes at least one file under `supabase/`.
+3. The branch has finished provisioning (`status == ACTIVE_HEALTHY`).
 
-If none of your changes touch `supabase/`, no preview branch is created and
-you should continue to test against the main project as documented in
-`docs/WORKTREE_AGENTS.md`.
+If your work does **not** touch `supabase/` and you still need an isolated
+database with a service role (for example subscription-tier setup via the
+helper script), add a minimal legitimate change under `supabase/` in the same
+PR or stack a short-lived PR that only exists to spawn a branch—**never** use
+the production service role from cloud agents.
 
----
-
-## Required secrets
-
-| Secret | Where to add | Purpose |
-|--------|-------------|---------|
-| `SUPABASE_SERVICE_ROLE_KEY` | Cursor Cloud › Secrets | Already present; used for the **main** project |
-| `SUPABASE_ACCESS_TOKEN` | Cursor Cloud › Secrets | **Needed to retrieve the preview branch's service_role key** via the Supabase Management API |
-
-> **SUPABASE_ACCESS_TOKEN is the critical gap.** Without it, agents can
-> discover the preview branch via the Supabase MCP but cannot retrieve its
-> service_role key, which is required by `provision-agent-pro-account.mjs`
-> and any direct database admin operations. See the [hooking it up](#hooking-it-up)
-> section at the bottom.
+If there are no `supabase/` changes, use the **production** URL and publishable
+key for anon-level testing only; see `docs/WORKTREE_AGENTS.md` and
+`docs/agent-pro-test-accounts.md` for what is still possible without a service
+role.
 
 ---
 
-## Step-by-step agent workflow
+## Required secrets (Cursor Cloud)
 
-### 1. Determine whether a preview branch exists
+| Secret | Purpose |
+|--------|---------|
+| `SUPABASE_ACCESS_TOKEN` | **Required** to read the preview branch **service_role** API key via the Supabase Management API (`/v1/projects/<branch-ref>/api-keys`). Without it, agents cannot run `provision-agent-pro-account.mjs` or other admin flows against a branch. |
 
-Use the Supabase MCP `list_branches` tool with the production project ref
-(`ejnnjdvgrwsjfgafxtvk`). Look for an entry whose `git_branch` field matches
-your git branch name.
+The production `SUPABASE_SERVICE_ROLE_KEY` is **intentionally not** injected for
+cloud agents. Retrieve a **per-branch** service role key with the token above;
+do not substitute production’s key.
+
+---
+
+## Step-by-step agent workflow (PR with `supabase/` changes)
+
+### 1. Discover the preview branch
+
+Use the Supabase MCP `list_branches` tool with the production project id
+`ejnnjdvgrwsjfgafxtvk`. Find the entry whose `git_branch` matches your git
+branch name.
 
 ```
 MCP: list_branches(project_id="ejnnjdvgrwsjfgafxtvk")
 ```
 
-Match on `git_branch == <your-branch-name>` and read:
+Read:
 
-- `project_ref` — the branch's unique ref (use as `project_id` for all
-  subsequent MCP calls)
+- `project_ref` — use as `project_id` for subsequent MCP calls targeting the branch
 - `status` — must be `ACTIVE_HEALTHY` before proceeding
 
-If no matching entry is found, skip to the [no-branch path](#no-preview-branch).
+If there is no row yet, wait for the integration to create one after the PR is
+opened.
 
-### 2. Wait for the branch to be healthy
+### 2. Wait for `ACTIVE_HEALTHY`
 
-The branch's provisioning pipeline (clone → pull → health → configure →
-migrate → seed → deploy) takes up to a few minutes after the PR is opened or
-a commit is pushed.
+Poll `list_branches` about every 15 seconds. If the branch is still not healthy
+after roughly five minutes, treat it as an infrastructure issue (retry the
+workflow or inspect Supabase/GitHub integration logs)—**do not** switch
+schema-affecting tests to production to “unblock”.
 
-Poll with `list_branches` at ~15-second intervals until `status` is
-`ACTIVE_HEALTHY`. Give up after ~5 minutes and fall back to the main project
-if it never becomes healthy.
-
-### 3. Retrieve branch credentials
-
-Use the Supabase MCP `get_project_url` and `get_publishable_keys` tools,
-targeting the **branch's** `project_ref`:
+### 3. Branch URL and publishable key
 
 ```
 MCP: get_project_url(project_id="<branch-project-ref>")
-→ https://<branch-ref>.supabase.co
-
 MCP: get_publishable_keys(project_id="<branch-project-ref>")
-→ anon key / publishable key
 ```
 
-For the **service_role key**, you must use the Supabase Management API
-(requires `SUPABASE_ACCESS_TOKEN`):
+Use these values for `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+(local `npm run dev`, `npm run build`, or when checking env on a Vercel preview).
+
+### 4. Branch service_role key
 
 ```bash
 curl -s \
@@ -93,9 +110,15 @@ curl -s \
   | jq -r '.[] | select(.name == "service_role") | .api_key'
 ```
 
-### 4. Start the dev server against the branch
+Export it only for the duration of the helper script or admin task; never
+commit it or place it in `NEXT_PUBLIC_*` variables.
 
-Replace the production URL and anon key with the branch values:
+If `SUPABASE_ACCESS_TOKEN` is missing in the environment, say so in your summary
+and stop: you cannot complete admin provisioning on the branch without it.
+
+### 5. Start the dev server (local) or use Vercel preview
+
+**Local:**
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://<branch-ref>.supabase.co \
@@ -104,9 +127,14 @@ NEXT_PUBLIC_IDLEBREW_HOSTS=localhost:3000,127.0.0.1:3000,idlebrew.app,www.idlebr
 npm run dev
 ```
 
-### 5. Provision test accounts against the branch
+**Vercel:** If the project links Supabase to Vercel, preview deployments may
+already receive branch-scoped `NEXT_PUBLIC_SUPABASE_*` values. Otherwise, set
+them in the Vercel dashboard for preview environments or rely on local dev
+with the same values.
 
-Pass the branch URL and its service_role key to the helper:
+### 6. Provision test accounts on the branch
+
+Preview branches start empty—always pass `--create`:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://<branch-ref>.supabase.co \
@@ -119,65 +147,49 @@ npm run agent:pro-account -- \
   --yes
 ```
 
-Preview branches start empty (no production data), so you must always pass
-`--create` — existing production accounts do not exist in the branch.
+### 7. Point Supabase MCP operations at the branch
 
-### 6. Run all database operations against the branch
+For `execute_sql`, `get_advisors`, `apply_migration`, etc., pass the **branch**
+`project_ref` as `project_id`, not `ejnnjdvgrwsjfgafxtvk`.
 
-When using the Supabase MCP tools for SQL, schema queries, or advisor checks,
-pass the **branch `project_id`**, not the production project ref:
+### 8. Manual tests
 
-```
-MCP: execute_sql(project_id="<branch-ref>", query="...")
-MCP: get_advisors(project_id="<branch-ref>", type="security")
-```
-
-### 7. Run manual tests as normal
-
-Follow the deck editor smoke test from `docs/WORKTREE_AGENTS.md`, but use the
-branch URL and credentials from steps 3–4.
+Follow the deck editor smoke test in `docs/WORKTREE_AGENTS.md` using the branch
+URL and anon key, with email/password auth (not OAuth).
 
 ---
 
-## No-preview-branch path
+## PRs without `supabase/` changes
 
-If the PR has no `supabase/` changes (or the branch never becomes healthy),
-use the main project as documented in `docs/WORKTREE_AGENTS.md`. The
-production project ref is `ejnnjdvgrwsjfgafxtvk`.
+No Supabase preview branch is created automatically. Use the **main** project
+URL and publishable key for client-side smoke tests.
+
+You **cannot** run `provision-agent-pro-account.mjs` against production from
+Cursor Cloud (no production service role). Use signup + MCP SQL email
+confirmation as in `docs/WORKTREE_AGENTS.md`, and accept that **subscription
+tier manipulation** requires either a preview branch plus branch service role or
+a maintainer running the helper locally with an explicit key.
 
 ---
 
-## Hooking it up
+## Enabling `SUPABASE_ACCESS_TOKEN`
 
-Everything in this workflow works **except retrieving the branch service_role
-key**, which requires `SUPABASE_ACCESS_TOKEN`. Without it, agents can still
-run the dev server and browser tests using the anon/publishable key, but
-`provision-agent-pro-account.mjs` and any direct admin DB operations will fail
-unless you fall back to the production service_role key (acceptable for
-non-schema-changing tasks, but not ideal).
-
-**To fully enable this workflow, add one secret to Cursor Cloud:**
-
-1. Generate a personal access token at
+1. Create a personal access token at
    [supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens).
-2. In Cursor, go to **Cloud Agents › Secrets** and add:
-   `SUPABASE_ACCESS_TOKEN = <your-token>`
+2. In Cursor: **Cloud Agents › Secrets** → add `SUPABASE_ACCESS_TOKEN`.
 
-Once that secret is injected, agents can retrieve branch service_role keys
-and the full workflow described above works end-to-end.
+Scope should allow reading project API keys for the org that owns this Supabase
+project.
 
 ---
 
 ## Quick reference
 
-| Task | Use branch? | Tool / command |
-|------|-------------|----------------|
-| Discover branch | — | MCP `list_branches` |
-| Get branch URL | Yes | MCP `get_project_url(branch_ref)` |
-| Get anon key | Yes | MCP `get_publishable_keys(branch_ref)` |
-| Get service_role key | Yes | Management API (needs `SUPABASE_ACCESS_TOKEN`) |
-| Start dev server | Yes | `NEXT_PUBLIC_SUPABASE_URL=<branch-url> npm run dev` |
-| Provision test user | Yes | `provision-agent-pro-account.mjs` with branch URL + key |
-| Schema SQL | Yes | MCP `execute_sql(project_id=branch_ref)` |
-| Security advisors | Yes | MCP `get_advisors(project_id=branch_ref)` |
-| Apply migration | Yes | MCP `apply_migration(project_id=branch_ref)` |
+| Task | Target | Notes |
+|------|--------|--------|
+| Discover branch | Production project id | MCP `list_branches` |
+| App URL / anon key | Branch `project_ref` | MCP `get_project_url`, `get_publishable_keys` |
+| Service role key | Branch `project_ref` | Management API + `SUPABASE_ACCESS_TOKEN` |
+| `npm run dev` | Branch or prod URL | Match URL to the DB you are testing |
+| `provision-agent-pro-account` | **Branch only** in cloud | Needs branch service role |
+| `execute_sql` / advisors | Branch ref when on a branch PR | Never use prod for branch-schema validation |

@@ -4,10 +4,16 @@ The old local-worktree Docker workflow is no longer required for Cursor Cloud
 agents. Prefer the host Node process plus hosted Supabase for browser testing.
 
 > **If your PR modifies any file under `supabase/`**, a Supabase preview branch
-> is created automatically. You should target that branch instead of the
-> production project. See `docs/supabase-branch-testing.md` for the full
-> workflow. The instructions below apply when there are no `supabase/` changes
-> or as a fallback when the preview branch is not yet available.
+> is created automatically. Target that branch for the app and for any admin
+> scripts (`provision-agent-pro-account`, etc.). Preview branches have **no
+> production users** and **OAuth sign-in is not expected to work**—use
+> email/password. See `docs/supabase-branch-testing.md` for discovery, env vars,
+> and how to fetch the branch `service_role` key with `SUPABASE_ACCESS_TOKEN`.
+>
+> The instructions below focus on **production** testing with the publishable
+> key when the PR does not touch `supabase/`. Cursor Cloud agents no longer have
+> the production `SUPABASE_SERVICE_ROLE_KEY`; use REST signup + MCP SQL
+> confirmation instead of the provisioning helper when testing prod from cloud.
 
 ## Start the frontend
 
@@ -30,9 +36,10 @@ npm ci
 
 ## Login and deck editor smoke test
 
-When testing against the **production project**, use the credentials below.
-When testing against a **preview branch**, substitute the branch URL and anon
-key discovered via the Supabase MCP (see `docs/supabase-branch-testing.md`).
+When testing against the **production project**, use the URL and publishable
+key below (or the values from the Supabase MCP). When testing against a **preview
+branch**, substitute the branch URL and anon key from the MCP and expect OAuth
+to fail—use the same REST signup flow with the branch anon key.
 
 1. Create a disposable auth user:
 

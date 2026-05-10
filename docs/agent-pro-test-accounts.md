@@ -1,38 +1,36 @@
 # Agent subscription test accounts
 
 Agents can provision disposable Supabase test accounts as either `pro` or `free`
-for manual verification of subscription-gated UI.
+for manual verification of subscription-gated UI. The helper requires
+`SUPABASE_SERVICE_ROLE_KEY` and therefore **only runs where that key is
+available** (locally, in Docker, or in Cursor Cloud **against a preview branch**
+after you fetch the branch’s service role key—**not** against production from
+cloud agents).
 
 ## Targeting the right database
 
-If your PR has `supabase/` changes, a preview branch was created for it. You
-**must** provision accounts against that branch, not production. Determine the
-branch URL and service_role key as described in
-`docs/supabase-branch-testing.md`, then substitute them below.
-
-If there is no preview branch (no `supabase/` changes), use the production
-project URL and the `SUPABASE_SERVICE_ROLE_KEY` secret from the environment.
+If your PR changes files under `supabase/`, Supabase creates a preview branch.
+**Always** provision against that branch: resolve its URL and keys in
+`docs/supabase-branch-testing.md`, then run the commands below with the branch
+`NEXT_PUBLIC_SUPABASE_URL` and branch `SUPABASE_SERVICE_ROLE_KEY`.
 
 Preview branches start empty — production accounts do **not** carry over.
 Always pass `--create` when provisioning against a preview branch.
 
+**Cursor Cloud / production:** The production service role key is **disabled**
+for agents. Do not run `npm run agent:pro-account` against the main project from
+cloud environments. For production-only PRs, smoke-test subscriptions manually or
+run the helper on a maintainer machine with an explicit key, or add a minimal
+`supabase/` change so a preview branch exists and use the branch key from the
+Management API.
+
 ## Use the helper script
 
-Create a confirmed pro test account:
+Create a confirmed pro test account (preview branch example):
 
 ```bash
-# Against a preview branch (recommended when supabase/ changes exist):
 NEXT_PUBLIC_SUPABASE_URL=https://<branch-ref>.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=<branch-service-role-key> \
-npm run agent:pro-account -- \
-  --email cursor-<task>-pro@example.com \
-  --create \
-  --tier pro \
-  --password '<strong-test-password>' \
-  --yes
-
-# Against production (when no preview branch):
-NEXT_PUBLIC_SUPABASE_URL=https://ejnnjdvgrwsjfgafxtvk.supabase.co \
 npm run agent:pro-account -- \
   --email cursor-<task>-pro@example.com \
   --create \
@@ -44,7 +42,7 @@ npm run agent:pro-account -- \
 Create a confirmed non-pro test account:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=https://<branch-or-prod-ref>.supabase.co \
+NEXT_PUBLIC_SUPABASE_URL=https://<branch-or-local-ref>.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
 npm run agent:pro-account -- \
   --email cursor-<task>-free@example.com \
@@ -54,8 +52,8 @@ npm run agent:pro-account -- \
   --yes
 ```
 
-To change an existing disposable account's tier (only valid on production or a
-branch that already has the account):
+To change an existing disposable account’s tier (only valid where the account
+already exists):
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co \

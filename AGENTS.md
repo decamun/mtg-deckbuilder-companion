@@ -40,10 +40,23 @@ available globally.
 
 ### Supabase MCP discovery
 
-Use the Supabase MCP tools with project_id `ejnnjdvgrwsjfgafxtvk`:
+Use the Supabase MCP tools with project_id `ejnnjdvgrwsjfgafxtvk` when talking to
+the **main** project (for example listing branches or anon-only prod smoke
+tests):
 - `get_project_url` → `https://ejnnjdvgrwsjfgafxtvk.supabase.co`
 - `get_publishable_keys` → use the non-disabled publishable key (format
   `sb_publishable_...`)
+
+**Credentials policy:** Cursor Cloud agents **do not** receive the production
+`SUPABASE_SERVICE_ROLE_KEY`. Anything that needs admin Auth, RLS bypass, or the
+`provision-agent-pro-account` helper must run against a **Supabase preview
+branch**, using that branch’s service role key from the Management API (requires
+`SUPABASE_ACCESS_TOKEN` in secrets). See `docs/supabase-branch-testing.md`.
+
+**GitHub + Supabase:** When a PR changes files under `supabase/`, Supabase opens
+an isolated preview database for that PR. **OAuth providers do not work** on
+that database, and it has **no production user data**—use email/password flows
+and `--create` when provisioning test accounts.
 
 ### Gotchas
 
@@ -58,7 +71,8 @@ Use the Supabase MCP tools with project_id `ejnnjdvgrwsjfgafxtvk`:
 **Never run `supabase db push` against the prod project.** Migrations reach
 prod only via the GitHub integration's deploy job after a PR merges to `main`.
 If you need to validate SQL, push to a Supabase preview branch instead (the
-integration creates one per PR; see "Supabase branch-aware testing" below).
+integration creates one when the PR changes `supabase/`; see "Supabase
+branch-aware testing" below).
 
 **Migration filename convention.** New files must be named
 `YYYYMMDDHHMMSS_<snake_case_name>.sql` where the `HHMMSS` suffix is one of:
@@ -80,8 +94,9 @@ before committing.
 ## Supabase branch-aware testing
 
 When a PR touches files under `supabase/`, the GitHub integration automatically
-creates an isolated preview database branch. Agents **must** test against that
-branch rather than the shared production database.
+creates an isolated preview database branch. Agents **must** use that branch for
+schema work, admin scripts, and any test that would have used the production
+service role.
 
 Full workflow: `docs/supabase-branch-testing.md`
 
@@ -90,31 +105,44 @@ Short version:
    and find the entry whose `git_branch` matches your branch name.
 2. Wait for `status == ACTIVE_HEALTHY` (poll every ~15 s, give up after ~5 min).
 3. Use `get_project_url` and `get_publishable_keys` with the branch's
-   `project_ref` to get its URL and anon key.
-4. Retrieve the branch service_role key via the Management API using
-   `SUPABASE_ACCESS_TOKEN` (see `docs/supabase-branch-testing.md` for the curl
-   command). If `SUPABASE_ACCESS_TOKEN` is not set, note this in your response
-   and fall back to the production service_role key for non-schema tasks only.
-5. Start the dev server and run all tests using the branch credentials.
-6. Pass `--create` to `provision-agent-pro-account.mjs` — preview branches
-   start empty, no production accounts carry over.
+   `project_ref` for `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+4. Retrieve the **branch** `service_role` key via the Management API using
+   `SUPABASE_ACCESS_TOKEN` (see `docs/supabase-branch-testing.md`). If the token
+   is missing, you cannot complete admin provisioning on the branch—state that
+   clearly; **never** use or ask for the production service role from cloud
+   agents.
+5. Run `npm run dev` locally with those env vars, **or** use the Vercel preview
+   URL if it is already wired to the same Supabase branch.
+6. Pass `--create` to `provision-agent-pro-account.mjs` — preview branches start
+   empty; use email/password login (OAuth is not supported on branches).
 
-If the PR has no `supabase/` changes, skip to the standard hosted testing
-instructions below.
+If the PR has no `supabase/` changes, skip to the hosted testing section below
+(anon-only production; no `provision-agent-pro-account` against prod in cloud).
 
 ## Hosted Supabase testing (no supabase/ changes)
 
-Use the Supabase MCP tools to discover the active project, URL, and publishable
-key when `.env` only points at local Supabase. For deck editor testing:
+Use the Supabase MCP tools for the main project URL and publishable key when
+`.env` only points at local Supabase. This path uses **production** data
+policies with the **anon** key only—cloud agents do **not** have production
+`SUPABASE_SERVICE_ROLE_KEY`, so you cannot run `provision-agent-pro-account`
+here; use the REST signup + MCP SQL confirmation flow in
+`docs/WORKTREE_AGENTS.md` instead.
 
-1. Create a disposable email/password user through Supabase Auth or the Auth
-   REST signup endpoint.
-2. If the hosted project requires email confirmation, confirm only that
-   disposable user with SQL against `auth.users`.
+For deck editor testing:
+
+1. Create a disposable email/password user through the Auth REST signup endpoint
+   (see `docs/WORKTREE_AGENTS.md`).
+2. If email confirmation is required, confirm only that disposable user with SQL
+   against `auth.users` via the Supabase MCP `execute_sql` tool on the **main**
+   project id.
 3. Log into the app through the user menu, then navigate to `/decks`.
 4. Create a deck and open `/decks/<id>` to exercise the editor.
 5. Add a card through the editor search box to verify auth, RLS, Scryfall
    search, deck writes, and realtime/editor refresh behavior.
+
+If you need an isolated database or subscription-tier setup from an agent,
+include a legitimate `supabase/` change in the PR so a preview branch is created,
+then follow `docs/supabase-branch-testing.md`.
 
 ## Local Docker development
 
