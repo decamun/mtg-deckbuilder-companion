@@ -6,20 +6,36 @@ This complements [`social-launch-security-plan.md`](social-launch-security-plan.
 
 ## 1. Environment variables (production & previews)
 
-### `NEXT_PUBLIC_SITE_URL`
+### Production: set `NEXT_PUBLIC_SITE_URL`
 
-OAuth callbacks now resolve redirects from **`NEXT_PUBLIC_SITE_URL` or `SITE_URL`** when set. If unset in production, redirects fall back to **`https://idlebrew.app`**.
+On **Vercel → Production** environment, set:
 
-**What you should do**
+`NEXT_PUBLIC_SITE_URL=https://idlebrew.app` (no trailing slash)
 
-1. In **Vercel → Project → Settings → Environment Variables**, set  
-   `NEXT_PUBLIC_SITE_URL=https://idlebrew.app` for **Production**.
-2. For **Preview** deployments, either:
-   - set `NEXT_PUBLIC_SITE_URL` to each preview URL (hard with branch previews), or  
-   - rely on the canonical fallback only for production and accept that previews use `idlebrew.app` redirects after OAuth **unless** you set the variable per-preview (often impractical), or  
-   - document that OAuth smoke tests run against production URL only.
+That keeps OAuth return URLs on your **custom domain** after login. If you omit it on Production, the app falls back to this deployment’s **`VERCEL_URL`** (`*.vercel.app`), which is wrong for users who browse **idlebrew.app** unless you always use the Vercel hostname.
 
-If preview OAuth must land back on the preview host, you need a strategy (e.g. dynamic env per branch or testing OAuth only on production).
+### Previews: OAuth without setting a variable per branch
+
+The auth callback uses **`VERCEL_URL`** automatically when **`NEXT_PUBLIC_SITE_URL` is unset** (Vercel injects `VERCEL_URL` for every deployment). So **Preview** builds redirect back to **`https://<that-deployment>.vercel.app`**, which is what you want for branch QA.
+
+You do **not** need `NEXT_PUBLIC_SITE_URL` on Preview unless you want to override that behavior.
+
+### Supabase Auth: allow preview redirect URLs
+
+Supabase must accept `/auth/callback` on preview hosts. In **Supabase Dashboard → Authentication → URL configuration**:
+
+1. Set **Site URL** to your primary site (e.g. `https://idlebrew.app`) or leave as production default.
+2. Under **Redirect URLs**, add at least one pattern that matches Vercel previews, for example:
+   - `http://localhost:3000/**` (local)
+   - `https://*.vercel.app/**` — if the dashboard accepts this wildcard (common on hosted Supabase).
+
+If wildcards are not available, add your team’s stable preview pattern or paste a one-off preview URL when testing a given PR.
+
+Without a matching redirect URL, Supabase will reject the OAuth round-trip even when the app builds the correct `redirect_to`.
+
+### Google / Facebook developer consoles
+
+OAuth goes **through Supabase** first (`…supabase.co/auth/v1/callback`), so you usually **do not** register every preview URL with Google or Meta—only what Supabase documents for your project. If you use a **custom OAuth flow** that bypasses Supabase, you would need per-environment redirect URIs there as well.
 
 ---
 
