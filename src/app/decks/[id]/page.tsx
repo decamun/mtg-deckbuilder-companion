@@ -19,6 +19,7 @@ import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 import { useRouter, useSearchParams } from "next/navigation"
+import { createPortal } from "react-dom"
 import { DeckAgentSidebar } from "@/components/agent/DeckAgentSidebar"
 import { DeckAnalytics } from "@/components/deck-analytics"
 import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
@@ -1076,7 +1077,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const activeButtonClass = "text-primary"
     const destructiveButtonClass = `${menuButtonClass} text-destructive hover:bg-destructive/10 hover:text-destructive`
     return (
-      <div className="max-h-[80vh] w-64 overflow-y-auto rounded-lg border border-border bg-white p-1 text-foreground shadow-2xl">
+      <div className="pointer-events-auto max-h-[80vh] w-64 overflow-y-auto rounded-lg border border-border bg-white p-1 text-foreground shadow-2xl">
         <button
           type="button"
           className={`${menuButtonClass} ${commanderIds.includes(c.scryfall_id) ? 'text-yellow-500' : ''}`}
@@ -1199,7 +1200,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const interactionsLocked = !isOwner || !!viewing
-  const cardDragDisabled = interactionsLocked || cardInteractionPhase !== 'ready' || grouping !== 'tag'
+  // While the large-card preview is open, disable dnd-kit on deck cards so pointer sensors
+  // cannot steal move/hover events from the preview action panel (plain buttons rely on :hover).
+  const cardDragDisabled = interactionsLocked || cardInteractionPhase !== 'ready' || grouping !== 'tag' || !!clickedPreview
   const clickedPreviewCard = clickedPreview
     ? displayedCards.find(card => card.id === clickedPreview.card.id) ?? clickedPreview.card
     : null
@@ -1862,16 +1865,17 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       </Dialog>
 
 
-      {clickedPreview && clickedPreviewCard && (
+      {clickedPreview && clickedPreviewCard && createPortal(
         <div
-          className="fixed inset-0 z-[80] bg-background/20 backdrop-blur-[1px]"
+          className="fixed inset-0 z-[100] bg-background/20 backdrop-blur-[1px]"
           onClick={(e) => {
             if (e.target === e.currentTarget) setClickedPreview(null)
           }}
         >
           <div
-            className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-start gap-3"
+            className="pointer-events-auto absolute left-1/2 top-1/2 flex max-h-[90vh] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 -translate-y-1/2 items-start gap-3"
             onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
           >
             <CardArt
               card={clickedPreviewCard}
@@ -1881,7 +1885,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             />
             {renderPreviewActionPanel(clickedPreviewCard, clickedPreview.groupName)}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       <Dialog open={revertConfirmOpen} onOpenChange={setRevertConfirmOpen}>
