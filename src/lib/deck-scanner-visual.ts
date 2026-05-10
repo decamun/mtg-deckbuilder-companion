@@ -211,8 +211,8 @@ export async function buildScannerReference(
   }
 }
 
-/** Same crop + output size as `DeckScannerDialog.captureCard`. */
-export function captureFrameFromVideo(
+/** Raw 5:7 slot → fixed canvas (no edge refine). Use with `refineCardCanvasByEdges` + `analyzeEdgeRefinementDebug`. */
+export function captureRawSlotFromVideo(
   video: HTMLVideoElement,
   outWidth = 320,
   outHeight = 448
@@ -228,20 +228,22 @@ export function captureFrameFromVideo(
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
   ctx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, canvas.width, canvas.height)
-  return refineCardCanvasByEdges(canvas)
+  return canvas
 }
 
-export function hashesForCanvas(canvas: HTMLCanvasElement): { fullHash: HashBits; artHash: HashBits } {
-  const w = canvas.width
-  const h = canvas.height
-  const fullHash = computeDHash(canvas, w, h)
-  const artCrop = getArtCrop(w, h)
-  const artHash = computeDHash(canvas, w, h, artCrop)
-  return { fullHash, artHash }
+/** Same crop + output size as `DeckScannerDialog.captureCard` (includes edge refine). */
+export function captureFrameFromVideo(
+  video: HTMLVideoElement,
+  outWidth = 320,
+  outHeight = 448
+): HTMLCanvasElement | null {
+  const raw = captureRawSlotFromVideo(video, outWidth, outHeight)
+  if (!raw) return null
+  return refineCardCanvasByEdges(raw)
 }
 
-/** Same centered crop + output size as the live camera path, for still-image debugging. */
-export function captureFrameFromImageElement(img: HTMLImageElement, outWidth = 320, outHeight = 448): HTMLCanvasElement {
+/** Raw slot from printing image (no edge refine). */
+export function captureRawSlotFromImageElement(img: HTMLImageElement, outWidth = 320, outHeight = 448): HTMLCanvasElement {
   const frameWidth = img.naturalWidth
   const frameHeight = img.naturalHeight
   const crop = getCenteredCardCrop(frameWidth, frameHeight)
@@ -251,7 +253,22 @@ export function captureFrameFromImageElement(img: HTMLImageElement, outWidth = 3
   const ctx = canvas.getContext("2d")
   if (!ctx) throw new Error("Could not get canvas context")
   ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, canvas.width, canvas.height)
-  return refineCardCanvasByEdges(canvas)
+  return canvas
+}
+
+/** Same centered crop + output size as the live camera path (includes edge refine). */
+export function captureFrameFromImageElement(img: HTMLImageElement, outWidth = 320, outHeight = 448): HTMLCanvasElement {
+  const raw = captureRawSlotFromImageElement(img, outWidth, outHeight)
+  return refineCardCanvasByEdges(raw)
+}
+
+export function hashesForCanvas(canvas: HTMLCanvasElement): { fullHash: HashBits; artHash: HashBits } {
+  const w = canvas.width
+  const h = canvas.height
+  const fullHash = computeDHash(canvas, w, h)
+  const artCrop = getArtCrop(w, h)
+  const artHash = computeDHash(canvas, w, h, artCrop)
+  return { fullHash, artHash }
 }
 
 /** Same resize + hash regions as a camera capture, but from a loaded printing image. */

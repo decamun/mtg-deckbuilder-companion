@@ -34,15 +34,17 @@ import {
   rankPhashMatches,
 } from "@/lib/deck-scanner-phash"
 import { buildRgbScannerReference, hammingPacked256 } from "@/lib/deck-scanner-rgb"
+import { analyzeEdgeRefinementDebug, refineCardCanvasByEdges, type EdgeRefinementDebug } from "@/lib/deck-scanner-card-refine"
 import {
-  captureFrameFromImageElement,
-  captureFrameFromVideo,
   getArtCrop,
   getCenteredCardCrop,
   getCenteredCardCropPercents,
+  captureRawSlotFromImageElement,
+  captureRawSlotFromVideo,
 } from "@/lib/deck-scanner-visual"
 import { getCardImageUrl, getCardsByIds, getCardsCollection, type ScryfallCard } from "@/lib/scryfall"
 import { loadUserDeckScryfallPrintings } from "@/lib/scanner-deck-load"
+import { runCardOcrFuzzySearch, type OcrSearchHit } from "@/lib/scanner-ocr-search"
 import { supabase } from "@/lib/supabase/client"
 
 type LogEntry = { at: string; level: "info" | "warn" | "error"; message: string }
@@ -63,6 +65,13 @@ function median(nums: number[]): number | null {
   const s = [...nums].sort((a, b) => a - b)
   const m = Math.floor(s.length / 2)
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2
+}
+
+function searchTextFromScryfall(card: ScryfallCard): string {
+  return [card.name, card.type_line, card.oracle_text]
+    .filter(s => s && String(s).trim())
+    .join("\n")
+    .slice(0, 8000)
 }
 
 export function ScannerLabClient() {
@@ -102,6 +111,11 @@ export function ScannerLabClient() {
   const [lastRanked, setLastRanked] = useState<PhashRankedMatch[]>([])
   const [lastPick, setLastPick] = useState<PhashPickResult | null>(null)
   const [capturing, setCapturing] = useState(false)
+  const [refineDebug, setRefineDebug] = useState<EdgeRefinementDebug | null>(null)
+  const [ocrLoading, setOcrLoading] = useState(false)
+  const [ocrRaw, setOcrRaw] = useState("")
+  const [ocrQuery, setOcrQuery] = useState("")
+  const [ocrHits, setOcrHits] = useState<OcrSearchHit[]>([])
   const [videoDims, setVideoDims] = useState<{ w: number; h: number } | null>(null)
   const [cameraFocusDebug, setCameraFocusDebug] = useState<string | null>(null)
 
@@ -173,6 +187,10 @@ export function ScannerLabClient() {
       setLastPreviewUrl(null)
       setLastCropMeta(null)
       setLastHashInfo(null)
+      setRefineDebug(null)
+      setOcrRaw("")
+      setOcrQuery("")
+      setOcrHits([])
       const rows: ReferenceRow[] = []
       pushLog("info", `${label}: loading ${cards.length} printings…`)
       const builtByImageUrl = new Map<string, PhashScannerReference>()
@@ -193,13 +211,17 @@ export function ScannerLabClient() {
               id,
               name,
               packed: new Uint8Array(cached.packed),
+              searchText: searchTextFromScryfall(card),
             },
           })
           pushLog("info", `Reference OK (shared art): ${name}`)
           continue
         }
         try {
-          const ref = await buildPhashScannerReference(id, name, imageUrl)
+          const ref = await buildPhashScannerReference(id, name, imageUrl, {
+            typeLine: card.type_line,
+            oracleText: card.oracle_text,
+          })
           builtByImageUrl.set(imageUrl, ref)
           rows.push({ status: "ok", ref })
           pushLog("info", `Reference OK: ${name} (${ref.imageWidth}×${ref.imageHeight}) · DCT pHash 256-bit`)
@@ -278,17 +300,28 @@ export function ScannerLabClient() {
   }, [buildFromCards, deckNameInput, pushLog])
 
   const runAnalysis = useCallback(
-    (canvas: HTMLCanvasElement, sourceLabel: string, frameW: number, frameH: number) => {
-      const preview = canvas.toDataURL("image/jpeg", 0.85)
+    (
+      refinedCanvas: HTMLCanvasElement,
+      sourceLabel: string,
+      frameW: number,
+      frameH: number,
+      rawSlot?: HTMLCanvasElement | null
+    ) => {
+      if (rawSlot) {
+        setRefineDebug(analyzeEdgeRefinementDebug(rawSlot))
+      } else {
+        setRefineDebug(null)
+      }
+      const preview = refinedCanvas.toDataURL("image/jpeg", 0.85)
       setLastPreviewUrl(preview)
       setLastCropMeta({
         sourceLabel,
         frameW,
         frameH,
-        outW: canvas.width,
-        outH: canvas.height,
+        outW: refinedCanvas.width,
+        outH: refinedCanvas.height,
       })
-      const packed = computeDctPhash256FromCanvas(canvas)
+      const packed = computeDctPhash256FromCanvas(refinedCanvas)
       setLastHashInfo({ phashBytes: packed.byteLength })
 
       const ranked = rankPhashMatches(packed, okPhashRefs)
@@ -322,12 +355,13 @@ export function ScannerLabClient() {
         await nudgeAutofocusBeforeCapture(stream)
         await new Promise(r => setTimeout(r, 260))
       }
-      const canvas = captureFrameFromVideo(video)
-      if (!canvas) {
+      const raw = captureRawSlotFromVideo(video)
+      if (!raw) {
         pushLog("error", "Video not ready (dimensions or readyState).")
         return
       }
-      runAnalysis(canvas, "live camera", video.videoWidth, video.videoHeight)
+      const refined = refineCardCanvasByEdges(raw)
+      runAnalysis(refined, "live camera", video.videoWidth, video.videoHeight, raw)
     } finally {
       setCapturing(false)
     }
@@ -345,8 +379,9 @@ export function ScannerLabClient() {
       const img = new Image()
       img.onload = () => {
         try {
-          const canvas = captureFrameFromImageElement(img)
-          runAnalysis(canvas, `file: ${file.name}`, img.naturalWidth, img.naturalHeight)
+          const raw = captureRawSlotFromImageElement(img)
+          const refined = refineCardCanvasByEdges(raw)
+          runAnalysis(refined, `file: ${file.name}`, img.naturalWidth, img.naturalHeight, raw)
         } catch (e) {
           pushLog("error", e instanceof Error ? e.message : String(e))
         } finally {
@@ -380,9 +415,10 @@ export function ScannerLabClient() {
         scanRafRef.current = requestAnimationFrame(tick)
         return
       }
-      const canvas = captureFrameFromVideo(video)
-      if (canvas) {
-        const packed = computeDctPhash256FromCanvas(canvas)
+      const raw = captureRawSlotFromVideo(video)
+      if (raw) {
+        const refined = refineCardCanvasByEdges(raw)
+        const packed = computeDctPhash256FromCanvas(refined)
         const ranked = rankPhashMatches(packed, okPhashRefs)
         const best = ranked[0]
         const second = ranked[1]
@@ -398,7 +434,7 @@ export function ScannerLabClient() {
             scanRafRef.current = null
           }
           setContinuousScanning(false)
-          runAnalysis(canvas, "live camera (continuous hit)", video.videoWidth, video.videoHeight)
+          runAnalysis(refined, "live camera (continuous hit)", video.videoWidth, video.videoHeight, raw)
           queueMicrotask(() => {
             window.confirm(
               [
@@ -437,6 +473,27 @@ export function ScannerLabClient() {
     }
   }, [lastRanked])
 
+  const runOcrOnLastCapture = useCallback(async () => {
+    if (!lastPreviewUrl || okPhashRefs.length === 0) {
+      pushLog("warn", "Capture a frame first, and load references.")
+      return
+    }
+    setOcrLoading(true)
+    try {
+      const pool = okPhashRefs.map(r => ({ id: r.id, name: r.name, searchText: r.searchText }))
+      const { rawText, query, hits } = await runCardOcrFuzzySearch(lastPreviewUrl, pool)
+      setOcrRaw(rawText)
+      setOcrQuery(query)
+      setOcrHits(hits)
+      pushLog("info", `OCR + fuzzy search: ${hits.length} hits (Tesseract first run may download language data).`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      pushLog("error", `OCR failed: ${msg}`)
+    } finally {
+      setOcrLoading(false)
+    }
+  }, [lastPreviewUrl, okPhashRefs, pushLog])
+
   const cropGuide = videoDims ? getCenteredCardCrop(videoDims.w, videoDims.h) : null
   const aimOverlayPercents = useMemo(() => {
     if (!videoDims) return null
@@ -453,7 +510,7 @@ export function ScannerLabClient() {
         <h1 className="text-2xl font-semibold tracking-tight">Scanner lab</h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
           Debugger for the physical deck scanner: <strong className="font-normal">DCT pHash</strong> (256-bit on a 64×64 grayscale crop of the 320×448 card), optional <strong className="font-normal">RGB dHash</strong> diagnostics in{" "}
-          <code className="text-[11px]">deck-scanner-rgb.ts</code>, continuous scanning, and references from Scryfall or your decks.
+          <code className="text-[11px]">deck-scanner-rgb.ts</code>, edge-refinement previews, OCR + fuzzy text search over the loaded pool, continuous scanning, and references from Scryfall or your decks.
         </p>
         <p className="max-w-3xl rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-950 dark:text-amber-100">
           <strong className="font-medium">Geometry:</strong> after the centered 5:7 slot, frames are passed through a <strong className="font-normal">texture high-pass + Sobel edge bounding box</strong> (with 5:7 clamp) when signal is strong enough; otherwise the slot crop is kept. This targets playmat gradients and loose framing before pHash/RGB.
@@ -768,6 +825,10 @@ export function ScannerLabClient() {
                   setLastPreviewUrl(null)
                   setLastCropMeta(null)
                   setLastHashInfo(null)
+                  setRefineDebug(null)
+                  setOcrRaw("")
+                  setOcrQuery("")
+                  setOcrHits([])
                   pushLog("info", "Cleared last capture analytics.")
                 }}
               >
@@ -906,6 +967,91 @@ export function ScannerLabClient() {
                   </tbody>
                 </table>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {(refineDebug || ocrRaw || ocrHits.length > 0) && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {refineDebug && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Edge refinement debug</CardTitle>
+                <CardDescription>
+                  Built from the <strong className="font-normal">raw</strong> 5:7 slot (before letterbox re-fit). Threshold = mean + k·σ on Sobel(inner); strong pixels {refineDebug.strongEdgeCount}.{" "}
+                  {refineDebug.applied ? "Refine applied." : `Skipped: ${refineDebug.skipReason ?? "unknown"}`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                <div className="font-mono text-muted-foreground">
+                  thresh {refineDebug.thresh.toFixed(2)} · inner mean|σ mag {refineDebug.innerSample.meanMag.toFixed(2)} |{" "}
+                  {refineDebug.innerSample.stdMag.toFixed(2)}
+                </div>
+                {refineDebug.rawBbox && (
+                  <div className="font-mono text-muted-foreground">
+                    raw bbox px: {refineDebug.rawBbox.minX},{refineDebug.rawBbox.minY} → {refineDebug.rawBbox.maxX},{refineDebug.rawBbox.maxY}
+                  </div>
+                )}
+                {refineDebug.finalBbox && (
+                  <div className="font-mono text-muted-foreground">
+                    final 5:7 box: {refineDebug.finalBbox.sx},{refineDebug.finalBbox.sy} size {refineDebug.finalBbox.sw}×{refineDebug.finalBbox.sh}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {[
+                    ["Raw slot", refineDebug.dataUrls.rawSlot],
+                    ["High-pass", refineDebug.dataUrls.highPass],
+                    ["Sobel magnitude", refineDebug.dataUrls.sobelMag],
+                    ["Strong mask", refineDebug.dataUrls.strongMask],
+                    ["BBox overlay", refineDebug.dataUrls.bboxOverlay],
+                    ...(refineDebug.dataUrls.refinedSlot ? [["Refined out", refineDebug.dataUrls.refinedSlot]] as const : []),
+                  ].map(([label, src]) => (
+                    <div key={label} className="space-y-1">
+                      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
+                      <img src={src} alt="" className="w-full rounded border border-border bg-black object-contain" />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">OCR + fuzzy pool</CardTitle>
+              <CardDescription>
+                Tesseract reads the <strong className="font-normal">last JPEG preview</strong> (refined crop). Fuse.js ranks loaded references on name + type line + oracle text. First run downloads WASM/data (~few MB).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button type="button" variant="secondary" size="sm" onClick={() => void runOcrOnLastCapture()} disabled={ocrLoading || !lastPreviewUrl || okPhashRefs.length === 0}>
+                {ocrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Run OCR on last capture
+              </Button>
+              {(ocrRaw || ocrQuery) && (
+                <div className="rounded-md border border-border bg-muted/20 p-2 font-mono text-[11px]">
+                  <div className="text-muted-foreground">Query (normalized)</div>
+                  <div className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap">{ocrQuery || "—"}</div>
+                  <div className="mt-2 text-muted-foreground">Raw OCR</div>
+                  <div className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap">{ocrRaw || "—"}</div>
+                </div>
+              )}
+              {ocrHits.length > 0 && (
+                <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+                  {ocrHits.map((h, i) => (
+                    <li key={`${h.id}-${i}`} className="rounded border border-border/60 bg-card/40 p-2">
+                      <div className="font-medium">
+                        #{i + 1} {h.name}
+                      </div>
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        fuse score {h.fuseScore != null ? h.fuseScore.toFixed(4) : "—"} · id {h.id}
+                      </div>
+                      <div className="mt-1 line-clamp-3 text-xs text-muted-foreground">{h.snippet}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </div>

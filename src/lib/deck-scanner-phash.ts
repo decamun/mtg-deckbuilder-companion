@@ -18,6 +18,7 @@ export type PhashScannerReference = {
   packed: Uint8Array
   imageWidth: number
   imageHeight: number
+  searchText: string
 }
 
 export type PhashRankedMatch = {
@@ -112,10 +113,19 @@ export function computeDctPhash256FromCanvas(canvas: HTMLCanvasElement): Uint8Ar
   return packMedianBits(dct, PHASH_SIZE)
 }
 
-export async function buildPhashScannerReference(id: string, name: string, imageUrl: string): Promise<PhashScannerReference> {
+export async function buildPhashScannerReference(
+  id: string,
+  name: string,
+  imageUrl: string,
+  meta?: { typeLine?: string | null; oracleText?: string | null }
+): Promise<PhashScannerReference> {
   const img = await loadImageQueued(imageUrl)
   const canvas = captureFrameFromImageElement(img)
   const packed = computeDctPhash256FromCanvas(canvas)
+  const searchText = [name, meta?.typeLine, meta?.oracleText]
+    .filter((s): s is string => Boolean(s && String(s).trim()))
+    .join("\n")
+    .slice(0, 8000)
   return {
     id,
     name,
@@ -123,6 +133,7 @@ export async function buildPhashScannerReference(id: string, name: string, image
     packed: new Uint8Array(packed),
     imageWidth: img.naturalWidth,
     imageHeight: img.naturalHeight,
+    searchText,
   }
 }
 

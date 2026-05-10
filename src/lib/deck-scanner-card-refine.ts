@@ -1,26 +1,16 @@
 /**
- * Refines a fixed 320×448 "card slot" crop by finding a tighter interior crop
- * via high-pass (texture) + Sobel edges + bounding box, then re-normalizing
- * to the same output size so downstream hashes stay comparable.
- *
- * This is separate from the legacy centered 5:7 crop from the camera frame
- * (`getCenteredCardCrop`); it runs *after* that step.
+ * Refines a fixed 320×448 "card slot" crop using high-pass luminance + Sobel edges
+ * + bounding box (5:7 clamp). Exposes diagnostics for scanner-lab UI.
  */
 
 const CARD_AR = 5 / 7
 
 export type EdgeRefineOptions = {
-  /** Box blur radius on luminance (reduces playmat gradients before edges). */
   blurRadius?: number
-  /** Edge magnitude threshold = mean + k * std (inner region only). */
   sobelK?: number
-  /** Pixels to pad around the detected box. */
   marginPx?: number
-  /** Minimum fraction of pixels that must count as "strong edge" to trust the box. */
   minStrongEdgeRatio?: number
-  /** If refined box covers more than this fraction of the frame, assume no gain and skip. */
   maxBoxCoverage?: number
-  /** Allowed deviation from 5:7 before we letterbox the crop back to 5:7. */
   aspectSlack?: number
 }
 
@@ -123,21 +113,158 @@ function clampAspectBox(
   return { sx, sy, sw, sh }
 }
 
-/**
- * Tighten a 320×448 (or any) card crop using texture high-pass + edge bbox.
- * Returns `src` unchanged when heuristics say the refine is unreliable.
- */
-export function refineCardCanvasByEdges(
-  src: HTMLCanvasElement,
-  opts?: EdgeRefineOptions
-): HTMLCanvasElement {
-  const o = { ...DEFAULTS, ...opts }
+function floatGrayToDataUrl(gray: Float32Array, w: number, h: number, mode: "symmetric" | "positive"): string {
+  let lo = Infinity
+  let hi = -Infinity
+  let maxAbs = 0
+  for (let i = 0; i < w * h; i++) {
+    const v = gray[i]!
+    if (mode === "symmetric") {
+      maxAbs = Math.max(maxAbs, Math.abs(v))
+    } else {
+      if (v < lo) lo = v
+      if (v > hi) hi = v
+    }
+  }
+  if (mode === "symmetric") {
+    if (maxAbs < 1e-6) maxAbs = 1
+    lo = 0
+    hi = maxAbs
+  } else {
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) {
+      lo = 0
+      hi = 1
+    }
+  }
+  const c = document.createElement("canvas")
+  c.width = w
+  c.height = h
+  const ctx = c.getContext("2d")
+  if (!ctx) return ""
+  const img = ctx.createImageData(w, h)
+  const d = img.data
+  for (let i = 0, p = 0; i < w * h; i++, p += 4) {
+    let t: number
+    if (mode === "symmetric") {
+      t = (Math.abs(gray[i]!) / maxAbs) * 255
+    } else {
+      t = ((gray[i]! - lo) / (hi - lo)) * 255
+    }
+    const b = Math.max(0, Math.min(255, Math.round(t)))
+    d[p] = b
+    d[p + 1] = b
+    d[p + 2] = b
+    d[p + 3] = 255
+  }
+  ctx.putImageData(img, 0, 0)
+  return c.toDataURL("image/png")
+}
+
+function maskToDataUrl(mask: Uint8Array, w: number, h: number): string {
+  const c = document.createElement("canvas")
+  c.width = w
+  c.height = h
+  const ctx = c.getContext("2d")
+  if (!ctx) return ""
+  const img = ctx.createImageData(w, h)
+  const d = img.data
+  for (let i = 0, p = 0; i < w * h; i++, p += 4) {
+    const v = mask[i]! ? 255 : 0
+    d[p] = v
+    d[p + 1] = v
+    d[p + 2] = v
+    d[p + 3] = 255
+  }
+  ctx.putImageData(img, 0, 0)
+  return c.toDataURL("image/png")
+}
+
+function drawBboxOnCanvasCopy(src: HTMLCanvasElement, sx: number, sy: number, sw: number, sh: number): string {
+  const c = document.createElement("canvas")
+  c.width = src.width
+  c.height = src.height
+  const ctx = c.getContext("2d")
+  if (!ctx) return ""
+  ctx.drawImage(src, 0, 0)
+  ctx.strokeStyle = "rgba(255, 60, 60, 0.95)"
+  ctx.lineWidth = 3
+  ctx.strokeRect(sx + 1.5, sy + 1.5, sw - 3, sh - 3)
+  ctx.fillStyle = "rgba(255,60,60,0.85)"
+  ctx.font = "12px ui-monospace, monospace"
+  ctx.fillText(`${sw}×${sh}`, sx + 4, sy + 16)
+  return c.toDataURL("image/png")
+}
+
+type PipelineResult = {
+  applied: boolean
+  skipReason?: string
+  thresh: number
+  strongEdgeCount: number
+  rawMinX: number
+  rawMinY: number
+  rawMaxX: number
+  rawMaxY: number
+  paddedMinX: number
+  paddedMinY: number
+  paddedMaxX: number
+  paddedMaxY: number
+  finalBbox: { sx: number; sy: number; sw: number; sh: number } | null
+  hp: Float32Array
+  mag: Float32Array
+  mask: Uint8Array
+  w: number
+  h: number
+}
+
+function runPipeline(src: HTMLCanvasElement, o: Required<EdgeRefineOptions>): PipelineResult {
   const w = src.width
   const h = src.height
-  if (w < 32 || h < 32) return src
-
+  const emptyMask = () => new Uint8Array(w * h)
+  if (w < 32 || h < 32) {
+    return {
+      applied: false,
+      skipReason: "canvas too small",
+      thresh: 0,
+      strongEdgeCount: 0,
+      rawMinX: 0,
+      rawMinY: 0,
+      rawMaxX: 0,
+      rawMaxY: 0,
+      paddedMinX: 0,
+      paddedMinY: 0,
+      paddedMaxX: 0,
+      paddedMaxY: 0,
+      finalBbox: null,
+      hp: new Float32Array(0),
+      mag: new Float32Array(0),
+      mask: emptyMask(),
+      w,
+      h,
+    }
+  }
   const ctx = src.getContext("2d", { willReadFrequently: true })
-  if (!ctx) return src
+  if (!ctx) {
+    return {
+      applied: false,
+      skipReason: "no 2d context",
+      thresh: 0,
+      strongEdgeCount: 0,
+      rawMinX: 0,
+      rawMinY: 0,
+      rawMaxX: 0,
+      rawMaxY: 0,
+      paddedMinX: 0,
+      paddedMinY: 0,
+      paddedMaxX: 0,
+      paddedMaxY: 0,
+      finalBbox: null,
+      hp: new Float32Array(0),
+      mag: new Float32Array(0),
+      mask: emptyMask(),
+      w,
+      h,
+    }
+  }
   const { data } = ctx.getImageData(0, 0, w, h)
   const lum = luminanceFromImageData(data, w, h)
   const blur = boxBlurSeparable(lum, w, h, o.blurRadius)
@@ -145,16 +272,15 @@ export function refineCardCanvasByEdges(
   for (let i = 0; i < w * h; i++) {
     hp[i] = lum[i]! - blur[i]!
   }
-
   const mag = sobelMagnitude(hp, w, h)
 
-  let sum = 0
-  let sumsq = 0
-  let inner = 0
   const x0 = Math.floor(w * 0.08)
   const x1 = Math.ceil(w * 0.92)
   const y0 = Math.floor(h * 0.08)
   const y1 = Math.ceil(h * 0.92)
+  let sum = 0
+  let sumsq = 0
+  let inner = 0
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
       const v = mag[y * w + x]!
@@ -163,7 +289,28 @@ export function refineCardCanvasByEdges(
       inner++
     }
   }
-  if (inner === 0) return src
+  if (inner === 0) {
+    return {
+      applied: false,
+      skipReason: "empty inner window",
+      thresh: 0,
+      strongEdgeCount: 0,
+      rawMinX: 0,
+      rawMinY: 0,
+      rawMaxX: 0,
+      rawMaxY: 0,
+      paddedMinX: 0,
+      paddedMinY: 0,
+      paddedMaxX: 0,
+      paddedMaxY: 0,
+      finalBbox: null,
+      hp,
+      mag,
+      mask: emptyMask(),
+      w,
+      h,
+    }
+  }
   const mean = sum / inner
   const std = Math.sqrt(Math.max(0, sumsq / inner - mean * mean))
   const thresh = mean + o.sobelK * Math.max(std, 1e-6)
@@ -173,9 +320,12 @@ export function refineCardCanvasByEdges(
   let maxX = 0
   let maxY = 0
   let strong = 0
+  const mask = new Uint8Array(w * h)
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
-      if (mag[y * w + x]! > thresh) {
+      const i = y * w + x
+      if (mag[i]! > thresh) {
+        mask[i] = 1
         strong++
         if (x < minX) minX = x
         if (x > maxX) maxX = x
@@ -186,27 +336,220 @@ export function refineCardCanvasByEdges(
   }
 
   const area = w * h
-  if (strong < area * o.minStrongEdgeRatio) return src
-  if (maxX <= minX || maxY <= minY) return src
+  const rawMinX = minX
+  const rawMinY = minY
+  const rawMaxX = maxX
+  const rawMaxY = maxY
 
-  minX = Math.max(0, minX - o.marginPx)
-  minY = Math.max(0, minY - o.marginPx)
-  maxX = Math.min(w - 1, maxX + o.marginPx)
-  maxY = Math.min(h - 1, maxY + o.marginPx)
+  if (strong < area * o.minStrongEdgeRatio || maxX <= minX || maxY <= minY) {
+    return {
+      applied: false,
+      skipReason: "too few strong edges or degenerate bbox",
+      thresh,
+      strongEdgeCount: strong,
+      rawMinX,
+      rawMinY,
+      rawMaxX,
+      rawMaxY,
+      paddedMinX: 0,
+      paddedMinY: 0,
+      paddedMaxX: 0,
+      paddedMaxY: 0,
+      finalBbox: null,
+      hp,
+      mag,
+      mask,
+      w,
+      h,
+    }
+  }
 
-  const { sx, sy, sw, sh } = clampAspectBox(minX, minY, maxX, maxY, o.aspectSlack)
-  if (sw < w * 0.28 || sh < h * 0.28) return src
+  const pMinX = Math.max(0, minX - o.marginPx)
+  const pMinY = Math.max(0, minY - o.marginPx)
+  const pMaxX = Math.min(w - 1, maxX + o.marginPx)
+  const pMaxY = Math.min(h - 1, maxY + o.marginPx)
 
+  const { sx, sy, sw, sh } = clampAspectBox(pMinX, pMinY, pMaxX, pMaxY, o.aspectSlack)
+  if (sw < w * 0.28 || sh < h * 0.28) {
+    return {
+      applied: false,
+      skipReason: "bbox too small after clamp",
+      thresh,
+      strongEdgeCount: strong,
+      rawMinX,
+      rawMinY,
+      rawMaxX,
+      rawMaxY,
+      paddedMinX: pMinX,
+      paddedMinY: pMinY,
+      paddedMaxX: pMaxX,
+      paddedMaxY: pMaxY,
+      finalBbox: { sx, sy, sw, sh },
+      hp,
+      mag,
+      mask,
+      w,
+      h,
+    }
+  }
   const cov = (sw * sh) / area
-  if (cov > o.maxBoxCoverage) return src
+  if (cov > o.maxBoxCoverage) {
+    return {
+      applied: false,
+      skipReason: "bbox covers nearly full frame",
+      thresh,
+      strongEdgeCount: strong,
+      rawMinX,
+      rawMinY,
+      rawMaxX,
+      rawMaxY,
+      paddedMinX: pMinX,
+      paddedMinY: pMinY,
+      paddedMaxX: pMaxX,
+      paddedMaxY: pMaxY,
+      finalBbox: { sx, sy, sw, sh },
+      hp,
+      mag,
+      mask,
+      w,
+      h,
+    }
+  }
 
+  return {
+    applied: true,
+    thresh,
+    strongEdgeCount: strong,
+    rawMinX,
+    rawMinY,
+    rawMaxX,
+    rawMaxY,
+    paddedMinX: pMinX,
+    paddedMinY: pMinY,
+    paddedMaxX: pMaxX,
+    paddedMaxY: pMaxY,
+    finalBbox: { sx, sy, sw, sh },
+    hp,
+    mag,
+    mask,
+    w,
+    h,
+  }
+}
+
+export type EdgeRefinementDebug = {
+  applied: boolean
+  skipReason?: string
+  thresh: number
+  strongEdgeCount: number
+  innerSample: { meanMag: number; stdMag: number }
+  rawBbox: { minX: number; minY: number; maxX: number; maxY: number } | null
+  paddedBbox: { minX: number; minY: number; maxX: number; maxY: number } | null
+  finalBbox: { sx: number; sy: number; sw: number; sh: number } | null
+  dataUrls: {
+    rawSlot: string
+    highPass: string
+    sobelMag: string
+    strongMask: string
+    bboxOverlay: string
+    refinedSlot?: string
+  }
+}
+
+function meanStdMag(mag: Float32Array, w: number, h: number, x0: number, x1: number, y0: number, y1: number) {
+  let s = 0
+  let sq = 0
+  let n = 0
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const v = mag[y * w + x]!
+      s += v
+      sq += v * v
+      n++
+    }
+  }
+  const mean = n ? s / n : 0
+  const std = n ? Math.sqrt(Math.max(0, sq / n - mean * mean)) : 0
+  return { mean, std }
+}
+
+/** Build PNG data URLs for UI: high-pass, Sobel magnitude, threshold mask, bbox on raw slot, optional refined. */
+export function analyzeEdgeRefinementDebug(rawSlot: HTMLCanvasElement, opts?: EdgeRefineOptions): EdgeRefinementDebug {
+  const o = { ...DEFAULTS, ...opts }
+  const p = runPipeline(rawSlot, o)
+  const w = p.w
+  const h = p.h
+  const x0 = Math.floor(w * 0.08)
+  const x1 = Math.ceil(w * 0.92)
+  const y0 = Math.floor(h * 0.08)
+  const y1 = Math.ceil(h * 0.92)
+  const { mean, std } = meanStdMag(p.mag, w, h, x0, x1, y0, y1)
+
+  const rawSlotUrl = rawSlot.toDataURL("image/png")
+  const highPass = p.hp.length ? floatGrayToDataUrl(p.hp, w, h, "symmetric") : ""
+  const sobelMag = p.mag.length ? floatGrayToDataUrl(p.mag, w, h, "positive") : ""
+  const strongMask = p.mask.length ? maskToDataUrl(p.mask, w, h) : ""
+
+  let bboxOverlay = rawSlotUrl
+  if (p.finalBbox) {
+    bboxOverlay = drawBboxOnCanvasCopy(rawSlot, p.finalBbox.sx, p.finalBbox.sy, p.finalBbox.sw, p.finalBbox.sh)
+  } else if (p.rawMaxX >= p.rawMinX && p.rawMaxY >= p.rawMinY) {
+    bboxOverlay = drawBboxOnCanvasCopy(rawSlot, p.rawMinX, p.rawMinY, p.rawMaxX - p.rawMinX + 1, p.rawMaxY - p.rawMinY + 1)
+  }
+
+  let refinedSlot: string | undefined
+  if (p.applied && p.finalBbox) {
+    const out = document.createElement("canvas")
+    out.width = w
+    out.height = h
+    const octx = out.getContext("2d")
+    if (octx) {
+      octx.fillStyle = "#101010"
+      octx.fillRect(0, 0, w, h)
+      const { sx, sy, sw, sh } = p.finalBbox
+      octx.drawImage(rawSlot, sx, sy, sw, sh, 0, 0, w, h)
+      refinedSlot = out.toDataURL("image/png")
+    }
+  }
+
+  return {
+    applied: p.applied,
+    skipReason: p.skipReason,
+    thresh: p.thresh,
+    strongEdgeCount: p.strongEdgeCount,
+    innerSample: { meanMag: mean, stdMag: std },
+    rawBbox:
+      p.rawMaxX >= p.rawMinX && p.rawMaxY >= p.rawMinY
+        ? { minX: p.rawMinX, minY: p.rawMinY, maxX: p.rawMaxX, maxY: p.rawMaxY }
+        : null,
+    paddedBbox:
+      p.paddedMaxX >= p.paddedMinX && p.paddedMaxY >= p.paddedMinY
+        ? { minX: p.paddedMinX, minY: p.paddedMinY, maxX: p.paddedMaxX, maxY: p.paddedMaxY }
+        : null,
+    finalBbox: p.finalBbox,
+    dataUrls: {
+      rawSlot: rawSlotUrl,
+      highPass,
+      sobelMag,
+      strongMask,
+      bboxOverlay,
+      refinedSlot,
+    },
+  }
+}
+
+export function refineCardCanvasByEdges(src: HTMLCanvasElement, opts?: EdgeRefineOptions): HTMLCanvasElement {
+  const o = { ...DEFAULTS, ...opts }
+  const p = runPipeline(src, o)
+  if (!p.applied || !p.finalBbox) return src
+  const { sx, sy, sw, sh } = p.finalBbox
   const out = document.createElement("canvas")
-  out.width = w
-  out.height = h
+  out.width = p.w
+  out.height = p.h
   const octx = out.getContext("2d")
   if (!octx) return src
   octx.fillStyle = "#101010"
-  octx.fillRect(0, 0, w, h)
-  octx.drawImage(src, sx, sy, sw, sh, 0, 0, w, h)
+  octx.fillRect(0, 0, p.w, p.h)
+  octx.drawImage(src, sx, sy, sw, sh, 0, 0, p.w, p.h)
   return out
 }
