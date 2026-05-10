@@ -34,6 +34,7 @@ import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type D
 import { formatPrice, pickPrice } from "@/lib/format"
 import { ManaText } from "@/components/mana/ManaText"
 import { getCardTypeGroup } from "@/lib/card-types"
+import { isFormatValidationImplemented, validateDeckForFormat } from "@/lib/deck-format-validation"
 
 type DeckCardRow = Omit<DeckCard, "image_url" | "face_images" | "type_line" | "mana_cost" | "cmc" | "colors" | "set_code" | "collector_number" | "available_finishes" | "price_usd" | "effective_printing_id">
 
@@ -41,7 +42,15 @@ type ViewingSnapshotState = {
   versionId: string
   label: string
   cards: DeckCard[]
-  deckMeta: { name: string; description: string | null; format: string | null; commanders: string[]; cover_image_scryfall_id: string | null; is_public: boolean }
+  deckMeta: {
+    name: string
+    description: string | null
+    format: string | null
+    bracket: number | null
+    commanders: string[]
+    cover_image_scryfall_id: string | null
+    is_public: boolean
+  }
   primerMarkdown: string
   coverImageUrl: string | null
 }
@@ -80,6 +89,26 @@ Welcome to the primer for **${deckName}**.
 - _What does an ideal opening hand look like?_
 `
 
+function visualDeckCardChrome(
+  card: DeckCard,
+  opts: {
+    commanderIds: readonly string[]
+    coverImageId: string | null
+    violations: readonly string[] | undefined
+  }
+): string {
+  if (opts.violations && opts.violations.length > 0) {
+    return 'border-red-500/85 ring-2 ring-red-500/45 hover:border-red-400'
+  }
+  if (opts.commanderIds.includes(card.scryfall_id)) {
+    return 'border-yellow-400/80 ring-2 ring-yellow-400/40 hover:border-yellow-300'
+  }
+  if (opts.coverImageId === card.scryfall_id) {
+    return 'border-blue-400/80 ring-2 ring-blue-400/40 hover:border-blue-300'
+  }
+  return 'border-border hover:border-primary/50'
+}
+
 /** Where to render the tag-drag handle (listeners must not cover the whole card: PointerSensor
  *  attaches document pointer listeners and can preventDefault on move, which breaks Base UI
  *  hover submenus and other mousemove-driven interactions). */
@@ -94,6 +123,7 @@ function DraggableDeckCard({
   animate,
   transition,
   onClick,
+  title,
   children,
 }: {
   id: string
@@ -104,6 +134,7 @@ function DraggableDeckCard({
   animate?: MotionProps["animate"]
   transition?: MotionProps["transition"]
   onClick?: (event: React.MouseEvent<HTMLDivElement>) => void
+  title?: string
   children: ReactNode
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useDraggable({ id, disabled })
@@ -141,6 +172,7 @@ function DraggableDeckCard({
       animate={animate}
       transition={transition}
       onClick={onClick}
+      title={title}
     >
       {tagDragHandlePlacement === "inline" ? dragHandle : null}
       {children}
@@ -160,6 +192,8 @@ function mergeDeckCardRow(current: DeckCard, row: DeckCardRow): DeckCard {
     oracle_text: current.oracle_text,
     cmc: current.cmc,
     colors: current.colors,
+    color_identity: current.color_identity,
+    legalities: current.legalities,
     produced_mana: current.produced_mana,
     set_code: current.set_code,
     collector_number: current.collector_number,
@@ -318,6 +352,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
   const [previewFaceIndex, setPreviewFaceIndex] = useState(0)
   const [readyCardInteractionKey, setReadyCardInteractionKey] = useState<string | null>(null)
+  /** After closing a ⋮ menu in the format-hints dialog, ignore row clicks for a short window (ghost click-through). */
+  const formatHintsMenuClosedAtRef = useRef(0)
 
   // New: ownership, tabs, settings, primer, version-viewing
   const [isOwner, setIsOwner] = useState(false)
@@ -343,6 +379,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
   const [reverting, setReverting] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [formatHintsListOpen, setFormatHintsListOpen] = useState(false)
 
   const [deckTitleEditing, setDeckTitleEditing] = useState(false)
   const [deckTitleDraft, setDeckTitleDraft] = useState("")
@@ -501,6 +538,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           mana_cost: effSf?.mana_cost || '',
           cmc: cmcOf(effSf),
           colors: effSf?.colors ?? [],
+          color_identity: effSf?.color_identity ?? [],
+          legalities: effSf?.legalities,
           oracle_text: effSf?.oracle_text || '',
           produced_mana: effSf?.produced_mana ?? [],
           set_code: effSf?.set,
@@ -577,6 +616,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         mana_cost: card.mana_cost || '',
         cmc: cmcOf(card),
         colors: card.colors ?? [],
+        color_identity: card.color_identity ?? [],
+        legalities: card.legalities,
+        oracle_text: card.oracle_text || '',
         set_code: card.set,
         collector_number: card.collector_number,
         available_finishes: card.finishes,
@@ -628,6 +670,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const deleteCard = async (id: string) => {
+    if (clickedPreview?.card.id === id) setClickedPreview(null)
     const card = cards.find(c => c.id === id)
     if (!card) return
     const versionSince = new Date().toISOString()
@@ -841,6 +884,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         mana_cost: effSf?.mana_cost || '',
         cmc: cmcOf(effSf),
         colors: effSf?.colors ?? [],
+        color_identity: effSf?.color_identity ?? [],
+        legalities: effSf?.legalities,
         oracle_text: effSf?.oracle_text || '',
         produced_mana: effSf?.produced_mana ?? [],
         set_code: effSf?.set,
@@ -858,7 +903,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       versionId: row.id,
       label: row.name ?? new Date(row.created_at).toLocaleString(),
       cards: hydrated,
-      deckMeta: snap.deck,
+      deckMeta: {
+        name: snap.deck.name,
+        description: snap.deck.description ?? null,
+        format: snap.deck.format ?? null,
+        bracket: snap.deck.bracket ?? null,
+        commanders: snap.deck.commanders,
+        cover_image_scryfall_id: snap.deck.cover_image_scryfall_id,
+        is_public: snap.deck.is_public,
+      },
       primerMarkdown: snap.primer_markdown,
       coverImageUrl: coverImageUrlSnap,
     }
@@ -931,8 +984,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   // Declared before getGroupedCards/totalUsd because both reference it.
   const displayedCards = viewing ? viewing.cards : cards
   const displayedCommanderIds = viewing ? viewing.deckMeta.commanders : commanderIds
+  const displayedCoverImageId = viewing ? viewing.deckMeta.cover_image_scryfall_id : coverImageId
   const displayedCoverImageUrl = viewing ? viewing.coverImageUrl : coverImageUrl
   const displayedDeckName = viewing ? viewing.deckMeta.name : (deck?.name || 'Loading...')
+  const displayedFormat = viewing ? viewing.deckMeta.format : deck?.format ?? null
+  const displayedBracket = viewing ? viewing.deckMeta.bracket : deck?.bracket ?? null
   const cardInteractionKey = useMemo(
     () => displayedCards.map(c => `${c.id}:${c.effective_printing_id ?? c.scryfall_id}:${c.quantity}`).join('|'),
     [displayedCards]
@@ -952,6 +1008,23 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     }
     return { sum, anyMissing }
   }, [displayedCards])
+
+  const formatViolationMap = useMemo(() => {
+    const { violationsByCardId } = validateDeckForFormat(displayedFormat, {
+      cards: displayedCards,
+      commanderScryfallIds: displayedCommanderIds,
+      bracket: displayedBracket,
+    })
+    return violationsByCardId
+  }, [displayedCards, displayedCommanderIds, displayedFormat, displayedBracket])
+
+  const formatHintCardList = useMemo(
+    () =>
+      displayedCards
+        .filter((c) => (formatViolationMap.get(c.id)?.length ?? 0) > 0)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [displayedCards, formatViolationMap]
+  )
 
   const getGroupedCards = () => {
     const sorted = [...displayedCards].sort((a, b) => {
@@ -993,6 +1066,19 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const groupedCards = getGroupedCards()
+
+  /** Group label for a card — matches list view sections so ⋮ menu tag actions stay coherent. */
+  const editorGroupNameForCard = (c: DeckCard): string => {
+    if (grouping === 'none') return 'All Cards'
+    if (grouping === 'type') return getCardTypeGroup(c.type_line)
+    if (grouping === 'mana') return `Mana Value ${c.cmc || 0}`
+    if (grouping === 'tag') {
+      if (!c.tags?.length) return 'Untagged'
+      return c.tags[0]
+    }
+    return 'All Cards'
+  }
+
   const commanderCards = displayedCommanderIds
     .map(id => displayedCards.find(c => c.scryfall_id === id))
     .filter((c): c is DeckCard => Boolean(c))
@@ -1114,16 +1200,30 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             <DropdownMenuSeparator className="bg-border" />
           </>
         )}
-        <DropdownMenuItem className="text-destructive" onClick={() => deleteCard(c.id)}>Remove from Deck</DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-destructive"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            void deleteCard(c.id)
+          }}
+        >
+          Remove from Deck
+        </DropdownMenuItem>
       </>
     )
   }
 
   // Render as a plain function (not a component) so React doesn't remount it on parent re-renders
-  const renderThreeDotMenu = (c: DeckCard, groupName: string, align: 'start' | 'end' = 'end') => {
+  const renderThreeDotMenu = (c: DeckCard, groupName: string, align: 'start' | 'end' = 'end', fromFormatHintsDialog = false) => {
     if (!isOwner || viewing) return null
     return (
-      <DropdownMenu onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(c) }}>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) void ensurePrintingsLoaded(c)
+          else if (fromFormatHintsDialog) formatHintsMenuClosedAtRef.current = performance.now()
+        }}
+      >
         <DropdownMenuTrigger
           aria-label={`Open options for ${c.name}`}
           className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-foreground/25 bg-background/95 text-foreground opacity-100 shadow-lg ring-2 ring-background/80 transition-colors hover:bg-accent hover:text-accent-foreground data-[popup-open]:bg-accent data-[popup-open]:text-accent-foreground"
@@ -1420,6 +1520,17 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                 <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"><List className="w-3.5 h-3.5" /></TabsTrigger>
               </TabsList>
             </Tabs>
+            {formatViolationMap.size > 0 && isFormatValidationImplemented(displayedFormat) && (
+              <button
+                type="button"
+                onClick={() => setFormatHintsListOpen(true)}
+                className="max-w-[14rem] cursor-pointer rounded px-0.5 text-left text-xs leading-snug text-red-400/90 hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
+                title="Show cards with format hints"
+              >
+                Format hints · {formatViolationMap.size} card{formatViolationMap.size === 1 ? '' : 's'} (
+                {displayedFormat === 'edh' ? 'EDH' : displayedFormat ?? 'format'})
+              </button>
+            )}
           </div>
           {/* Commanders */}
           {commanderCards.length > 0 && (
@@ -1490,6 +1601,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, ${cardSize}px))` }}
                 >
                   {groupCards.map(c => {
+                    const vlist = formatViolationMap.get(c.id)
                     const printings = printingsByCard[c.id] ?? []
                     const finishes = c.available_finishes ?? ['nonfoil']
                     return (
@@ -1498,13 +1610,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         <DraggableDeckCard
                           id={c.id}
                           disabled={cardDragDisabled}
-                          className={`relative rounded-xl overflow-hidden border shadow-xl group aspect-[5/7] transition-all ${
-                            commanderIds.includes(c.scryfall_id)
-                              ? 'border-yellow-400/80 ring-2 ring-yellow-400/40 hover:border-yellow-300'
-                              : coverImageId === c.scryfall_id
-                                ? 'border-blue-400/80 ring-2 ring-blue-400/40 hover:border-blue-300'
-                                : 'border-border hover:border-primary/50'
-                          }`}
+                          className={`relative rounded-xl overflow-hidden border shadow-xl group aspect-[5/7] transition-all ${visualDeckCardChrome(c, {
+                            commanderIds: displayedCommanderIds,
+                            coverImageId: displayedCoverImageId,
+                            violations: vlist,
+                          })}`}
                           style={{ width: cardSize }}
                         >
                           <button
@@ -1517,15 +1627,15 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                             }}
                           />
                           <CardThumbnail card={c} className="h-full w-full" imageClassName="h-full w-full object-cover" overlayClassName="rounded-none" />
-                          {commanderIds.includes(c.scryfall_id) && (
+                          {displayedCommanderIds.includes(c.scryfall_id) && (
                             <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg">
                               <Crown className="w-2.5 h-2.5" /> CMD
                             </div>
                           )}
-                          {coverImageId === c.scryfall_id && (
+                          {displayedCoverImageId === c.scryfall_id && (
                             <div
                               className="absolute left-2 bg-blue-400/90 text-blue-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg"
-                              style={{ top: commanderIds.includes(c.scryfall_id) ? '1.75rem' : '0.5rem' }}
+                              style={{ top: displayedCommanderIds.includes(c.scryfall_id) ? '1.75rem' : '0.5rem' }}
                             >
                               <ImageIcon className="w-2.5 h-2.5" /> Cover
                             </div>
@@ -1546,6 +1656,20 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           <div className="absolute bottom-1 right-1 z-20 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
                             {formatPrice(c.price_usd)}
                           </div>
+                          {vlist && vlist.length > 0 && (
+                            <div className="pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto opacity-0 shadow-lg transition-opacity duration-300 ease-out group-hover:opacity-100">
+                              <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
+                                <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
+                                <ul className="space-y-0.5">
+                                  {vlist.map((line) => (
+                                    <li key={line} className="list-disc pl-3.5 marker:text-red-400/90">
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          )}
                           {/* Set/finish indicator (top-left under commander/cover badges) */}
                           {(c.printing_scryfall_id || c.finish !== 'nonfoil') && c.set_code && (
                             <div className="absolute top-2 right-9 bg-background/80 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase border border-border">
@@ -1707,6 +1831,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                               && hoveredStack.groupName === groupName
                               && hoveredStack.colIdx === colIdx
                               && itemIdx > hoveredStack.itemIdx
+                            const stackViolations = formatViolationMap.get(card.id)
 
                             const dragStyle: CSSProperties = {
                               top: basePositions[itemIdx],
@@ -1722,7 +1847,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                 style={dragStyle}
                               >
                                 <motion.div
-                                  className="relative"
+                                  className={`relative rounded-xl${stackViolations?.length ? ' ring-2 ring-red-500/55 ring-offset-2 ring-offset-background' : ''}`}
                                   animate={{
                                     y: isHovered ? -12 : isBelow ? stackHoverShift : 0,
                                     scale: isHovered ? 1.05 : 1,
@@ -1739,12 +1864,30 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                                   }}
                                 />
                                 <CardThumbnail card={card} imageClassName="w-full rounded-xl border border-black/60 shadow-xl" />
+                                {stackViolations && stackViolations.length > 0 && (
+                                  <div
+                                    className={`pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
+                                      isHovered ? 'opacity-100' : 'opacity-0'
+                                    }`}
+                                  >
+                                    <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
+                                      <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
+                                      <ul className="space-y-0.5">
+                                        {stackViolations.map((line) => (
+                                          <li key={line} className="list-disc pl-3.5 marker:text-red-400/90">
+                                            {line}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  </div>
+                                )}
                                 {card.quantity > 1 && (
                                   <div className="absolute top-2 right-2 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
                                     {card.quantity}x
                                   </div>
                                 )}
-                                {commanderIds.includes(card.scryfall_id) && (
+                                {displayedCommanderIds.includes(card.scryfall_id) && (
                                   <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-0.5 shadow">
                                     <Crown className="w-2.5 h-2.5" /> CMD
                                   </div>
@@ -1773,32 +1916,49 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               {/* ── LIST VIEW ── */}
               {viewMode === 'list' && (
                 <div className="bg-card/50 rounded-lg border border-border">
-                  {groupCards.map(c => (
+                  {groupCards.map(c => {
+                    const listV = formatViolationMap.get(c.id)
+                    return (
                     <DraggableDeckCard
                       key={c.id}
                       id={c.id}
                       disabled={cardDragDisabled}
                       tagDragHandlePlacement="inline"
-                      className="flex items-center justify-between gap-2 p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative"
+                      className={`flex items-center justify-between gap-2 p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg group relative${listV?.length ? ' border-l-4 border-l-red-500' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation()
                         showClickedPreview(c, groupName)
                       }}
                     >
-                      <div className="flex min-w-0 items-center gap-3">
+                      <div className="relative z-0 flex min-w-0 flex-1 items-center gap-3">
                         <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
                         {(c.face_images?.[0] || c.image_url) && <CardThumbnail card={c} className="h-9 shrink-0" imageClassName="h-9 w-auto rounded border border-border/50" overlayClassName="rounded" />}
                         <ManaText text={c.name} className="font-medium cursor-pointer hover:text-primary transition-colors truncate" />
                         <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
                       </div>
-                      <div className="flex items-center gap-3 ml-auto">
+                      <div className="flex items-center gap-3 ml-auto shrink-0">
                         <span className="text-xs font-mono text-muted-foreground tabular-nums w-16 text-right">
                           {formatPrice(c.price_usd)}
                         </span>
                         {renderThreeDotMenu(c, groupName, 'end')}
                       </div>
+                      {listV && listV.length > 0 && (
+                        <div className="pointer-events-none absolute inset-x-2 top-1/2 z-30 max-h-[calc(100%-0.5rem)] -translate-y-1/2 overflow-y-auto opacity-0 shadow-lg transition-opacity duration-300 ease-out group-hover:opacity-100">
+                          <div className="ml-auto w-[min(100%,22rem)] rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-[10px] leading-snug text-red-100">
+                            <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
+                            <ul className="space-y-0.5">
+                              {listV.map((line) => (
+                                <li key={line} className="list-disc pl-3.5 text-left marker:text-red-400/90">
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      )}
                     </DraggableDeckCard>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </>)}
@@ -1887,6 +2047,64 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
         />
       )}
 
+      <Dialog open={formatHintsListOpen} onOpenChange={setFormatHintsListOpen}>
+        <DialogContent className="flex max-h-[min(88vh,720px)] flex-col border border-border bg-card text-foreground sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Format hints</DialogTitle>
+            <DialogDescription>
+              {formatHintCardList.length} card{formatHintCardList.length === 1 ? '' : 's'} that do not match{' '}
+              {displayedFormat === 'edh' ? 'EDH' : 'the selected'} construction hints.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-card/50">
+            {formatHintCardList.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground">No cards to show.</p>
+            ) : (
+              formatHintCardList.map((c) => {
+                const hintLines = formatViolationMap.get(c.id) ?? []
+                const gn = editorGroupNameForCard(c)
+                return (
+                  <div
+                    key={c.id}
+                    className={`flex items-center justify-between border-b border-border p-2 last:border-0 hover:bg-accent/50${hintLines.length ? ' border-l-4 border-l-red-500' : ''}`}
+                  >
+                    <div
+                      className="relative z-0 flex min-w-0 flex-1 cursor-pointer items-center gap-3"
+                      onClick={() => {
+                        if (performance.now() - formatHintsMenuClosedAtRef.current < 450) return
+                        setFormatHintsListOpen(false)
+                        showClickedPreview(c, gn)
+                      }}
+                    >
+                      <span className="w-4 shrink-0 text-right font-mono text-muted-foreground">{c.quantity}</span>
+                      {(c.face_images?.[0] || c.image_url) && (
+                        <CardThumbnail
+                          card={c}
+                          className="h-9 shrink-0"
+                          imageClassName="h-9 w-auto rounded border border-border/50"
+                          overlayClassName="rounded"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <ManaText text={c.name} className="truncate font-medium text-foreground" />
+                        <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
+                        <p className="mt-0.5 line-clamp-2 text-[11px] text-red-300/95">{hintLines.join(' · ')}</p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="w-16 text-right font-mono text-xs text-muted-foreground tabular-nums">
+                        {formatPrice(c.price_usd)}
+                      </span>
+                      {renderThreeDotMenu(c, gn, 'end', true)}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={diffOpen && !!diffTarget} onOpenChange={(open) => { setDiffOpen(open); if (!open) setDiffTarget(null) }}>
         <DialogContent overlayClassName="bg-background/95 supports-backdrop-filter:backdrop-blur-none" className="max-h-[88vh] overflow-y-auto border border-border bg-background text-foreground shadow-2xl sm:max-w-6xl">
           <DialogHeader>
@@ -1905,7 +2123,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       </Dialog>
 
 
-      {clickedPreview && clickedPreviewCard && (
+      {clickedPreview && clickedPreviewCard && (() => {
+        const pv = formatViolationMap.get(clickedPreviewCard.id)
+        return (
         <div
           className="fixed inset-0 z-[80] bg-background/20 backdrop-blur-[1px]"
           onClick={(e) => {
@@ -1916,16 +2136,31 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             className="absolute left-1/2 top-1/2 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 -translate-y-1/2 items-start gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <CardArt
-              card={clickedPreviewCard}
-              imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl"
-              faceIndex={previewFaceIndex}
-              onFlip={() => setPreviewFaceIndex(i => i + 1)}
-            />
+            <div className="group relative flex w-80 shrink-0 flex-col items-center">
+              <CardArt
+                card={clickedPreviewCard}
+                imageClassName={`w-80 rounded-xl border shadow-2xl ${pv?.length ? 'border-red-500/70' : 'border-border/50'}`}
+                faceIndex={previewFaceIndex}
+                onFlip={() => setPreviewFaceIndex(i => i + 1)}
+              />
+              {pv && pv.length > 0 && isFormatValidationImplemented(displayedFormat) && (
+                <div className="pointer-events-none absolute inset-x-2 bottom-3 z-20 max-h-[45%] overflow-y-auto opacity-0 shadow-lg transition-opacity duration-300 ease-out group-hover:opacity-100">
+                  <div className="rounded-lg border border-red-600 bg-zinc-950 px-3 py-2 text-xs text-red-100">
+                    <div className="font-semibold text-red-300">Format hints</div>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      {pv.map((r) => (
+                        <li key={r}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
             {renderPreviewDropdownMenu(clickedPreviewCard, clickedPreview.groupName)}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       <Dialog open={revertConfirmOpen} onOpenChange={setRevertConfirmOpen}>
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
