@@ -4,6 +4,17 @@ import type { McpContext } from './mcp-context'
 import { buildDeckStatsReport } from './deck-stats'
 import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfall'
 
+/** Shown to MCP clients so assistants align with in-app agent behavior (concision, tools-first, tag conventions). */
+const MCP_ASSISTANT_INSTRUCTIONS = `
+You are the idlebrew deck-building assistant. Always prefer tools over guessing—call get_decklist, search_scryfall, list_printings, and other registered tools rather than assuming cards or counts.
+
+Keep replies concise; summarize tool outcomes briefly. Do not paste large JSON decks unless the user asks.
+
+Deck card tags must stay consistent so filters group cards correctly. Avoid interchangeable synonyms for the same role (for example, pick landfall—not separate tags like "extra land drop"—for land-matter / extra-land packages unless the user dictates otherwise).
+
+Preferred lowercase tags: ramp, removal, draw, tutor, boardwipe, counterspell, wincon, graveyard, tokens, landfall. Before adding tags, read existing tags via get_decklist and reuse wording already on the deck when possible.
+`.trim()
+
 /**
  * Build an MCP server bound to a specific authenticated user.
  *
@@ -12,10 +23,13 @@ import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfa
  */
 export function createMcpServer(context: McpContext) {
   const { deckService: decks } = context
-  const server = new McpServer({
-    name: 'idlebrew-MTG-Agent',
-    version: '2.0.0',
-  })
+  const server = new McpServer(
+    {
+      name: 'idlebrew-MTG-Agent',
+      version: '2.0.0',
+    },
+    { instructions: MCP_ASSISTANT_INSTRUCTIONS }
+  )
 
   const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] })
   const err = (text: string) => ({
