@@ -24,16 +24,16 @@ import {
   readCameraFocusSetting,
 } from "@/lib/camera-device"
 import {
-  DEFAULT_RGB_PICK,
-  type RgbPickResult,
-  type RgbRankedMatch,
-  type RgbScannerReference,
-  buildRgbScannerReference,
-  computeRgbDhash256FromCanvas,
-  hammingPacked256,
-  pickRgbMatch,
-  rankRgbMatches,
-} from "@/lib/deck-scanner-rgb"
+  DEFAULT_PHASH_PICK,
+  type PhashPickResult,
+  type PhashRankedMatch,
+  type PhashScannerReference,
+  buildPhashScannerReference,
+  computeDctPhash256FromCanvas,
+  pickPhashMatch,
+  rankPhashMatches,
+} from "@/lib/deck-scanner-phash"
+import { buildRgbScannerReference, hammingPacked256 } from "@/lib/deck-scanner-rgb"
 import {
   captureFrameFromImageElement,
   captureFrameFromVideo,
@@ -48,7 +48,7 @@ import { supabase } from "@/lib/supabase/client"
 type LogEntry = { at: string; level: "info" | "warn" | "error"; message: string }
 
 type ReferenceRow =
-  | { status: "ok"; ref: RgbScannerReference }
+  | { status: "ok"; ref: PhashScannerReference }
   | { status: "error"; id: string; name: string; imageUrl?: string; message: string }
 
 const DEMO_NAMES = ["Lightning Bolt", "Giant Growth", "Dark Ritual", "Counterspell", "Serra Angel"] as const
@@ -84,11 +84,10 @@ export function ScannerLabClient() {
   const [referenceRows, setReferenceRows] = useState<ReferenceRow[]>([])
   const [referencesLoading, setReferencesLoading] = useState(false)
 
-  const [rgbMeanMax, setRgbMeanMax] = useState(DEFAULT_RGB_PICK.meanMax)
-  const [rgbGapMin, setRgbGapMin] = useState(DEFAULT_RGB_PICK.gapMin)
-  const [scanStopMeanMax, setScanStopMeanMax] = useState(44)
+  const [phashDistanceMax, setPhashDistanceMax] = useState(DEFAULT_PHASH_PICK.distanceMax)
+  const [phashGapMin, setPhashGapMin] = useState(DEFAULT_PHASH_PICK.gapMin)
+  const [scanStopDistanceMax, setScanStopDistanceMax] = useState(44)
   const [scanStopGapMin, setScanStopGapMin] = useState(8)
-  const [quickRMax, setQuickRMax] = useState(240)
   const [continuousScanning, setContinuousScanning] = useState(false)
 
   const [lastPreviewUrl, setLastPreviewUrl] = useState<string | null>(null)
@@ -99,14 +98,14 @@ export function ScannerLabClient() {
     outW: number
     outH: number
   } | null>(null)
-  const [lastHashInfo, setLastHashInfo] = useState<{ r: number; g: number; b: number } | null>(null)
-  const [lastRanked, setLastRanked] = useState<RgbRankedMatch[]>([])
-  const [lastPick, setLastPick] = useState<RgbPickResult | null>(null)
+  const [lastHashInfo, setLastHashInfo] = useState<{ phashBytes: number } | null>(null)
+  const [lastRanked, setLastRanked] = useState<PhashRankedMatch[]>([])
+  const [lastPick, setLastPick] = useState<PhashPickResult | null>(null)
   const [capturing, setCapturing] = useState(false)
   const [videoDims, setVideoDims] = useState<{ w: number; h: number } | null>(null)
   const [cameraFocusDebug, setCameraFocusDebug] = useState<string | null>(null)
 
-  const okRgbRefs = useMemo(
+  const okPhashRefs = useMemo(
     () => referenceRows.filter((r): r is Extract<ReferenceRow, { status: "ok" }> => r.status === "ok").map(r => r.ref),
     [referenceRows]
   )
@@ -176,7 +175,7 @@ export function ScannerLabClient() {
       setLastHashInfo(null)
       const rows: ReferenceRow[] = []
       pushLog("info", `${label}: loading ${cards.length} printings…`)
-      const builtByImageUrl = new Map<string, RgbScannerReference>()
+      const builtByImageUrl = new Map<string, PhashScannerReference>()
       for (const card of cards) {
         const imageUrl = getCardImageUrl(card, "normal")
         const id = card.id
@@ -193,19 +192,17 @@ export function ScannerLabClient() {
               ...cached,
               id,
               name,
-              r: new Uint8Array(cached.r),
-              g: new Uint8Array(cached.g),
-              b: new Uint8Array(cached.b),
+              packed: new Uint8Array(cached.packed),
             },
           })
           pushLog("info", `Reference OK (shared art): ${name}`)
           continue
         }
         try {
-          const ref = await buildRgbScannerReference(id, name, imageUrl)
+          const ref = await buildPhashScannerReference(id, name, imageUrl)
           builtByImageUrl.set(imageUrl, ref)
           rows.push({ status: "ok", ref })
-          pushLog("info", `Reference OK: ${name} (${ref.imageWidth}×${ref.imageHeight}) · RGB 256-bit`)
+          pushLog("info", `Reference OK: ${name} (${ref.imageWidth}×${ref.imageHeight}) · DCT pHash 256-bit`)
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e)
           rows.push({ status: "error", id, name, imageUrl, message })
@@ -291,26 +288,21 @@ export function ScannerLabClient() {
         outW: canvas.width,
         outH: canvas.height,
       })
-      const { r, g, b } = computeRgbDhash256FromCanvas(canvas)
-      setLastHashInfo({ r: r.byteLength, g: g.byteLength, b: b.byteLength })
+      const packed = computeDctPhash256FromCanvas(canvas)
+      setLastHashInfo({ phashBytes: packed.byteLength })
 
-      const ranked = rankRgbMatches(r, g, b, okRgbRefs, {
-        quickRMax: quickRMax >= 256 ? null : quickRMax,
-      })
+      const ranked = rankPhashMatches(packed, okPhashRefs)
       setLastRanked(ranked)
-      const pick = pickRgbMatch(ranked, { meanMax: rgbMeanMax, gapMin: rgbGapMin })
+      const pick = pickPhashMatch(ranked, { distanceMax: phashDistanceMax, gapMin: phashGapMin })
       setLastPick(pick)
 
       if (pick.match) {
-        pushLog(
-          "info",
-          `Match: ${pick.match.reference.name} · mean ${pick.match.meanDist.toFixed(1)} (R ${pick.match.distR} · G ${pick.match.distG} · B ${pick.match.distB})`
-        )
+        pushLog("info", `Match: ${pick.match.reference.name} · pHash distance ${pick.match.distance}`)
       } else {
         pushLog("warn", `No pick: ${pick.rejectReason ?? "unknown"}`)
       }
     },
-    [okRgbRefs, pushLog, quickRMax, rgbGapMin, rgbMeanMax]
+    [okPhashRefs, phashDistanceMax, phashGapMin, pushLog]
   )
 
   const captureFromVideo = useCallback(async () => {
@@ -319,7 +311,7 @@ export function ScannerLabClient() {
       pushLog("error", "Video element missing.")
       return
     }
-    if (referencesLoading || okRgbRefs.length === 0) {
+    if (referencesLoading || okPhashRefs.length === 0) {
       pushLog("warn", "Build references first.")
       return
     }
@@ -339,13 +331,13 @@ export function ScannerLabClient() {
     } finally {
       setCapturing(false)
     }
-  }, [okRgbRefs.length, pushLog, referencesLoading, runAnalysis])
+  }, [okPhashRefs.length, pushLog, referencesLoading, runAnalysis])
 
   const onPickFile = useCallback(
     (fileList: FileList | null) => {
       const file = fileList?.[0]
       if (!file) return
-      if (referencesLoading || okRgbRefs.length === 0) {
+      if (referencesLoading || okPhashRefs.length === 0) {
         pushLog("warn", "Build references first.")
         return
       }
@@ -367,11 +359,11 @@ export function ScannerLabClient() {
       }
       img.src = url
     },
-    [okRgbRefs.length, pushLog, referencesLoading, runAnalysis]
+    [okPhashRefs.length, pushLog, referencesLoading, runAnalysis]
   )
 
   useEffect(() => {
-    if (!continuousScanning || cameraError || okRgbRefs.length === 0) {
+    if (!continuousScanning || cameraError || okPhashRefs.length === 0) {
       if (scanRafRef.current != null) {
         cancelAnimationFrame(scanRafRef.current)
         scanRafRef.current = null
@@ -390,18 +382,16 @@ export function ScannerLabClient() {
       }
       const canvas = captureFrameFromVideo(video)
       if (canvas) {
-        const { r, g, b } = computeRgbDhash256FromCanvas(canvas)
-        const ranked = rankRgbMatches(r, g, b, okRgbRefs, {
-          quickRMax: quickRMax >= 256 ? null : quickRMax,
-        })
+        const packed = computeDctPhash256FromCanvas(canvas)
+        const ranked = rankPhashMatches(packed, okPhashRefs)
         const best = ranked[0]
         const second = ranked[1]
-        const gap = second ? second.meanDist - best.meanDist : scanStopGapMin
+        const gap = second ? second.distance - best.distance : scanStopGapMin
         if (
           best &&
-          best.meanDist <= scanStopMeanMax &&
+          best.distance <= scanStopDistanceMax &&
           gap >= scanStopGapMin &&
-          (second != null || okRgbRefs.length === 1)
+          (second != null || okPhashRefs.length === 1)
         ) {
           if (scanRafRef.current != null) {
             cancelAnimationFrame(scanRafRef.current)
@@ -414,7 +404,7 @@ export function ScannerLabClient() {
               [
                 "Continuous scan: threshold reached.",
                 `Best match: ${best.reference.name}`,
-                `Mean RGB distance ${best.meanDist.toFixed(1)} (R ${best.distR} · G ${best.distG} · B ${best.distB})`,
+                `pHash distance ${best.distance}`,
                 `Gap to second ${gap.toFixed(1)}`,
                 "",
                 "Scanning has stopped. Last frame is shown in Last crop / ranking.",
@@ -435,18 +425,10 @@ export function ScannerLabClient() {
         scanRafRef.current = null
       }
     }
-  }, [
-    cameraError,
-    continuousScanning,
-    okRgbRefs,
-    quickRMax,
-    runAnalysis,
-    scanStopGapMin,
-    scanStopMeanMax,
-  ])
+  }, [cameraError, continuousScanning, okPhashRefs, runAnalysis, scanStopDistanceMax, scanStopGapMin])
 
   const rankedStats = useMemo(() => {
-    const scores = lastRanked.map(r => r.meanDist)
+    const scores = lastRanked.map(r => r.distance)
     return {
       count: scores.length,
       min: scores.length ? Math.min(...scores) : null,
@@ -470,7 +452,8 @@ export function ScannerLabClient() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Scanner lab</h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Debugger for the physical deck scanner: RGB 256-bit difference hashes (17×16 per channel on the 320×448 crop), continuous live scanning with configurable stop thresholds, and reference loads from Scryfall or your saved decks.
+          Debugger for the physical deck scanner: <strong className="font-normal">DCT pHash</strong> (256-bit on a 64×64 grayscale crop of the 320×448 card), optional <strong className="font-normal">RGB dHash</strong> diagnostics in{" "}
+          <code className="text-[11px]">deck-scanner-rgb.ts</code>, continuous scanning, and references from Scryfall or your decks.
         </p>
         <p className="max-w-3xl rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-950 dark:text-amber-100">
           <strong className="font-medium">Geometry:</strong> references and captures both hash the same camera-aligned 320×448 card crop so distances are comparable.
@@ -517,64 +500,63 @@ export function ScannerLabClient() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">RGB match & continuous scan</CardTitle>
+            <CardTitle className="text-base">pHash match &amp; continuous scan</CardTitle>
             <CardDescription>
-              Matching uses per-channel 256-bit difference hashes (17×16 downsample of the 320×448 card crop). Lower mean distance is better. Defaults: pick mean ≤ {DEFAULT_RGB_PICK.meanMax}, gap ≥{" "}
-              {DEFAULT_RGB_PICK.gapMin}.
+              Primary matcher is grayscale DCT pHash (hash size 16, ImageHash-style sizing). Lower Hamming distance is better. Pick defaults: distance ≤ {DEFAULT_PHASH_PICK.distanceMax}, gap ≥ {DEFAULT_PHASH_PICK.gapMin}.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="rgb-mean">Pick: max mean distance (0–96)</Label>
-                <Badge variant="outline">{rgbMeanMax}</Badge>
+                <Label htmlFor="ph-dmax">Pick: max pHash distance (8–96)</Label>
+                <Badge variant="outline">{phashDistanceMax}</Badge>
               </div>
               <input
-                id="rgb-mean"
+                id="ph-dmax"
                 type="range"
                 min={8}
                 max={96}
                 step={1}
-                value={rgbMeanMax}
-                onChange={e => setRgbMeanMax(Number(e.target.value))}
+                value={phashDistanceMax}
+                onChange={e => setPhashDistanceMax(Number(e.target.value))}
                 className="w-full"
               />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="rgb-gap">Pick: min gap between best &amp; 2nd mean</Label>
-                <Badge variant="outline">{rgbGapMin}</Badge>
+                <Label htmlFor="ph-gap">Pick: min gap (1st vs 2nd distance)</Label>
+                <Badge variant="outline">{phashGapMin}</Badge>
               </div>
               <input
-                id="rgb-gap"
+                id="ph-gap"
                 type="range"
                 min={0}
                 max={24}
                 step={0.5}
-                value={rgbGapMin}
-                onChange={e => setRgbGapMin(Number(e.target.value))}
+                value={phashGapMin}
+                onChange={e => setPhashGapMin(Number(e.target.value))}
                 className="w-full"
               />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="scan-mean">Continuous stop: max mean distance</Label>
-                <Badge variant="outline">{scanStopMeanMax}</Badge>
+                <Label htmlFor="scan-dmax">Continuous stop: max distance</Label>
+                <Badge variant="outline">{scanStopDistanceMax}</Badge>
               </div>
               <input
-                id="scan-mean"
+                id="scan-dmax"
                 type="range"
                 min={8}
                 max={96}
                 step={1}
-                value={scanStopMeanMax}
-                onChange={e => setScanStopMeanMax(Number(e.target.value))}
+                value={scanStopDistanceMax}
+                onChange={e => setScanStopDistanceMax(Number(e.target.value))}
                 className="w-full"
               />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="scan-gap">Continuous stop: min mean gap (1st vs 2nd)</Label>
+                <Label htmlFor="scan-gap">Continuous stop: min distance gap (1st vs 2nd)</Label>
                 <Badge variant="outline">{scanStopGapMin}</Badge>
               </div>
               <input
@@ -585,22 +567,6 @@ export function ScannerLabClient() {
                 step={0.5}
                 value={scanStopGapMin}
                 onChange={e => setScanStopGapMin(Number(e.target.value))}
-                className="w-full"
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="quick-r">Quick filter: skip if R distance &gt; (256 = off)</Label>
-                <Badge variant="outline">{quickRMax >= 256 ? "off" : quickRMax}</Badge>
-              </div>
-              <input
-                id="quick-r"
-                type="range"
-                min={120}
-                max={256}
-                step={4}
-                value={quickRMax}
-                onChange={e => setQuickRMax(Number(e.target.value))}
                 className="w-full"
               />
             </div>
@@ -686,7 +652,7 @@ export function ScannerLabClient() {
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-medium">{ref.name}</div>
                             <div className="font-mono text-xs text-muted-foreground">
-                              {ref.imageWidth}×{ref.imageHeight} · RGB packed {ref.r.length} bytes / channel (256-bit dHash)
+                              {ref.imageWidth}×{ref.imageHeight} · DCT pHash 256-bit ({ref.packed.length} bytes)
                             </div>
                           </div>
                         </li>
@@ -758,7 +724,7 @@ export function ScannerLabClient() {
                     setContinuousScanning(false)
                     pushLog("info", "Continuous scan stopped manually.")
                   } else {
-                    if (cameraError || okRgbRefs.length === 0) {
+                    if (cameraError || okPhashRefs.length === 0) {
                       pushLog("warn", "Need camera and references to start continuous scan.")
                       return
                     }
@@ -768,7 +734,7 @@ export function ScannerLabClient() {
                 }}
                 disabled={
                   referencesLoading ||
-                  (!continuousScanning && (!!cameraError || okRgbRefs.length === 0))
+                  (!continuousScanning && (!!cameraError || okPhashRefs.length === 0))
                 }
               >
                 {continuousScanning ? "Stop continuous scan" : "Start continuous scan"}
@@ -810,7 +776,7 @@ export function ScannerLabClient() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Output canvas is 320×448. Each channel is downsampled to 17×16 then a 256-bit horizontal difference hash is packed in 32 bytes (Moss-style RGB separation).
+              Output canvas is 320×448. pHash resizes luminance to 64×64, 2D DCT, then 16×16 low-frequency median hash (256 bits, 32 bytes).
             </p>
           </CardContent>
         </Card>
@@ -847,13 +813,13 @@ export function ScannerLabClient() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Orange guide in the camera matches this full frame; cyan is only the inner art rectangle used for the art half of the hash (often wider than tall).
+                    Orange guide matches this crop. Cyan shows the inner art rectangle (legacy dHash art band — not used by pHash).
                   </p>
                 </div>
               )}
               {lastHashInfo && (
                 <div className="font-mono text-xs text-muted-foreground">
-                  packed channel bytes: R {lastHashInfo.r} · G {lastHashInfo.g} · B {lastHashInfo.b}
+                  pHash packed bytes: {lastHashInfo.phashBytes}
                 </div>
               )}
               {lastPick && (
@@ -862,13 +828,10 @@ export function ScannerLabClient() {
                   {lastPick.match ? (
                     <ul className="mt-2 list-inside list-disc space-y-1 text-xs">
                       <li>Winner: {lastPick.match.reference.name}</li>
-                      <li>
-                        mean {lastPick.match.meanDist.toFixed(1)} (R {lastPick.match.distR} · G {lastPick.match.distG} · B{" "}
-                        {lastPick.match.distB})
-                      </li>
+                      <li>pHash distance {lastPick.match.distance}</li>
                       {lastPick.runnerUp && (
                         <li>
-                          Runner-up: {lastPick.runnerUp.reference.name} · mean {lastPick.runnerUp.meanDist.toFixed(1)}
+                          Runner-up: {lastPick.runnerUp.reference.name} · distance {lastPick.runnerUp.distance}
                         </li>
                       )}
                     </ul>
@@ -884,7 +847,7 @@ export function ScannerLabClient() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Full ranking</CardTitle>
               <CardDescription>
-                Sorted by mean RGB distance (lower is better). Green: accepted pick at current sliders; amber: tight gap; red: over pick meanMax.
+                Sorted by pHash distance (lower is better). Green: accepted pick; amber: tight gap; red: over pick distance max.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -895,31 +858,28 @@ export function ScannerLabClient() {
                 {rankedStats.max != null && <span>max {rankedStats.max.toFixed(2)}</span>}
               </div>
               <div className="max-h-[min(60vh,720px)] overflow-auto rounded-lg border border-border">
-                <table className="w-full min-w-[640px] border-collapse text-left text-xs">
+                <table className="w-full min-w-[520px] border-collapse text-left text-xs">
                   <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                     <tr className="border-b border-border">
                       <th className="p-2 font-medium">#</th>
                       <th className="p-2 font-medium">Card</th>
-                      <th className="p-2 font-medium">R</th>
-                      <th className="p-2 font-medium">G</th>
-                      <th className="p-2 font-medium">B</th>
-                      <th className="p-2 font-medium">mean</th>
-                      <th className="p-2 font-medium">Δ mean</th>
+                      <th className="p-2 font-medium">distance</th>
+                      <th className="p-2 font-medium">Δ</th>
                       <th className="p-2 font-medium">flags</th>
                     </tr>
                   </thead>
                   <tbody>
                     {lastRanked.map((row, i) => {
                       const next = lastRanked[i + 1]
-                      const delta = next ? next.meanDist - row.meanDist : null
+                      const delta = next ? next.distance - row.distance : null
                       const isWinner = i === 0
                       const ambiguous =
-                        isWinner && next != null && delta != null && delta < rgbGapMin + Number.EPSILON
-                      const overTh = row.meanDist > rgbMeanMax
+                        isWinner && next != null && delta != null && delta < phashGapMin + Number.EPSILON
+                      const overTh = row.distance > phashDistanceMax
                       const flags = [
                         isWinner ? "best" : "",
                         ambiguous ? "tight-gap" : "",
-                        overTh ? "over-meanMax" : "",
+                        overTh ? "over-distanceMax" : "",
                       ]
                         .filter(Boolean)
                         .join(" · ")
@@ -937,10 +897,7 @@ export function ScannerLabClient() {
                               <span className="font-medium">{row.reference.name}</span>
                             </div>
                           </td>
-                          <td className="p-2 font-mono">{row.distR}</td>
-                          <td className="p-2 font-mono">{row.distG}</td>
-                          <td className="p-2 font-mono">{row.distB}</td>
-                          <td className="p-2 font-mono">{row.meanDist.toFixed(1)}</td>
+                          <td className="p-2 font-mono">{row.distance}</td>
                           <td className="p-2 font-mono">{delta != null ? delta.toFixed(2) : "—"}</td>
                           <td className="p-2 text-muted-foreground">{flags || "—"}</td>
                         </tr>
@@ -988,31 +945,54 @@ export function ScannerLabClient() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Self-check (RGB)</CardTitle>
-          <CardDescription>Rebuild the first reference from its image URL and compare packed hashes (expect 0 Hamming per channel).</CardDescription>
+          <CardTitle className="text-base">Hash diagnostics</CardTitle>
+          <CardDescription>
+            pHash is the live matcher. RGB dHash helpers remain in <code className="text-[11px]">deck-scanner-rgb.ts</code> for experiments.
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            disabled={okRgbRefs.length === 0}
+            disabled={okPhashRefs.length === 0}
             onClick={() => {
-              const ref = okRgbRefs[0]!
+              const ref = okPhashRefs[0]!
               void (async () => {
                 try {
-                  const rebuilt = await buildRgbScannerReference(ref.id, ref.name, ref.imageUrl)
-                  const dr = hammingPacked256(ref.r, rebuilt.r)
-                  const dg = hammingPacked256(ref.g, rebuilt.g)
-                  const db = hammingPacked256(ref.b, rebuilt.b)
-                  pushLog("info", `RGB rebuild check "${ref.name}": R ${dr} · G ${dg} · B ${db} (expect 0 each).`)
+                  const rebuilt = await buildPhashScannerReference(ref.id, ref.name, ref.imageUrl)
+                  const d = hammingPacked256(ref.packed, rebuilt.packed)
+                  pushLog("info", `pHash rebuild check "${ref.name}": Hamming ${d} (expect 0).`)
                 } catch (e) {
                   pushLog("error", e instanceof Error ? e.message : String(e))
                 }
               })()
             }}
           >
-            Rebuild-hash check (first OK ref)
+            pHash rebuild check
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={okPhashRefs.length === 0}
+            onClick={() => {
+              const ref = okPhashRefs[0]!
+              void (async () => {
+                try {
+                  const rgbRef = await buildRgbScannerReference(ref.id, ref.name, ref.imageUrl)
+                  const rebuilt = await buildRgbScannerReference(ref.id, ref.name, ref.imageUrl)
+                  const dr = hammingPacked256(rgbRef.r, rebuilt.r)
+                  const dg = hammingPacked256(rgbRef.g, rebuilt.g)
+                  const db = hammingPacked256(rgbRef.b, rebuilt.b)
+                  pushLog("info", `RGB dHash rebuild (auxiliary) "${ref.name}": R ${dr} · G ${dg} · B ${db} (expect 0 each).`)
+                } catch (e) {
+                  pushLog("error", e instanceof Error ? e.message : String(e))
+                }
+              })()
+            }}
+          >
+            RGB dHash rebuild (auxiliary)
           </Button>
         </CardContent>
       </Card>

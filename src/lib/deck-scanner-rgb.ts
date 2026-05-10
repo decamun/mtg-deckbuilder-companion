@@ -5,7 +5,9 @@
 
 import { captureFrameFromImageElement, loadImageQueued } from "@/lib/deck-scanner-visual"
 
-export const RGB_DHASH_PACK_BYTES = 32
+/** 256-bit hashes packed as 32 bytes (used by RGB dHash and DCT pHash). */
+export const PACKED_HASH_256_BYTES = 32
+export const RGB_DHASH_PACK_BYTES = PACKED_HASH_256_BYTES
 const DOWNSAMPLE_W = 17
 const DOWNSAMPLE_H = 16
 
@@ -41,9 +43,9 @@ export const DEFAULT_RGB_PICK: RgbPickThresholds = {
 }
 
 export function hammingPacked256(a: Uint8Array, b: Uint8Array): number {
-  if (a.length !== RGB_DHASH_PACK_BYTES || b.length !== RGB_DHASH_PACK_BYTES) return 99999
+  if (a.length !== b.length || a.length !== PACKED_HASH_256_BYTES) return 99999
   let bits = 0
-  for (let i = 0; i < RGB_DHASH_PACK_BYTES; i++) {
+  for (let i = 0; i < PACKED_HASH_256_BYTES; i++) {
     let x = a[i]! ^ b[i]!
     while (x) {
       bits += x & 1
