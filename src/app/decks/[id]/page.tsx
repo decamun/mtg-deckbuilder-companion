@@ -19,7 +19,6 @@ import type { Deck, DeckCard, ViewMode, GroupingMode, SortingMode } from "@/lib/
 import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 import { useRouter, useSearchParams } from "next/navigation"
-import { createPortal } from "react-dom"
 import { DeckAgentSidebar } from "@/components/agent/DeckAgentSidebar"
 import { DeckAnalytics } from "@/components/deck-analytics"
 import { DeckSettingsDialog } from "@/components/deck/DeckSettingsDialog"
@@ -1069,122 +1068,35 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     )
   }
 
-  const renderPreviewActionPanel = (c: DeckCard, groupName: string) => {
+  /** Same actions as the ⋮ menu, using Base UI DropdownMenu so pointer hover highlighting matches. */
+  const renderPreviewDropdownMenu = (c: DeckCard, groupName: string) => {
     if (!isOwner || viewing) return null
-    const printings = printingsByCard[c.id] ?? []
-    const finishes = c.available_finishes ?? ['nonfoil']
-    const menuButtonClass = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:outline-none"
-    const activeButtonClass = "text-primary"
-    const destructiveButtonClass = `${menuButtonClass} text-destructive hover:bg-destructive/10 hover:text-destructive`
     return (
-      <div className="pointer-events-auto max-h-[80vh] w-64 overflow-y-auto rounded-lg border border-border bg-white p-1 text-foreground shadow-2xl">
-        <button
-          type="button"
-          className={`${menuButtonClass} ${commanderIds.includes(c.scryfall_id) ? 'text-yellow-500' : ''}`}
-          onClick={() => setAsCommander(c.scryfall_id)}
+      <div className="w-56 shrink-0 self-start">
+        <DropdownMenu
+          modal={false}
+          open
+          onOpenChange={(next) => {
+            if (next) void ensurePrintingsLoaded(c)
+            else setClickedPreview(null)
+          }}
         >
-          <Crown className="h-3.5 w-3.5" />
-          {commanderIds.includes(c.scryfall_id) ? 'Remove as Commander' : 'Set as Commander'}
-        </button>
-        <button
-          type="button"
-          className={`${menuButtonClass} ${coverImageId === c.scryfall_id ? 'text-blue-500' : ''}`}
-          onClick={() => setAsCoverImage(c.scryfall_id)}
-        >
-          <ImageIcon className="h-3.5 w-3.5" />
-          {coverImageId === c.scryfall_id ? 'Remove Cover Image' : 'Set as Cover Image'}
-        </button>
-        <div className="-mx-1 my-1 h-px bg-border" />
-        <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Printing</div>
-        <button
-          type="button"
-          className={`${menuButtonClass} ${c.printing_scryfall_id == null ? activeButtonClass : ''}`}
-          onClick={() => setCardPrinting(c.id, null)}
-        >
-          Default
-        </button>
-        <div className="max-h-36 overflow-y-auto">
-          {printings.map(p => (
-            <button
-              key={p.id}
-              type="button"
-              className={`${menuButtonClass} ${c.printing_scryfall_id === p.id ? activeButtonClass : ''}`}
-              onClick={() => setCardPrinting(c.id, p.id)}
-            >
-              <span className="font-mono text-xs text-muted-foreground">{p.set?.toUpperCase()}</span>
-              <span className="min-w-0 flex-1 truncate">{p.set_name}</span>
-              <span className="text-xs text-muted-foreground">{(p.released_at ?? '').slice(0, 4)}</span>
-            </button>
-          ))}
-          {printings.length === 0 && c.oracle_id && (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading printings...</div>
-          )}
-        </div>
-        <div className="-mx-1 my-1 h-px bg-border" />
-        <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Foil</div>
-        <button
-          type="button"
-          disabled={!finishes.includes('nonfoil')}
-          className={`${menuButtonClass} ${c.finish === 'nonfoil' ? activeButtonClass : ''} disabled:pointer-events-none disabled:opacity-50`}
-          onClick={() => setCardFinish(c.id, 'nonfoil')}
-        >
-          Non-foil
-        </button>
-        <button
-          type="button"
-          disabled={!finishes.includes('foil')}
-          className={`${menuButtonClass} ${c.finish === 'foil' ? activeButtonClass : ''} disabled:pointer-events-none disabled:opacity-50`}
-          onClick={() => setCardFinish(c.id, 'foil')}
-        >
-          Foil
-        </button>
-        <button
-          type="button"
-          disabled={!finishes.includes('etched')}
-          className={`${menuButtonClass} ${c.finish === 'etched' ? activeButtonClass : ''} disabled:pointer-events-none disabled:opacity-50`}
-          onClick={() => setCardFinish(c.id, 'etched')}
-        >
-          Etched
-        </button>
-        <div className="-mx-1 my-1 h-px bg-border" />
-        <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Tags</div>
-        <div className="flex flex-wrap gap-1 px-2 pb-1">
-          {(c.tags?.length ? c.tags : ['No tags']).map(tag => (
-            <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>
-          ))}
-        </div>
-        {allUniqueTags.map(tag => {
-          const hasTag = c.tags?.includes(tag)
-          return (
-            <button
-              key={tag}
-              type="button"
-              className={`${menuButtonClass} ${hasTag ? activeButtonClass : ''}`}
-              onClick={() => hasTag ? removeTag(c.id, tag) : addTag(c.id, tag)}
-            >
-              {hasTag ? 'Remove' : 'Add'} {tag}
-            </button>
-          )
-        })}
-        <button
-          type="button"
-          className={menuButtonClass}
-          onClick={() => { setActiveCardIdForTag(c.id); setTagDialogOpen(true) }}
-        >
-          Add Custom Tag...
-        </button>
-        {grouping === 'tag' && groupName !== 'Untagged' && (
-          <>
-            <div className="-mx-1 my-1 h-px bg-border" />
-            <button type="button" className="flex w-full rounded-md px-2 py-1.5 text-left text-sm text-orange-500 transition-colors hover:bg-orange-400/10 focus-visible:bg-orange-400/10 focus-visible:outline-none" onClick={() => removeTag(c.id, groupName)}>
-              Remove from &apos;{groupName}&apos;
-            </button>
-          </>
-        )}
-        <div className="-mx-1 my-1 h-px bg-border" />
-        <button type="button" className={destructiveButtonClass} onClick={() => deleteCard(c.id)}>
-          Remove from Deck
-        </button>
+          <DropdownMenuTrigger
+            type="button"
+            tabIndex={-1}
+            aria-hidden
+            className="h-2 w-full cursor-default border-0 bg-transparent p-0 opacity-0"
+          />
+          <DropdownMenuContent
+            align="start"
+            side="bottom"
+            sideOffset={4}
+            positionerClassName="z-[90]"
+            className="w-56 max-h-[80vh] overflow-y-auto border border-border bg-white text-foreground"
+          >
+            {renderDropdownItems(c, groupName)}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     )
   }
@@ -1200,9 +1112,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   }
 
   const interactionsLocked = !isOwner || !!viewing
-  // While the large-card preview is open, disable dnd-kit on deck cards so pointer sensors
-  // cannot steal move/hover events from the preview action panel (plain buttons rely on :hover).
-  const cardDragDisabled = interactionsLocked || cardInteractionPhase !== 'ready' || grouping !== 'tag' || !!clickedPreview
+  const cardDragDisabled = interactionsLocked || cardInteractionPhase !== 'ready' || grouping !== 'tag'
   const clickedPreviewCard = clickedPreview
     ? displayedCards.find(card => card.id === clickedPreview.card.id) ?? clickedPreview.card
     : null
@@ -1865,17 +1775,16 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       </Dialog>
 
 
-      {clickedPreview && clickedPreviewCard && createPortal(
+      {clickedPreview && clickedPreviewCard && (
         <div
-          className="fixed inset-0 z-[100] bg-background/20 backdrop-blur-[1px]"
+          className="fixed inset-0 z-[80] bg-background/20 backdrop-blur-[1px]"
           onClick={(e) => {
             if (e.target === e.currentTarget) setClickedPreview(null)
           }}
         >
           <div
-            className="pointer-events-auto absolute left-1/2 top-1/2 flex max-h-[90vh] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 -translate-y-1/2 items-start gap-3"
+            className="absolute left-1/2 top-1/2 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 -translate-y-1/2 items-start gap-3"
             onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
           >
             <CardArt
               card={clickedPreviewCard}
@@ -1883,10 +1792,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               faceIndex={previewFaceIndex}
               onFlip={() => setPreviewFaceIndex(i => i + 1)}
             />
-            {renderPreviewActionPanel(clickedPreviewCard, clickedPreview.groupName)}
+            {renderPreviewDropdownMenu(clickedPreviewCard, clickedPreview.groupName)}
           </div>
-        </div>,
-        document.body,
+        </div>
       )}
 
       <Dialog open={revertConfirmOpen} onOpenChange={setRevertConfirmOpen}>
