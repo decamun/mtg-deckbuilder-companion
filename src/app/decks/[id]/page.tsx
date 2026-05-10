@@ -1201,19 +1201,33 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   />
                 </div>
               ) : (
-                <h1
-                  className={`min-w-0 truncate font-bold text-base drop-shadow-md sm:whitespace-nowrap ${isOwner && !viewing && deck ? "cursor-text select-none" : ""}`}
-                  title={isOwner && !viewing && deck ? "Double-click to rename" : undefined}
-                  onDoubleClick={e => {
-                    e.preventDefault()
-                    if (!isOwner || viewing || !deck) return
-                    skipDeckTitleBlurCommitRef.current = false
-                    setDeckTitleDraft(deck.name ?? "")
-                    setDeckTitleEditing(true)
-                  }}
+                <div
+                  className={
+                    isOwner && !viewing && deck
+                      ? "group relative min-w-0 flex-1 max-w-full rounded-md px-2 py-0.5 -mx-1"
+                      : "relative min-w-0 flex-1 max-w-full"
+                  }
                 >
-                  {displayedDeckName}
-                </h1>
+                  {isOwner && !viewing && deck && (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 rounded-md border border-border/80 bg-background/55 shadow-sm opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100"
+                    />
+                  )}
+                  <h1
+                    className={`relative z-10 min-w-0 truncate font-bold text-base drop-shadow-md sm:whitespace-nowrap ${isOwner && !viewing && deck ? "cursor-text select-none" : ""}`}
+                    title={isOwner && !viewing && deck ? "Double-click to rename" : undefined}
+                    onDoubleClick={e => {
+                      e.preventDefault()
+                      if (!isOwner || viewing || !deck) return
+                      skipDeckTitleBlurCommitRef.current = false
+                      setDeckTitleDraft(deck.name ?? "")
+                      setDeckTitleEditing(true)
+                    }}
+                  >
+                    {displayedDeckName}
+                  </h1>
+                </div>
               )}
               <Badge variant="outline" className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm">
                 {displayedCards.reduce((a, c) => a + c.quantity, 0)}
