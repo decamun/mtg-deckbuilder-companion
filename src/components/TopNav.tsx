@@ -22,6 +22,7 @@ const NAV_LINKS = [
   { href: "/decks", label: "Your Decks", requiresAuth: true },
   { href: "/browse", label: "Browse", requiresAuth: false },
   { href: "/blog", label: "Blog", requiresAuth: false },
+  { href: "/scanner-lab", label: "Scanner lab", requiresAuth: false },
 ]
 
 // Paths that render the scroll shell — clicking their nav links scrolls
