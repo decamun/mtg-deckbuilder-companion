@@ -119,30 +119,27 @@ export function TopNav() {
 
         {/* Nav links */}
         <nav className="flex items-center gap-0.5 sm:gap-1">
-          {NAV_LINKS.map(({ href, label, requiresAuth }) => {
-            const hidden = requiresAuth && !user
-            const isActive =
-              activePath === href ||
-              (href !== "/" && activePath.startsWith(href + "/"))
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-hidden={hidden}
-                tabIndex={hidden ? -1 : undefined}
-                onClick={(e) => handleNavClick(e, href)}
-                className={`rounded-md px-2 sm:px-4 py-1.5 text-sm font-medium transition-colors ${
-                  hidden ? "invisible pointer-events-none" : ""
-                } ${
-                  isActive
-                    ? "border border-primary/20 bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                {label}
-              </Link>
-            )
-          })}
+          {NAV_LINKS.filter((link) => !link.requiresAuth || user).map(
+            ({ href, label }) => {
+              const isActive =
+                activePath === href ||
+                (href !== "/" && activePath.startsWith(href + "/"))
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={(e) => handleNavClick(e, href)}
+                  className={`rounded-md px-2 sm:px-4 py-1.5 text-sm font-medium transition-colors ${
+                    isActive
+                      ? "border border-primary/20 bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </Link>
+              )
+            },
+          )}
         </nav>
 
         {/* Spacer pushes dropdown to the far right */}
