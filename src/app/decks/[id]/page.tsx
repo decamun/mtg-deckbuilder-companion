@@ -663,10 +663,37 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const card = cards.find(c => c.id === cardId)
     if (!card) return
     const versionSince = new Date().toISOString()
-    setCards(prev => prev.map(c => c.id === cardId ? { ...c, printing_scryfall_id: printingId } : c))
+    const nextPrinting = printingId ? printingsByCard[cardId]?.find(p => p.id === printingId) : null
+    const defaultPrinting = !printingId ? printingsByCard[cardId]?.find(p => p.id === card.scryfall_id) : null
+    const nextCard = nextPrinting ? {
+      ...card,
+      printing_scryfall_id: printingId,
+      image_url: getCardImageUrl(nextPrinting),
+      face_images: getCardFaceImages(nextPrinting),
+      set_code: nextPrinting.set,
+      collector_number: nextPrinting.collector_number,
+      available_finishes: nextPrinting.finishes,
+      price_usd: pickPrice(nextPrinting.prices, card.finish),
+      effective_printing_id: nextPrinting.id,
+    } : defaultPrinting ? {
+      ...card,
+      printing_scryfall_id: null,
+      image_url: getCardImageUrl(defaultPrinting),
+      face_images: getCardFaceImages(defaultPrinting),
+      set_code: defaultPrinting.set,
+      collector_number: defaultPrinting.collector_number,
+      available_finishes: defaultPrinting.finishes,
+      price_usd: pickPrice(defaultPrinting.prices, card.finish),
+      effective_printing_id: card.scryfall_id,
+    } : {
+      ...card,
+      printing_scryfall_id: null,
+      effective_printing_id: card.scryfall_id,
+    }
+    setCards(prev => prev.map(c => c.id === cardId ? nextCard : c))
     const { error } = await supabase.from('deck_cards').update({ printing_scryfall_id: printingId }).eq('id', cardId)
     if (error) {
-      setCards(prev => prev.map(c => c.id === cardId ? { ...c, printing_scryfall_id: card.printing_scryfall_id } : c))
+      setCards(prev => prev.map(c => c.id === cardId ? card : c))
       toast.error(error.message)
     } else {
       recordMutationVersion(printingId ? `Changed ${card.name} printing` : `Reset ${card.name} to default printing`, versionSince)
@@ -677,7 +704,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const card = cards.find(c => c.id === cardId)
     if (!card) return
     const versionSince = new Date().toISOString()
-    setCards(prev => prev.map(c => c.id === cardId ? { ...c, finish } : c))
+    const currentPrinting = printingsByCard[cardId]?.find(p => p.id === (card.printing_scryfall_id || card.scryfall_id))
+    setCards(prev => prev.map(c => c.id === cardId ? { ...c, finish, price_usd: pickPrice(currentPrinting?.prices, finish) ?? c.price_usd } : c))
     const { error } = await supabase.from('deck_cards').update({ finish }).eq('id', cardId)
     if (error) {
       setCards(prev => prev.map(c => c.id === cardId ? { ...c, finish: card.finish } : c))
@@ -1036,10 +1064,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const renderPreviewActionPanel = (c: DeckCard, groupName: string) => {
     if (!isOwner || viewing) return null
-    const menuButtonClass = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+    const printings = printingsByCard[c.id] ?? []
+    const finishes = c.available_finishes ?? ['nonfoil']
+    const menuButtonClass = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:outline-none"
+    const activeButtonClass = "text-primary"
     const destructiveButtonClass = `${menuButtonClass} text-destructive hover:bg-destructive/10 hover:text-destructive`
     return (
-      <div className="w-56 rounded-lg border border-border bg-white p-1 text-foreground shadow-2xl">
+      <div className="max-h-[80vh] w-64 overflow-y-auto rounded-lg border border-border bg-white p-1 text-foreground shadow-2xl">
         <button
           type="button"
           className={`${menuButtonClass} ${commanderIds.includes(c.scryfall_id) ? 'text-yellow-500' : ''}`}
@@ -1057,16 +1088,88 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           {coverImageId === c.scryfall_id ? 'Remove Cover Image' : 'Set as Cover Image'}
         </button>
         <div className="-mx-1 my-1 h-px bg-border" />
+        <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Printing</div>
+        <button
+          type="button"
+          className={`${menuButtonClass} ${c.printing_scryfall_id == null ? activeButtonClass : ''}`}
+          onClick={() => setCardPrinting(c.id, null)}
+        >
+          Default
+        </button>
+        <div className="max-h-36 overflow-y-auto">
+          {printings.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              className={`${menuButtonClass} ${c.printing_scryfall_id === p.id ? activeButtonClass : ''}`}
+              onClick={() => setCardPrinting(c.id, p.id)}
+            >
+              <span className="font-mono text-xs text-muted-foreground">{p.set?.toUpperCase()}</span>
+              <span className="min-w-0 flex-1 truncate">{p.set_name}</span>
+              <span className="text-xs text-muted-foreground">{(p.released_at ?? '').slice(0, 4)}</span>
+            </button>
+          ))}
+          {printings.length === 0 && c.oracle_id && (
+            <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading printings...</div>
+          )}
+        </div>
+        <div className="-mx-1 my-1 h-px bg-border" />
+        <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Foil</div>
+        <button
+          type="button"
+          disabled={!finishes.includes('nonfoil')}
+          className={`${menuButtonClass} ${c.finish === 'nonfoil' ? activeButtonClass : ''} disabled:pointer-events-none disabled:opacity-50`}
+          onClick={() => setCardFinish(c.id, 'nonfoil')}
+        >
+          Non-foil
+        </button>
+        <button
+          type="button"
+          disabled={!finishes.includes('foil')}
+          className={`${menuButtonClass} ${c.finish === 'foil' ? activeButtonClass : ''} disabled:pointer-events-none disabled:opacity-50`}
+          onClick={() => setCardFinish(c.id, 'foil')}
+        >
+          Foil
+        </button>
+        <button
+          type="button"
+          disabled={!finishes.includes('etched')}
+          className={`${menuButtonClass} ${c.finish === 'etched' ? activeButtonClass : ''} disabled:pointer-events-none disabled:opacity-50`}
+          onClick={() => setCardFinish(c.id, 'etched')}
+        >
+          Etched
+        </button>
+        <div className="-mx-1 my-1 h-px bg-border" />
         <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Tags</div>
         <div className="flex flex-wrap gap-1 px-2 pb-1">
           {(c.tags?.length ? c.tags : ['No tags']).map(tag => (
             <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>
           ))}
         </div>
+        {allUniqueTags.map(tag => {
+          const hasTag = c.tags?.includes(tag)
+          return (
+            <button
+              key={tag}
+              type="button"
+              className={`${menuButtonClass} ${hasTag ? activeButtonClass : ''}`}
+              onClick={() => hasTag ? removeTag(c.id, tag) : addTag(c.id, tag)}
+            >
+              {hasTag ? 'Remove' : 'Add'} {tag}
+            </button>
+          )
+        })}
+        <button
+          type="button"
+          className={menuButtonClass}
+          onClick={() => { setActiveCardIdForTag(c.id); setTagDialogOpen(true) }}
+        >
+          Add Custom Tag...
+        </button>
         {grouping === 'tag' && groupName !== 'Untagged' && (
           <>
             <div className="-mx-1 my-1 h-px bg-border" />
-            <button type="button" className="flex w-full rounded-md px-2 py-1.5 text-left text-sm text-orange-500 hover:bg-orange-400/10" onClick={() => removeTag(c.id, groupName)}>
+            <button type="button" className="flex w-full rounded-md px-2 py-1.5 text-left text-sm text-orange-500 transition-colors hover:bg-orange-400/10 focus-visible:bg-orange-400/10 focus-visible:outline-none" onClick={() => removeTag(c.id, groupName)}>
               Remove from &apos;{groupName}&apos;
             </button>
           </>
@@ -1091,6 +1194,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
 
   const interactionsLocked = !isOwner || !!viewing
   const cardDragDisabled = interactionsLocked || cardInteractionPhase !== 'ready' || grouping !== 'tag'
+  const clickedPreviewCard = clickedPreview
+    ? displayedCards.find(card => card.id === clickedPreview.card.id) ?? clickedPreview.card
+    : null
 
   return (
     <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
@@ -1336,8 +1442,11 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                   className="grid justify-start gap-4"
                   style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, ${cardSize}px))` }}
                 >
-                  {groupCards.map(c => (
-                    <ContextMenu key={c.id}>
+                  {groupCards.map(c => {
+                    const printings = printingsByCard[c.id] ?? []
+                    const finishes = c.available_finishes ?? ['nonfoil']
+                    return (
+                    <ContextMenu key={c.id} onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(c) }}>
                       <ContextMenuTrigger>
                         <DraggableDeckCard
                           id={c.id}
@@ -1402,7 +1511,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                           </div>
                         </DraggableDeckCard>
                       </ContextMenuTrigger>
-                      <ContextMenuContent className="w-48 bg-white border-border text-foreground">
+                      <ContextMenuContent className="w-56 bg-white border-border text-foreground">
                         <ContextMenuItem
                           onClick={() => setAsCommander(c.scryfall_id)}
                           className={commanderIds.includes(c.scryfall_id) ? 'text-yellow-400 focus:text-yellow-300 focus:bg-yellow-400/10' : ''}
@@ -1419,10 +1528,63 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         </ContextMenuItem>
                         <ContextMenuSeparator className="bg-border" />
                         <ContextMenuSub>
+                          <ContextMenuSubTrigger onMouseEnter={() => void ensurePrintingsLoaded(c)}>Printing</ContextMenuSubTrigger>
+                          <ContextMenuSubContent className="max-h-80 overflow-y-auto bg-white border-border text-foreground">
+                            <ContextMenuItem
+                              className={c.printing_scryfall_id == null ? 'text-primary' : ''}
+                              onClick={() => setCardPrinting(c.id, null)}
+                            >
+                              Default
+                            </ContextMenuItem>
+                            {printings.length > 0 && <ContextMenuSeparator className="bg-border" />}
+                            {printings.map(p => (
+                              <ContextMenuItem
+                                key={p.id}
+                                className={c.printing_scryfall_id === p.id ? 'text-primary' : ''}
+                                onClick={() => setCardPrinting(c.id, p.id)}
+                              >
+                                <span className="font-mono text-xs mr-2 text-muted-foreground">{p.set?.toUpperCase()}</span>
+                                {p.set_name}
+                                <span className="ml-auto text-xs text-muted-foreground">{(p.released_at ?? '').slice(0, 4)}</span>
+                              </ContextMenuItem>
+                            ))}
+                            {printings.length === 0 && c.oracle_id && (
+                              <ContextMenuItem disabled>Loading printings...</ContextMenuItem>
+                            )}
+                          </ContextMenuSubContent>
+                        </ContextMenuSub>
+                        <ContextMenuSub>
+                          <ContextMenuSubTrigger>Foil</ContextMenuSubTrigger>
+                          <ContextMenuSubContent className="bg-white border-border text-foreground">
+                            <ContextMenuItem
+                              disabled={!finishes.includes('nonfoil')}
+                              className={c.finish === 'nonfoil' ? 'text-primary' : ''}
+                              onClick={() => setCardFinish(c.id, 'nonfoil')}
+                            >Non-foil</ContextMenuItem>
+                            <ContextMenuItem
+                              disabled={!finishes.includes('foil')}
+                              className={c.finish === 'foil' ? 'text-primary' : ''}
+                              onClick={() => setCardFinish(c.id, 'foil')}
+                            >Foil</ContextMenuItem>
+                            <ContextMenuItem
+                              disabled={!finishes.includes('etched')}
+                              className={c.finish === 'etched' ? 'text-primary' : ''}
+                              onClick={() => setCardFinish(c.id, 'etched')}
+                            >Etched</ContextMenuItem>
+                          </ContextMenuSubContent>
+                        </ContextMenuSub>
+                        <ContextMenuSeparator className="bg-border" />
+                        <ContextMenuSub>
                           <ContextMenuSubTrigger>Tags</ContextMenuSubTrigger>
                           <ContextMenuSubContent className="bg-white border-border text-foreground">
                             {allUniqueTags.map(tag => (
-                              <ContextMenuItem key={tag} onClick={() => addTag(c.id, tag)}>{tag}</ContextMenuItem>
+                              <ContextMenuItem
+                                key={tag}
+                                className={c.tags?.includes(tag) ? 'text-primary' : ''}
+                                onClick={() => c.tags?.includes(tag) ? removeTag(c.id, tag) : addTag(c.id, tag)}
+                              >
+                                {c.tags?.includes(tag) ? 'Remove' : 'Add'} {tag}
+                              </ContextMenuItem>
                             ))}
                             {allUniqueTags.length > 0 && <ContextMenuSeparator className="bg-border" />}
                             <ContextMenuItem onClick={() => { setActiveCardIdForTag(c.id); setTagDialogOpen(true) }}>Add Custom Tag...</ContextMenuItem>
@@ -1442,7 +1604,8 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
                         </ContextMenuItem>
                       </ContextMenuContent>
                     </ContextMenu>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -1693,7 +1856,7 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       </Dialog>
 
 
-      {clickedPreview && (
+      {clickedPreview && clickedPreviewCard && (
         <div
           className="fixed inset-0 z-[80] bg-background/20 backdrop-blur-[1px]"
           onClick={(e) => {
@@ -1705,12 +1868,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
             onClick={(e) => e.stopPropagation()}
           >
             <CardArt
-              card={clickedPreview.card}
+              card={clickedPreviewCard}
               imageClassName="w-80 rounded-xl border border-border/50 shadow-2xl"
               faceIndex={previewFaceIndex}
               onFlip={() => setPreviewFaceIndex(i => i + 1)}
             />
-            {renderPreviewActionPanel(clickedPreview.card, clickedPreview.groupName)}
+            {renderPreviewActionPanel(clickedPreviewCard, clickedPreview.groupName)}
           </div>
         </div>
       )}
