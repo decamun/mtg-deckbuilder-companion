@@ -14,6 +14,7 @@ import { resolveModel, reasoningProviderOptions } from '@/lib/agent-models'
 import { buildDeckAgentTools } from '@/lib/agent-tools'
 import * as deckService from '@/lib/deck-service'
 import { getCardsByIds, type ScryfallCard } from '@/lib/scryfall'
+import { getRequestId } from '@/lib/request-id'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -214,13 +215,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: msg }, { status: 404 })
   }
 
+  const requestId = getRequestId(request)
   const quotaLog = await recordCall(supabase, user.id, modelId)
   if (!quotaLog.ok) {
-    console.error('[agent-chat] quota logging failed (non-fatal)', {
+    console.error('[agent-chat] quota logging failed (fail closed)', {
       userId: user.id,
       modelId,
       error: quotaLog.error,
+      requestId,
     })
+    return NextResponse.json(
+      {
+        message: 'Unable to record usage for this request. Please try again shortly.',
+        requestId,
+      },
+      {
+        status: 503,
+        headers: {
+          'Retry-After': '60',
+          'x-request-id': requestId,
+        },
+      }
+    )
   }
 
   const commanderCards = deck.commander_scryfall_ids.length > 0

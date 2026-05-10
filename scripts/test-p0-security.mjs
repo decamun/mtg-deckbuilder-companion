@@ -26,6 +26,24 @@ assert.equal(isValidEdhrecSlug('atraxa.praetors'), false)
 assert.equal(isValidEdhrecSlug(''), false)
 assert.equal(isValidEdhrecSlug('a'.repeat(121)), false)
 
+const chatRoute = await import('node:fs/promises').then((fs) =>
+  fs.readFile('src/app/api/agent/chat/route.ts', 'utf8')
+)
+assertIncludes(chatRoute, 'Unable to record usage for this request')
+assertIncludes(chatRoute, 'status: 503')
+
+const callbackRoute = await import('node:fs/promises').then((fs) =>
+  fs.readFile('src/app/auth/callback/route.ts', 'utf8')
+)
+assertIncludes(callbackRoute, 'getTrustedRedirectOrigin')
+
+const launchMigration = await import('node:fs/promises').then((fs) =>
+  fs.readFile('supabase/migrations/20260510120000_social_launch_indexes_rls_and_advisor.sql', 'utf8')
+)
+assertIncludes(launchMigration, 'decks_user_id_idx')
+assertIncludes(launchMigration, 'rls_auto_enable')
+assertIncludes(launchMigration, 'Users read own oauth tokens')
+
 const migration = await import('node:fs/promises').then((fs) =>
   fs.readFile('supabase/migrations/20260502211949_p0_security_remediation.sql', 'utf8')
 )

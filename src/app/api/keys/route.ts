@@ -1,16 +1,21 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateApiKey } from '@/lib/mcp-auth'
+import { getRequestId } from '@/lib/request-id'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const requestId = getRequestId(request)
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json(
+      { message: 'Unauthorized', requestId },
+      { status: 401, headers: { 'x-request-id': requestId } }
+    )
   }
 
   const { data, error } = await supabase
@@ -19,34 +24,50 @@ export async function GET() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
   if (error) {
-    console.error('[api-keys] list failed', { userId: user.id, error: error.message })
-    return NextResponse.json({ message: 'Unable to list API keys.' }, { status: 500 })
+    console.error('[api-keys] list failed', { userId: user.id, requestId, error: error.message })
+    return NextResponse.json(
+      { message: 'Unable to list API keys.', requestId },
+      { status: 500, headers: { 'x-request-id': requestId } }
+    )
   }
 
-  return NextResponse.json(data)
+  return NextResponse.json(data, { headers: { 'x-request-id': requestId } })
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestId(request)
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json(
+      { message: 'Unauthorized', requestId },
+      { status: 401, headers: { 'x-request-id': requestId } }
+    )
   }
 
   let body: unknown
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json({ message: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json(
+      { message: 'Invalid JSON', requestId },
+      { status: 400, headers: { 'x-request-id': requestId } }
+    )
   }
   const name = (body as { name?: unknown })?.name
   if (typeof name !== 'string' || name.trim().length === 0) {
-    return NextResponse.json({ message: 'name is required' }, { status: 400 })
+    return NextResponse.json(
+      { message: 'name is required', requestId },
+      { status: 400, headers: { 'x-request-id': requestId } }
+    )
   }
   if (name.length > 100) {
-    return NextResponse.json({ message: 'name too long' }, { status: 400 })
+    return NextResponse.json(
+      { message: 'name too long', requestId },
+      { status: 400, headers: { 'x-request-id': requestId } }
+    )
   }
 
   const { raw, hash, prefix } = await generateApiKey()
@@ -62,9 +83,15 @@ export async function POST(request: Request) {
     .select('id, name, key_prefix, created_at')
     .single()
   if (error) {
-    console.error('[api-keys] create failed', { userId: user.id, error: error.message })
-    return NextResponse.json({ message: 'Unable to create API key.' }, { status: 500 })
+    console.error('[api-keys] create failed', { userId: user.id, requestId, error: error.message })
+    return NextResponse.json(
+      { message: 'Unable to create API key.', requestId },
+      { status: 500, headers: { 'x-request-id': requestId } }
+    )
   }
 
-  return NextResponse.json({ ...data, key: raw }, { status: 201 })
+  return NextResponse.json(
+    { ...data, key: raw, requestId },
+    { status: 201, headers: { 'x-request-id': requestId } }
+  )
 }
