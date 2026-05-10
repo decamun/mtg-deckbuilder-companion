@@ -1021,7 +1021,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
           <DropdownMenuSubTrigger>Tags</DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="bg-white border-border text-foreground">
             {allUniqueTags.map(tag => (
-              <DropdownMenuItem key={tag} onClick={() => addTag(c.id, tag)}>{tag}</DropdownMenuItem>
+              <DropdownMenuItem
+                key={tag}
+                className={c.tags?.includes(tag) ? 'text-primary' : ''}
+                onClick={() => (c.tags?.includes(tag) ? removeTag(c.id, tag) : addTag(c.id, tag))}
+              >
+                {c.tags?.includes(tag) ? 'Remove' : 'Add'} {tag}
+              </DropdownMenuItem>
             ))}
             {allUniqueTags.length > 0 && <DropdownMenuSeparator className="bg-border" />}
             <DropdownMenuItem onClick={() => { setActiveCardIdForTag(c.id); setTagDialogOpen(true) }}>Add Custom Tag...</DropdownMenuItem>
