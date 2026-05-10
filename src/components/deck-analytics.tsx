@@ -57,6 +57,20 @@ function isLand(typeLine: string | undefined): boolean {
   return !!typeLine && primaryTypeLine(typeLine).includes('Land')
 }
 
+function isBasicLand(typeLine: string | undefined): boolean {
+  return !!typeLine && primaryTypeLine(typeLine).includes('Basic') && primaryTypeLine(typeLine).includes('Land')
+}
+
+// MDFCs where the front face is NOT a land but the back face IS (e.g. "Sorcery // Land")
+function isMdfcWithLandBack(typeLine: string | undefined): boolean {
+  if (!typeLine) return false
+  const sep = typeLine.indexOf(' // ')
+  if (sep === -1) return false
+  const front = typeLine.slice(0, sep)
+  const back = typeLine.slice(sep + 4)
+  return !front.includes('Land') && back.includes('Land')
+}
+
 function cardColors(c: AnalyticsCard): ColorKey[] {
   const cs = (c.colors || []).filter((x): x is ColorKey =>
     x === 'W' || x === 'U' || x === 'B' || x === 'R' || x === 'G'
@@ -297,6 +311,14 @@ function StatsLine({
     const deckSize = cards.reduce((s, c) => s + c.quantity, 0)
     const lands = typeCounts.Land
 
+    const basicLandCount = cards
+      .filter(c => isBasicLand(c.type_line))
+      .reduce((s, c) => s + c.quantity, 0)
+
+    const mdfcLandCount = cards
+      .filter(c => isMdfcWithLandBack(c.type_line))
+      .reduce((s, c) => s + c.quantity, 0)
+
     const onCurve = commanders.map(cmd => {
       const cmc = cmd.cmc ?? 0
       // Cards seen by turn `cmc` going first: opening 7 + (cmc - 1) draws.
@@ -305,7 +327,7 @@ function StatsLine({
       return { name: cmd.name, cmc, probability: p }
     })
 
-    return { avgCmc, avgCmcAll, typeCounts, onCurve }
+    return { avgCmc, avgCmcAll, typeCounts, basicLandCount, mdfcLandCount, onCurve }
   }, [cards, commanders])
 
   return (
@@ -313,10 +335,18 @@ function StatsLine({
       <Stat label="Avg. CMC" value={stats.avgCmcAll.toFixed(2)} hint="all" />
       <Stat label="Avg. CMC" value={stats.avgCmc.toFixed(2)} hint="non-land" />
       {(Object.keys(stats.typeCounts) as CardType[])
-        .filter(t => stats.typeCounts[t] > 0)
+        .filter(t => stats.typeCounts[t] > 0 && t !== 'Land')
         .map(t => (
           <Stat key={t} label={t === 'Sorcery' ? 'Sorceries' : `${t}s`} value={String(stats.typeCounts[t])} />
         ))}
+      {stats.typeCounts.Land > 0 && (
+        <LandStat
+          total={stats.typeCounts.Land + stats.mdfcLandCount}
+          landsNoMdfc={stats.typeCounts.Land}
+          basicLandCount={stats.basicLandCount}
+          mdfcLandCount={stats.mdfcLandCount}
+        />
+      )}
       {stats.onCurve.length > 0 && (
         <div className="flex flex-col justify-center min-w-[180px]">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">
@@ -330,6 +360,46 @@ function StatsLine({
               <ManaText text={`T${c.cmc} · ${c.name}`} className="text-xs text-muted-foreground truncate" />
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LandStat({
+  total,
+  landsNoMdfc,
+  basicLandCount,
+  mdfcLandCount,
+}: {
+  total: number
+  landsNoMdfc: number
+  basicLandCount: number
+  mdfcLandCount: number
+}) {
+  const hasDetail = basicLandCount > 0 || mdfcLandCount > 0
+  return (
+    <div className="group relative flex flex-col justify-center min-w-[64px]">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Lands</div>
+      <div className="text-lg font-semibold tabular-nums">{total}</div>
+      {hasDetail && (
+        <div className="pointer-events-none absolute bottom-full left-0 mb-2 z-10 hidden group-hover:flex flex-col gap-1 rounded-md border border-border bg-popover px-3 py-2 shadow-md text-sm whitespace-nowrap">
+          {basicLandCount > 0 && (
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Basic</span>
+              <span className="tabular-nums font-medium">{basicLandCount}</span>
+            </div>
+          )}
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">Non-basic</span>
+            <span className="tabular-nums font-medium">{landsNoMdfc - basicLandCount}</span>
+          </div>
+          {mdfcLandCount > 0 && (
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">MDFC</span>
+              <span className="tabular-nums font-medium">{mdfcLandCount}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

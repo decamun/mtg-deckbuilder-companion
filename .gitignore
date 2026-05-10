@@ -46,6 +46,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# local supabase dump backups
+/backups
+
 # PWA files
 /public/sw.js
 /public/workbox-*.js

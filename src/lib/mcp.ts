@@ -347,7 +347,7 @@ export function createMcpServer(context: McpContext) {
     { deck_id: z.string().describe('UUID of the deck') },
     async ({ deck_id }) => {
       try {
-        const deck = await decks.getPrimer(deck_id)
+        const deck = await decks.getDeck(deck_id)
         return ok(deck.primer_markdown || '(no primer)')
       } catch (e) {
         return errFromException('get_primer failed', e)

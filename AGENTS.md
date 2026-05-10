@@ -53,6 +53,30 @@ Use the Supabase MCP tools with project_id `ejnnjdvgrwsjfgafxtvk`:
 - Deck page `/decks/[id]` redirects (307) when no auth cookie is set — this is
   expected; browser-based testing requires login via the UI.
 
+## Supabase migration rules
+
+**Never run `supabase db push` against the prod project.** Migrations reach
+prod only via the GitHub integration's deploy job after a PR merges to `main`.
+If you need to validate SQL, push to a Supabase preview branch instead (the
+integration creates one per PR; see "Supabase branch-aware testing" below).
+
+**Migration filename convention.** New files must be named
+`YYYYMMDDHHMMSS_<snake_case_name>.sql` where the `HHMMSS` suffix is one of:
+
+- `0000XX` — midnight UTC plus a small ordinal, for ordering siblings on the
+  same day (e.g. `20260605000001`, `20260605000002`).
+- `HHMM00` — a hand-picked HH:MM with seconds zero (e.g. `20260605185000`).
+
+Anything else (e.g. `081650`, `173847`) looks like a wall-clock auto-stamp from
+`supabase migration new` and is rejected by
+`.github/workflows/check-migration-filenames.yml`. The convention exists because
+auto-stamps recorded directly to prod by cloud agents were the cause of a
+`schema_migrations` drift incident; canonical filenames keep the local repo
+and `schema_migrations` in lock-step.
+
+After running `supabase migration new`, rename the file to fit the convention
+before committing.
+
 ## Supabase branch-aware testing
 
 When a PR touches files under `supabase/`, the GitHub integration automatically
