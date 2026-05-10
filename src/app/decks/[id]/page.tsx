@@ -318,6 +318,12 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const [reverting, setReverting] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
 
+  const [deckTitleEditing, setDeckTitleEditing] = useState(false)
+  const [deckTitleDraft, setDeckTitleDraft] = useState("")
+  const [deckTitleSaving, setDeckTitleSaving] = useState(false)
+  const deckTitleFieldRef = useRef<HTMLDivElement>(null)
+  const skipDeckTitleBlurCommitRef = useRef(false)
+
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
   const fetchGenRef = useRef(0)
@@ -326,6 +332,46 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
   const recordMutationVersion = (summary: string, sinceIso: string) => {
     recordVersion(deckId, summary, sinceIso)
   }
+
+  useEffect(() => {
+    if (!deckTitleEditing) return
+    const input = deckTitleFieldRef.current?.querySelector("input")
+    if (!input) return
+    input.focus()
+    input.select()
+  }, [deckTitleEditing])
+
+  const commitDeckTitleEdit = useCallback(async () => {
+    const d = deck
+    if (!d) return
+    const trimmed = deckTitleDraft.trim()
+    if (!trimmed) {
+      toast.error("Name is required")
+      setDeckTitleDraft(d.name ?? "")
+      queueMicrotask(() => {
+        const input = deckTitleFieldRef.current?.querySelector("input")
+        input?.focus()
+      })
+      return
+    }
+    if (trimmed === d.name) {
+      setDeckTitleEditing(false)
+      return
+    }
+    setDeckTitleSaving(true)
+    const versionSince = new Date().toISOString()
+    const { error } = await supabase.from("decks").update({ name: trimmed }).eq("id", deckId)
+    setDeckTitleSaving(false)
+    if (error) {
+      toast.error(error.message)
+      setDeckTitleDraft(d.name ?? "")
+      return
+    }
+    recordVersion(deckId, `renamed to "${trimmed}"`, versionSince)
+    setDeck(prev => (prev ? { ...prev, name: trimmed } : null))
+    setDeckTitleEditing(false)
+    toast.success("Name updated")
+  }, [deck, deckTitleDraft, deckId])
 
   useEffect(() => {
     if (tab === 'versions') void flushPendingVersion(deckId)
@@ -771,7 +817,9 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       return
     }
 
-    setViewing(await hydrateVersionSnapshot(row))
+    const snap = await hydrateVersionSnapshot(row)
+    setDeckTitleEditing(false)
+    setViewing(snap)
   }
 
   const openDiffWithVersion = async (versionId: string, label: string) => {
@@ -1122,7 +1170,63 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
               &larr; Back
             </Button>
             <div className="flex flex-1 min-w-0 sm:flex-none sm:shrink-0 items-center gap-2 border-r border-border pr-3">
-              <h1 className="min-w-0 truncate font-bold text-base drop-shadow-md sm:whitespace-nowrap">{displayedDeckName}</h1>
+              {deckTitleEditing && deck ? (
+                <div ref={deckTitleFieldRef} className="min-w-0 flex-1 sm:flex-none sm:max-w-[min(100%,28rem)]">
+                  <Input
+                    value={deckTitleDraft}
+                    onChange={e => setDeckTitleDraft(e.target.value)}
+                    disabled={deckTitleSaving}
+                    onBlur={() => {
+                      if (skipDeckTitleBlurCommitRef.current) {
+                        skipDeckTitleBlurCommitRef.current = false
+                        return
+                      }
+                      void commitDeckTitleEdit()
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === "Escape") {
+                        e.preventDefault()
+                        skipDeckTitleBlurCommitRef.current = true
+                        setDeckTitleDraft(deck.name ?? "")
+                        setDeckTitleEditing(false)
+                      } else if (e.key === "Enter") {
+                        e.preventDefault()
+                        deckTitleFieldRef.current?.querySelector("input")?.blur()
+                      }
+                    }}
+                    className="h-9 w-full font-bold text-base bg-background/70 border-border text-foreground drop-shadow-md md:text-base"
+                    aria-label="Deck name"
+                  />
+                </div>
+              ) : (
+                <div
+                  className={
+                    isOwner && !viewing && deck
+                      ? "group relative min-w-0 flex-1 max-w-full rounded-md px-2 py-0.5 -mx-1"
+                      : "relative min-w-0 flex-1 max-w-full"
+                  }
+                >
+                  {isOwner && !viewing && deck && (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 rounded-md border border-border/80 bg-background/55 shadow-sm opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100"
+                    />
+                  )}
+                  <h1
+                    className={`relative z-10 min-w-0 truncate font-bold text-base drop-shadow-md sm:whitespace-nowrap ${isOwner && !viewing && deck ? "cursor-text select-none" : ""}`}
+                    title={isOwner && !viewing && deck ? "Double-click to rename" : undefined}
+                    onDoubleClick={e => {
+                      e.preventDefault()
+                      if (!isOwner || viewing || !deck) return
+                      skipDeckTitleBlurCommitRef.current = false
+                      setDeckTitleDraft(deck.name ?? "")
+                      setDeckTitleEditing(true)
+                    }}
+                  >
+                    {displayedDeckName}
+                  </h1>
+                </div>
+              )}
               <Badge variant="outline" className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm">
                 {displayedCards.reduce((a, c) => a + c.quantity, 0)}
               </Badge>
