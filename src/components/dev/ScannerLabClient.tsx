@@ -44,7 +44,7 @@ import {
 } from "@/lib/deck-scanner-visual"
 import { getCardImageUrl, getCardsByIds, getCardsCollection, type ScryfallCard } from "@/lib/scryfall"
 import { loadUserDeckScryfallPrintings } from "@/lib/scanner-deck-load"
-import { runCardOcrFuzzySearch, type OcrSearchHit } from "@/lib/scanner-ocr-search"
+import { formatUnknownScannerError, runCardOcrFuzzySearch, type OcrSearchHit } from "@/lib/scanner-ocr-search"
 import { supabase } from "@/lib/supabase/client"
 
 type LogEntry = { at: string; level: "info" | "warn" | "error"; message: string }
@@ -487,7 +487,7 @@ export function ScannerLabClient() {
       setOcrHits(hits)
       pushLog("info", `OCR + fuzzy search: ${hits.length} hits (Tesseract first run may download language data).`)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = e instanceof Error ? e.message || e.name : formatUnknownScannerError(e)
       pushLog("error", `OCR failed: ${msg}`)
     } finally {
       setOcrLoading(false)

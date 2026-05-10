@@ -8,6 +8,10 @@ const supabaseOrigin = supabaseUrl ? new URL(supabaseUrl).origin : "https://*.su
 const scriptSrc = [
   "'self'",
   "'unsafe-inline'",
+  // Tesseract.js (scanner lab OCR) compiles WebAssembly in the browser.
+  "'wasm-unsafe-eval'",
+  // importScripts in the tesseract blob worker pulls scripts from jsDelivr by default.
+  "https://cdn.jsdelivr.net",
   "https://va.vercel-scripts.com",
   // Cloudflare Turnstile (feedback form); see https://developers.cloudflare.com/turnstile/reference/content-security-policy/
   "https://challenges.cloudflare.com",
@@ -21,7 +25,11 @@ const connectSrc = [
   "https://cards.scryfall.io",
   "https://vitals.vercel-insights.com",
   "https://va.vercel-scripts.com",
+  // tesseract.js default worker/core/lang downloads (see node_modules/tesseract.js/src/utils/resolvePaths.js)
+  "https://cdn.jsdelivr.net",
 ];
+/** Blob workers + remote script for Tesseract default worker path. */
+const workerSrc = ["'self'", "blob:", "https://cdn.jsdelivr.net"];
 
 if (isDev) {
   scriptSrc.push("'unsafe-eval'");
@@ -35,6 +43,7 @@ const contentSecurityPolicy = [
   "frame-ancestors 'none'",
   `script-src ${scriptSrc.join(" ")}`,
   `style-src ${styleSrc.join(" ")}`,
+  `worker-src ${workerSrc.join(" ")}`,
   "img-src 'self' data: blob: https://cards.scryfall.io https://*.scryfall.io",
   "font-src 'self' data:",
   `connect-src ${connectSrc.join(" ")}`,
