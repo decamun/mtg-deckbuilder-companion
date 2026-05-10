@@ -688,10 +688,13 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
     const versionSince = new Date().toISOString()
     if (coverImageId === scryfallId) {
       const previousId = coverImageId
+      const previousUrl = coverImageUrl
       setCoverImageId(null)
+      setCoverImageUrl(null)
       const { error } = await supabase.from('decks').update({ cover_image_scryfall_id: null }).eq('id', deckId)
       if (error) {
         setCoverImageId(previousId)
+        setCoverImageUrl(previousUrl)
         toast.error(error.message)
         return
       }
@@ -699,10 +702,19 @@ export default function DeckWorkspace({ params }: { params: Promise<{ id: string
       toast.success('Cover image removed')
     } else {
       const previousId = coverImageId
+      const previousUrl = coverImageUrl
+      const deckCard = cards.find(c => c.scryfall_id === scryfallId)
+      let nextUrl = deckCard?.image_url ?? null
+      if (!nextUrl) {
+        const fetched = await getCard(scryfallId)
+        nextUrl = getCardImageUrl(fetched) ?? null
+      }
       setCoverImageId(scryfallId)
+      setCoverImageUrl(nextUrl)
       const { error } = await supabase.from('decks').update({ cover_image_scryfall_id: scryfallId }).eq('id', deckId)
       if (error) {
         setCoverImageId(previousId)
+        setCoverImageUrl(previousUrl)
         toast.error(error.message)
         return
       }
