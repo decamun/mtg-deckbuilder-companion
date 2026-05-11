@@ -1,0 +1,79 @@
+# Supabase's GitHub integration often finishes with conclusion "cancelled" when there
+# is nothing to deploy. GitHub does not treat "cancelled" like "skipped" for merge
+# requirements, so PRs can look blocked or unhealthy.
+#
+# Point branch protection at the jobs below instead of the native Supabase app check
+# if routine cancellations should not block merges. Adjust checkName if your Supabase
+# check run uses a different name (see the Checks tab on a recent PR).
+name: Supabase preview guard
+
+on:
+  pull_request:
+  merge_group:
+
+permissions:
+  checks: read
+  contents: read
+
+jobs:
+  paths:
+    runs-on: ubuntu-latest
+    outputs:
+      supabase: ${{ steps.filter.outputs.supabase }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
+          filters: |
+            supabase:
+              - 'supabase/**'
+
+  no-supabase-preview-needed:
+    name: Supabase preview (not applicable)
+    needs: paths
+    if: needs.paths.outputs.supabase != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No changes under supabase/; skipping wait for Supabase preview check."
+
+  await-supabase-preview:
+    name: Supabase preview (guard)
+    needs: paths
+    if: needs.paths.outputs.supabase == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: fountainhead/action-wait-for-check@v1.2.0
+        id: wait
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Supabase Preview
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
+          timeoutSeconds: 1200
+          intervalSeconds: 15
+
+      - name: Accept success, skipped, neutral, or cancelled
+        run: |
+          conclusion="${{ steps.wait.outputs.conclusion }}"
+          echo "Supabase check conclusion: ${conclusion}"
+          case "${conclusion}" in
+            success|skipped|neutral|cancelled) exit 0 ;;
+            failure)
+              echo "Supabase preview reported failure."
+              exit 1
+              ;;
+            timed_out)
+              echo "Timed out waiting for Supabase check (see workflow checkName if misconfigured)."
+              exit 1
+              ;;
+            *)
+              echo "Unexpected conclusion: ${conclusion}"
+              exit 1
+              ;;
+          esac

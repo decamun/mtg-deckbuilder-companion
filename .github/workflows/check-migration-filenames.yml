@@ -2,10 +2,10 @@ name: Check migration filenames
 
 on:
   pull_request:
-    paths:
-      - 'supabase/migrations/**'
-      - 'scripts/check-migration-filenames.mjs'
-      - '.github/workflows/check-migration-filenames.yml'
+  merge_group:
+
+permissions:
+  contents: read
 
 jobs:
   check:
@@ -14,11 +14,28 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
+          filters: |
+            migrations:
+              - 'supabase/migrations/**'
+              - 'scripts/check-migration-filenames.mjs'
+              - '.github/workflows/check-migration-filenames.yml'
+
+      - uses: actions/setup-node@v6
+        if: steps.filter.outputs.migrations == 'true'
         with:
           node-version: '24'
 
       - name: Validate added migration filenames
+        if: steps.filter.outputs.migrations == 'true'
         run: node scripts/check-migration-filenames.mjs
+
+      - name: Skip (no migration-related files changed)
+        if: steps.filter.outputs.migrations != 'true'
+        run: echo "No migration-related files in this diff; skipping filename validation."
