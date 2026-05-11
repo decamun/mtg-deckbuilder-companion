@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { GitBranch, GitCompare, GitMerge, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -71,6 +71,7 @@ export function VersionsTab({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [branchIdToDelete, setBranchIdToDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const branchSwitchGenRef = useRef(0)
 
   const currentBranch = useMemo(
     () => branches.find((b) => b.id === currentBranchId) ?? null,
@@ -209,7 +210,9 @@ export function VersionsTab({
 
   const handleSelectBranch = async (branchId: string) => {
     if (branchId === currentBranchId) return
+    const gen = ++branchSwitchGenRef.current
     const ok = await switchBranch(deckId, branchId)
+    if (gen !== branchSwitchGenRef.current) return
     if (!ok) {
       toast.error("Failed to switch branch")
       return
