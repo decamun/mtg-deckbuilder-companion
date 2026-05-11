@@ -166,6 +166,24 @@ export async function getDeckVersionAncestry(
   return (data ?? []) as { id: string; parent_id: string | null; snapshot: VersionSnapshot }[]
 }
 
+/** Latest version id per tag across the whole deck (not scoped to the current branch). */
+export async function getLatestVersionIdPerTagForDeck(deckId: string): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from("deck_versions")
+    .select("id, tags, created_at")
+    .eq("deck_id", deckId)
+    .order("created_at", { ascending: false })
+  if (error || !data) return new Map()
+  const out = new Map<string, string>()
+  for (const row of data as { id: string; tags: string[] | null }[]) {
+    for (const tag of row.tags ?? []) {
+      const t = tag.trim()
+      if (t && !out.has(t)) out.set(t, row.id)
+    }
+  }
+  return out
+}
+
 export async function getVersion(versionId: string): Promise<DeckVersionRow | null> {
   const { data } = await supabase
     .from("deck_versions")

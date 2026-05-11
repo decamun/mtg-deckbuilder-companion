@@ -1,11 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { GitBranch, GitCompare, GitMerge, Plus, Trash2 } from "lucide-react"
+import { GitBranch, GitCompare, GitMerge, Plus, Trash2, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import {
   createNamedVersion,
+  getLatestVersionIdPerTagForDeck,
   getVersionsForBranch,
   setVersionBookmark,
   setVersionTags,
@@ -27,7 +28,7 @@ import { AddNamedVersionDialog } from "./AddNamedVersionDialog"
 import { NewBranchDialog } from "./NewBranchDialog"
 import { BranchMergeDialog } from "./BranchMergeDialog"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -72,6 +73,7 @@ export function VersionsTab({
   const [branchIdToDelete, setBranchIdToDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const branchSwitchGenRef = useRef(0)
+  const [tagTipByTag, setTagTipByTag] = useState<Record<string, string>>({})
 
   const currentBranch = useMemo(
     () => branches.find((b) => b.id === currentBranchId) ?? null,
@@ -85,10 +87,12 @@ export function VersionsTab({
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    const [{ data: deckRow }, branchList] = await Promise.all([
+    const [{ data: deckRow }, branchList, tagMap] = await Promise.all([
       supabase.from("decks").select("current_branch_id").eq("id", deckId).maybeSingle(),
       listBranches(deckId),
+      getLatestVersionIdPerTagForDeck(deckId),
     ])
+    setTagTipByTag(Object.fromEntries(tagMap))
     const bid = (deckRow?.current_branch_id as string | undefined) ?? null
     setCurrentBranchId(bid)
     setBranches(branchList)
@@ -129,15 +133,15 @@ export function VersionsTab({
       return a.localeCompare(b)
     })
   }, [rows])
-  const latestByTag = useMemo(() => {
-    const byTag = new Map<string, DeckVersionRow>()
-    for (const row of rows) {
-      for (const tag of row.tags ?? []) {
-        if (!byTag.has(tag)) byTag.set(tag, row)
-      }
-    }
-    return byTag
-  }, [rows])
+
+  const diffTags = useMemo(() => {
+    const s = new Set<string>([...BUILT_IN_VERSION_TAGS, ...Object.keys(tagTipByTag)])
+    return Array.from(s).sort((a, b) => {
+      if (a === "paper-build") return -1
+      if (b === "paper-build") return 1
+      return a.localeCompare(b)
+    })
+  }, [tagTipByTag])
 
   const groups = useMemo(() => {
     type Group = { kind: "named"; row: DeckVersionRow } | { kind: "unnamed"; rows: DeckVersionRow[] }
@@ -312,115 +316,107 @@ export function VersionsTab({
             )}
           </div>
         </div>
-        <div className="flex flex-col gap-2 sm:items-end">
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={currentBranchId ?? undefined}
-              onValueChange={(v) => {
-                if (!v) return
-                void handleSelectBranch(v)
-              }}
-              disabled={!isOwner || branches.length === 0 || !currentBranchId}
-            >
-              <SelectTrigger className="w-[200px] bg-background/50 border-border">
-                <SelectValue placeholder="Branch">
-                  {(value: string | null) =>
-                    branches.find((b) => b.id === value)?.name ?? value ?? "Branch"
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={branches.length === 0}
+                  className="min-w-[9.5rem] justify-between gap-2"
+                >
+                  <span className="flex items-center gap-1.5 truncate">
+                    <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{currentBranch?.name ?? "Branch"}</span>
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-56 bg-popover border-border text-foreground">
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Branches</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={currentBranchId && branches.some((b) => b.id === currentBranchId) ? currentBranchId : undefined}
+                onValueChange={(v) => {
+                  if (v) void handleSelectBranch(v)
+                }}
+              >
                 {branches.map((b) => (
-                  <SelectItem key={b.id} value={b.id}>
+                  <DropdownMenuRadioItem
+                    key={b.id}
+                    value={b.id}
+                    disabled={!isOwner}
+                    className="cursor-pointer"
+                  >
                     {b.name}
-                  </SelectItem>
+                  </DropdownMenuRadioItem>
                 ))}
-              </SelectContent>
-            </Select>
-            {isOwner && (
-              <Button size="sm" variant="outline" onClick={() => setNewBranchOpen(true)}>
-                <GitBranch className="w-3.5 h-3.5 mr-1.5" /> New branch
-              </Button>
-            )}
-            {isOwner && deletableBranches.length > 0 && (
-              <Button size="sm" variant="outline" onClick={openDeleteBranchDialog}>
-                <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete branch
-              </Button>
-            )}
-            {isOwner && mergeableOthers.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button size="sm" variant="outline" disabled={!currentBranch?.head_version_id}>
-                      <GitMerge className="w-3.5 h-3.5 mr-1.5" /> Merge into {currentBranch?.name ?? "…"}
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="end" className="w-56 bg-popover border-border text-foreground">
-                  {mergeableOthers.map((b) => (
-                    <DropdownMenuItem
-                      key={b.id}
-                      disabled={!b.head_version_id}
-                      onClick={() => {
-                        setMergeSource(b)
-                        setMergeOpen(true)
-                      }}
-                    >
-                      {b.name}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {isOwner && (
+            <Button size="sm" variant="outline" onClick={() => setNewBranchOpen(true)}>
+              <GitBranch className="w-3.5 h-3.5 mr-1.5" /> New branch
+            </Button>
+          )}
+          {isOwner && deletableBranches.length > 0 && (
+            <Button size="sm" variant="outline" onClick={openDeleteBranchDialog}>
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete branch
+            </Button>
+          )}
+          {isOwner && mergeableOthers.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <Button size="sm" variant="outline" disabled={knownTags.every((tag) => !latestByTag.has(tag))}>
-                    <GitCompare className="w-3.5 h-3.5 mr-1.5" /> View diff with...
+                  <Button size="sm" variant="outline" disabled={!currentBranch?.head_version_id}>
+                    <GitMerge className="w-3.5 h-3.5 mr-1.5" /> Merge into {currentBranch?.name ?? "…"}
                   </Button>
                 }
               />
               <DropdownMenuContent align="end" className="w-56 bg-popover border-border text-foreground">
-                <DropdownMenuItem
-                  disabled={!latestByTag.get("paper-build")}
-                  onClick={() => {
-                    const row = latestByTag.get("paper-build")
-                    if (row) onDiffWithVersion(row.id, `Latest ${tagLabel("paper-build")}`)
-                  }}
-                >
-                  Latest paper-build
-                </DropdownMenuItem>
-                {knownTags.filter((tag) => tag !== "paper-build").length > 0 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    {knownTags
-                      .filter((tag) => tag !== "paper-build")
-                      .map((tag) => {
-                        const row = latestByTag.get(tag)
-                        return (
-                          <DropdownMenuItem
-                            key={tag}
-                            disabled={!row}
-                            onClick={() => {
-                              if (row) onDiffWithVersion(row.id, `Latest ${tagLabel(tag)}`)
-                            }}
-                          >
-                            Latest {tagLabel(tag)}
-                          </DropdownMenuItem>
-                        )
-                      })}
-                  </>
-                )}
+                {mergeableOthers.map((b) => (
+                  <DropdownMenuItem
+                    key={b.id}
+                    disabled={!b.head_version_id}
+                    onClick={() => {
+                      setMergeSource(b)
+                      setMergeOpen(true)
+                    }}
+                  >
+                    {b.name}
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            {isOwner && (
-              <Button size="sm" onClick={() => setAddOpen(true)}>
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> Add named version
-              </Button>
-            )}
-          </div>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button size="sm" variant="outline" type="button">
+                  <GitCompare className="w-3.5 h-3.5 mr-1.5" /> View diff with…
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-56 bg-popover border-border text-foreground">
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Tagged snapshots (deck-wide)</DropdownMenuLabel>
+              {diffTags.map((tag) => {
+                const vid = tagTipByTag[tag]
+                return (
+                  <DropdownMenuItem
+                    key={tag}
+                    disabled={!vid}
+                    onClick={() => {
+                      if (vid) onDiffWithVersion(vid, `Latest ${tagLabel(tag)}`)
+                    }}
+                  >
+                    Latest {tagLabel(tag)}
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -446,7 +442,14 @@ export function VersionsTab({
       )}
 
       <section>
-        <h3 className="text-sm font-medium text-muted-foreground mb-2">Timeline</h3>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-medium text-muted-foreground">Timeline</h3>
+          {isOwner && (
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> Add named version
+            </Button>
+          )}
+        </div>
         {loading && <div className="text-sm text-muted-foreground">Loading…</div>}
         {!loading && rows.length === 0 && (
           <div className="text-sm text-muted-foreground italic">
