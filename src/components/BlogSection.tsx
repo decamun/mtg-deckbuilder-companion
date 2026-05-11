@@ -14,7 +14,7 @@ export function BlogSection() {
   const [visibleCount, setVisibleCount] = useState(BLOG_SCROLL_PAGE)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 
-  const collapseToPreview = useCallback(() => {
+  const stopShowingAll = useCallback(() => {
     setListMode("preview")
     setVisibleCount(BLOG_SCROLL_PAGE)
     requestAnimationFrame(() => {
@@ -64,10 +64,10 @@ export function BlogSection() {
       </p>
 
       {listMode === "full" && (
-        <div className="mb-8">
-          <Button type="button" variant="outline" size="sm" onClick={collapseToPreview}>
+        <div className="sticky top-14 z-40 -mx-4 mb-8 border-b border-border/70 bg-background/90 px-4 py-2.5 shadow-sm backdrop-blur-md supports-backdrop-filter:bg-background/75">
+          <Button type="button" variant="outline" size="sm" onClick={stopShowingAll}>
             <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden />
-            Back to preview
+            Stop showing all
           </Button>
         </div>
       )}

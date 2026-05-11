@@ -443,7 +443,7 @@ export function BrowseSection() {
     setFormat("all")
   }
 
-  const collapseToPreview = useCallback(() => {
+  const stopShowingAll = useCallback(() => {
     setListMode("preview")
     requestAnimationFrame(() => {
       const el = document.getElementById("browse")
@@ -613,10 +613,10 @@ export function BrowseSection() {
       </div>
 
       {listMode === "full" && (
-        <div className="mb-6">
-          <Button type="button" variant="outline" size="sm" onClick={collapseToPreview}>
+        <div className="sticky top-14 z-40 -mx-4 mb-6 border-b border-border/70 bg-background/90 px-4 py-2.5 shadow-sm backdrop-blur-md supports-backdrop-filter:bg-background/75">
+          <Button type="button" variant="outline" size="sm" onClick={stopShowingAll}>
             <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden />
-            Back to preview
+            Stop showing all
           </Button>
         </div>
       )}
