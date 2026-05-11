@@ -22,6 +22,22 @@ export interface ParsedDecklistLine {
 const FOIL_TAIL = /\s*(?:\*F\*|\*foil\*|\(F\)|\bFOIL\b|\bF\b)\s*$/i
 const SET_PAREN = /\s+[\(\[]([A-Za-z0-9]{2,6})[\)\]]\s*([0-9]+[a-zA-Z\-★]?)?\s*$/
 
+function stripTrailingFoil(body: string): { body: string; foil: boolean } {
+  if (!FOIL_TAIL.test(body)) return { body, foil: false }
+  return { body: body.replace(FOIL_TAIL, "").trim(), foil: true }
+}
+
+/** Normalize pasted names (curly quotes, NBSP) for resilient Scryfall matching. */
+export function normalizeDecklistCardName(name: string): string {
+  return name
+    .normalize("NFKC")
+    .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u00A0\u202F\u2007]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
 export function parseDecklistLine(raw: string): ParsedDecklistLine | null {
   const trimmed = raw.trim()
   if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("#")) return null
@@ -35,9 +51,10 @@ export function parseDecklistLine(raw: string): ParsedDecklistLine | null {
   }
 
   let foil = false
-  if (FOIL_TAIL.test(body)) {
+  const firstFoil = stripTrailingFoil(body)
+  if (firstFoil.foil) {
     foil = true
-    body = body.replace(FOIL_TAIL, "").trim()
+    body = firstFoil.body
   }
 
   let setCode: string | undefined
@@ -47,12 +64,18 @@ export function parseDecklistLine(raw: string): ParsedDecklistLine | null {
     setCode = setMatch[1].toUpperCase()
     collectorNumber = setMatch[2]
     body = body.slice(0, setMatch.index).trim()
+    // Exporters often put foil *before* the (SET) CN block, e.g. "Card *F* (EOC) 1"
+    const afterSetFoil = stripTrailingFoil(body)
+    if (afterSetFoil.foil) {
+      foil = true
+      body = afterSetFoil.body
+    }
   }
 
   // Strip dangling collector number with no set, e.g. "Lightning Bolt 146"
   body = body.replace(/\s+\d+[a-zA-Z\-★]?$/, "").trim()
 
-  const name = body
+  const name = normalizeDecklistCardName(body)
   if (!name) return null
   return { quantity, name, setCode, collectorNumber, foil }
 }
@@ -102,7 +125,7 @@ export async function resolveDecklist(
   // form causes the entry to land in `not_found`.  Normalize to the primary face
   // here — the matching logic below still handles both exact and face-name forms.
   const scryfallLookupName = (name: string) =>
-    name.includes(" // ") ? name.split(" // ")[0] : name
+    name.includes(" // ") ? normalizeDecklistCardName(name.split(" // ")[0]!) : normalizeDecklistCardName(name)
   const uniqueNames = Array.from(new Set(parsedCards.map((p) => scryfallLookupName(p.name))))
   const scryfallCards = await getCardsCollection(uniqueNames)
 
@@ -111,13 +134,15 @@ export async function resolveDecklist(
     .map((p) => `${p.setCode!.toLowerCase()}/${p.collectorNumber!}`)
   const uniquePrintingKeys = Array.from(new Set(printingKeys))
   const printingMap = new Map<string, { id: string; finishes?: string[] }>()
-  await Promise.all(
-    uniquePrintingKeys.map(async (k) => {
-      const [s, cn] = k.split("/")
-      const card = await getCardBySetAndCN(s, cn)
-      if (card) printingMap.set(k, { id: card.id, finishes: card.finishes })
-    }),
-  )
+  // Space calls slightly: Scryfall documents ~10 req/s for file fetches; parallel
+  // set+cn bursts can 429 and drop printings from the map.
+  const PRINTING_LOOKUP_GAP_MS = 75
+  for (const k of uniquePrintingKeys) {
+    const [s, cn] = k.split("/")
+    const card = await getCardBySetAndCN(s, cn)
+    if (card) printingMap.set(k, { id: card.id, finishes: card.finishes })
+    await new Promise(r => setTimeout(r, PRINTING_LOOKUP_GAP_MS))
+  }
 
   const warnings: string[] = []
   const cards: ResolvedImportCard[] = []
@@ -125,7 +150,7 @@ export async function resolveDecklist(
   for (const parsed of parsedCards) {
     const parsedLower = parsed.name.toLowerCase()
     const scryfallCard = scryfallCards.find((c) => {
-      const cardLower = c.name.toLowerCase()
+      const cardLower = normalizeDecklistCardName(c.name).toLowerCase()
       // Exact match (handles full split names like "Wear // Tear")
       if (cardLower === parsedLower) return true
       // Face-name match: Scryfall returns "Wear // Tear" but user typed only "Wear"

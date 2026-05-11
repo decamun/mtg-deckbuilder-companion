@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   applyPreferredAutofocus,
   describeCameraFocusCapabilities,
@@ -33,7 +34,17 @@ import {
   pickPhashMatch,
   rankPhashMatches,
 } from "@/lib/deck-scanner-phash"
-import { buildRgbScannerReference, hammingPacked256 } from "@/lib/deck-scanner-rgb"
+import {
+  buildRgbScannerReference,
+  computeRgbDhash256FromCanvas,
+  DEFAULT_RGB_PICK,
+  hammingPacked256,
+  pickRgbMatch,
+  rankRgbMatches,
+  type RgbPickResult,
+  type RgbRankedMatch,
+  type RgbScannerReference,
+} from "@/lib/deck-scanner-rgb"
 import { analyzeEdgeRefinementDebug, refineCardCanvasByEdges, type EdgeRefinementDebug } from "@/lib/deck-scanner-card-refine"
 import {
   getArtCrop,
@@ -57,8 +68,10 @@ import { supabase } from "@/lib/supabase/client"
 
 type LogEntry = { at: string; level: "info" | "warn" | "error"; message: string }
 
+type HashMode = "phash" | "rgb_dhash"
+
 type ReferenceRow =
-  | { status: "ok"; ref: PhashScannerReference }
+  | { status: "ok"; ref: PhashScannerReference; rgbRef: RgbScannerReference }
   | { status: "error"; id: string; name: string; imageUrl?: string; message: string }
 
 const DEMO_NAMES = ["Lightning Bolt", "Giant Growth", "Dark Ritual", "Counterspell", "Serra Angel"] as const
@@ -118,6 +131,12 @@ export function ScannerLabClient() {
   const [continuousOcrMinQueryChars, setContinuousOcrMinQueryChars] = useState(4)
   const [continuousScanning, setContinuousScanning] = useState(false)
 
+  const [hashMode, setHashMode] = useState<HashMode>("phash")
+  const [rgbMeanMax, setRgbMeanMax] = useState(DEFAULT_RGB_PICK.meanMax)
+  const [rgbGapMin, setRgbGapMin] = useState(DEFAULT_RGB_PICK.gapMin)
+  const [scanStopRgbMeanMax, setScanStopRgbMeanMax] = useState(40)
+  const [scanStopRgbGapMin, setScanStopRgbGapMin] = useState(7)
+
   const [lastPreviewUrl, setLastPreviewUrl] = useState<string | null>(null)
   const [lastCropMeta, setLastCropMeta] = useState<{
     sourceLabel: string
@@ -126,9 +145,11 @@ export function ScannerLabClient() {
     outW: number
     outH: number
   } | null>(null)
-  const [lastHashInfo, setLastHashInfo] = useState<{ phashBytes: number } | null>(null)
+  const [lastHashInfo, setLastHashInfo] = useState<{ phashBytes: number; rgbNote?: string } | null>(null)
   const [lastRanked, setLastRanked] = useState<PhashRankedMatch[]>([])
+  const [lastRgbRanked, setLastRgbRanked] = useState<RgbRankedMatch[]>([])
   const [lastPick, setLastPick] = useState<PhashPickResult | null>(null)
+  const [lastRgbPick, setLastRgbPick] = useState<RgbPickResult | null>(null)
   const [capturing, setCapturing] = useState(false)
   const [refineDebug, setRefineDebug] = useState<EdgeRefinementDebug | null>(null)
   const [ocrLoading, setOcrLoading] = useState(false)
@@ -141,6 +162,11 @@ export function ScannerLabClient() {
 
   const okPhashRefs = useMemo(
     () => referenceRows.filter((r): r is Extract<ReferenceRow, { status: "ok" }> => r.status === "ok").map(r => r.ref),
+    [referenceRows]
+  )
+
+  const okRgbRefs = useMemo(
+    () => referenceRows.filter((r): r is Extract<ReferenceRow, { status: "ok" }> => r.status === "ok").map(r => r.rgbRef),
     [referenceRows]
   )
 
@@ -203,7 +229,9 @@ export function ScannerLabClient() {
     async (label: string, cards: ScryfallCard[]) => {
       setReferencesLoading(true)
       setLastRanked([])
+      setLastRgbRanked([])
       setLastPick(null)
+      setLastRgbPick(null)
       setLastPreviewUrl(null)
       setLastCropMeta(null)
       setLastHashInfo(null)
@@ -214,7 +242,7 @@ export function ScannerLabClient() {
       setOcrHits([])
       const rows: ReferenceRow[] = []
       pushLog("info", `${label}: loading ${cards.length} printings…`)
-      const builtByImageUrl = new Map<string, PhashScannerReference>()
+      const builtByImageUrl = new Map<string, { phash: PhashScannerReference; rgb: RgbScannerReference }>()
       for (const card of cards) {
         const imageUrl = getCardImageUrl(card, "normal")
         const id = card.id
@@ -228,24 +256,37 @@ export function ScannerLabClient() {
           rows.push({
             status: "ok",
             ref: {
-              ...cached,
+              ...cached.phash,
               id,
               name,
-              packed: new Uint8Array(cached.packed),
+              packed: new Uint8Array(cached.phash.packed),
               searchText: searchTextFromScryfall(card),
+            },
+            rgbRef: {
+              ...cached.rgb,
+              id,
+              name,
+              imageUrl,
+              r: new Uint8Array(cached.rgb.r),
+              g: new Uint8Array(cached.rgb.g),
+              b: new Uint8Array(cached.rgb.b),
             },
           })
           pushLog("info", `Reference OK (shared art): ${name}`)
           continue
         }
         try {
-          const ref = await buildPhashScannerReference(id, name, imageUrl, {
+          const phashRef = await buildPhashScannerReference(id, name, imageUrl, {
             typeLine: card.type_line,
             oracleText: card.oracle_text,
           })
-          builtByImageUrl.set(imageUrl, ref)
-          rows.push({ status: "ok", ref })
-          pushLog("info", `Reference OK: ${name} (${ref.imageWidth}×${ref.imageHeight}) · DCT pHash 256-bit`)
+          const rgbRef = await buildRgbScannerReference(id, name, imageUrl)
+          builtByImageUrl.set(imageUrl, { phash: phashRef, rgb: rgbRef })
+          rows.push({ status: "ok", ref: phashRef, rgbRef })
+          pushLog(
+            "info",
+            `Reference OK: ${name} (${phashRef.imageWidth}×${phashRef.imageHeight}) · pHash + RGB dHash (256-bit ×3)`
+          )
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e)
           rows.push({ status: "error", id, name, imageUrl, message })
@@ -343,20 +384,37 @@ export function ScannerLabClient() {
         outH: refinedCanvas.height,
       })
       const packed = computeDctPhash256FromCanvas(refinedCanvas)
-      setLastHashInfo({ phashBytes: packed.byteLength })
+      const rgbHashes = computeRgbDhash256FromCanvas(refinedCanvas)
+      setLastHashInfo({ phashBytes: packed.byteLength, rgbNote: "RGB dHash 256-bit × R/G/B" })
 
-      const ranked = rankPhashMatches(packed, okPhashRefs)
-      setLastRanked(ranked)
-      const pick = pickPhashMatch(ranked, { distanceMax: phashDistanceMax, gapMin: phashGapMin })
-      setLastPick(pick)
+      const rankedP = rankPhashMatches(packed, okPhashRefs)
+      setLastRanked(rankedP)
+      const pickP = pickPhashMatch(rankedP, { distanceMax: phashDistanceMax, gapMin: phashGapMin })
+      setLastPick(pickP)
 
-      if (pick.match) {
-        pushLog("info", `Match: ${pick.match.reference.name} · pHash distance ${pick.match.distance}`)
+      const rankedR = rankRgbMatches(rgbHashes.r, rgbHashes.g, rgbHashes.b, okRgbRefs)
+      setLastRgbRanked(rankedR)
+      const pickR = pickRgbMatch(rankedR, { meanMax: rgbMeanMax, gapMin: rgbGapMin })
+      setLastRgbPick(pickR)
+
+      if (hashMode === "phash") {
+        if (pickP.match) {
+          pushLog("info", `Match (pHash): ${pickP.match.reference.name} · distance ${pickP.match.distance}`)
+        } else {
+          pushLog("warn", `No pHash pick: ${pickP.rejectReason ?? "unknown"}`)
+        }
       } else {
-        pushLog("warn", `No pick: ${pick.rejectReason ?? "unknown"}`)
+        if (pickR.match) {
+          pushLog(
+            "info",
+            `Match (RGB dHash): ${pickR.match.reference.name} · mean ${pickR.match.meanDist.toFixed(1)} (R${pickR.match.distR} G${pickR.match.distG} B${pickR.match.distB})`
+          )
+        } else {
+          pushLog("warn", `No RGB dHash pick: ${pickR.rejectReason ?? "unknown"}`)
+        }
       }
     },
-    [okPhashRefs, phashDistanceMax, phashGapMin, pushLog]
+    [hashMode, okPhashRefs, okRgbRefs, phashDistanceMax, phashGapMin, pushLog, rgbGapMin, rgbMeanMax]
   )
 
   const captureFromVideo = useCallback(async () => {
@@ -462,34 +520,69 @@ export function ScannerLabClient() {
         setRefineDebug(analyzeEdgeRefinementDebug(raw))
       }
       const packed = computeDctPhash256FromCanvas(refined)
-      const ranked = rankPhashMatches(packed, okPhashRefs)
-      const best = ranked[0]
-      const second = ranked[1]
-      const gap = second ? second.distance - best.distance : scanStopGapMin
-      const phashHit =
-        best != null &&
-        best.distance <= scanStopDistanceMax &&
-        gap >= scanStopGapMin &&
-        (second != null || okPhashRefs.length === 1)
+      const rgbHashes = computeRgbDhash256FromCanvas(refined)
 
-      if (phashHit) {
+      let hashHit = false
+      let hitTitle = ""
+      let hitLines: string[] = []
+
+      if (hashMode === "phash") {
+        const ranked = rankPhashMatches(packed, okPhashRefs)
+        const best = ranked[0]
+        const second = ranked[1]
+        const gap = second ? second.distance - best.distance : scanStopGapMin
+        hashHit =
+          best != null &&
+          best.distance <= scanStopDistanceMax &&
+          gap >= scanStopGapMin &&
+          (second != null || okPhashRefs.length === 1)
+        if (hashHit && best) {
+          hitTitle = "Continuous scan: pHash threshold reached."
+          hitLines = [
+            `Best match: ${best.reference.name}`,
+            `pHash distance ${best.distance}`,
+            `Gap to second ${gap.toFixed(1)}`,
+            "",
+            "Scanning has stopped. Last frame is shown in Last crop / ranking.",
+          ]
+        }
+      } else {
+        const ranked = rankRgbMatches(rgbHashes.r, rgbHashes.g, rgbHashes.b, okRgbRefs)
+        const best = ranked[0]
+        const second = ranked[1]
+        const gap = second ? second.meanDist - best.meanDist : scanStopRgbGapMin
+        hashHit =
+          best != null &&
+          best.meanDist <= scanStopRgbMeanMax &&
+          gap >= scanStopRgbGapMin &&
+          (second != null || okRgbRefs.length === 1)
+        if (hashHit && best) {
+          hitTitle = "Continuous scan: RGB dHash threshold reached."
+          hitLines = [
+            `Best match: ${best.reference.name}`,
+            `Mean distance ${best.meanDist.toFixed(1)} (R${best.distR} · G${best.distG} · B${best.distB})`,
+            `Gap to second ${gap.toFixed(2)}`,
+            "",
+            "Scanning has stopped. Last frame is shown in Last crop / ranking.",
+          ]
+        }
+      }
+
+      if (hashHit) {
         stopRaf()
         const vw = video.videoWidth
         const vh = video.videoHeight
         if (!cancelled) {
           setContinuousScanning(false)
-          runAnalysis(refined, "live camera (continuous pHash hit)", vw, vh, raw)
+          runAnalysis(
+            refined,
+            hashMode === "phash" ? "live camera (continuous pHash hit)" : "live camera (continuous RGB dHash hit)",
+            vw,
+            vh,
+            raw
+          )
           queueMicrotask(() => {
-            window.confirm(
-              [
-                "Continuous scan: pHash threshold reached.",
-                `Best match: ${best.reference.name}`,
-                `pHash distance ${best.distance}`,
-                `Gap to second ${gap.toFixed(1)}`,
-                "",
-                "Scanning has stopped. Last frame is shown in Last crop / ranking.",
-              ].join("\n")
-            )
+            window.confirm([hitTitle, "", ...hitLines].join("\n"))
           })
         }
         return
@@ -588,22 +681,27 @@ export function ScannerLabClient() {
     continuousOcrIntervalMs,
     continuousOcrMinQueryChars,
     continuousScanning,
+    hashMode,
     okPhashRefs,
+    okRgbRefs,
     pushLog,
     runAnalysis,
     scanStopDistanceMax,
     scanStopGapMin,
+    scanStopRgbGapMin,
+    scanStopRgbMeanMax,
   ])
 
   const rankedStats = useMemo(() => {
-    const scores = lastRanked.map(r => r.distance)
+    const scores =
+      hashMode === "phash" ? lastRanked.map(r => r.distance) : lastRgbRanked.map(r => r.meanDist)
     return {
       count: scores.length,
       min: scores.length ? Math.min(...scores) : null,
       max: scores.length ? Math.max(...scores) : null,
       median: median(scores),
     }
-  }, [lastRanked])
+  }, [hashMode, lastRanked, lastRgbRanked])
 
   const runOcrOnLastCapture = useCallback(async () => {
     if (!lastPreviewUrl || okPhashRefs.length === 0) {
@@ -697,6 +795,21 @@ export function ScannerLabClient() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="hash-mode">Matcher (pick, table, continuous hash gate)</Label>
+              <Select value={hashMode} onValueChange={v => setHashMode(v as HashMode)}>
+                <SelectTrigger id="hash-mode" className="max-w-xs bg-background border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="phash">DCT pHash (256-bit grayscale)</SelectItem>
+                  <SelectItem value="rgb_dhash">RGB dHash (256-bit × R/G/B)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Each reference builds both hashes; this only changes which metric drives ranking, the pick card, logs, and continuous stop (OCR is unchanged).
+              </p>
+            </div>
+            <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="ph-dmax">Pick: max pHash distance (8–96)</Label>
                 <Badge variant="outline">{phashDistanceMax}</Badge>
@@ -727,6 +840,73 @@ export function ScannerLabClient() {
                 onChange={e => setPhashGapMin(Number(e.target.value))}
                 className="w-full"
               />
+            </div>
+            <div className="rounded-md border border-border/60 bg-muted/15 p-3 space-y-3">
+              <div className="text-xs font-medium text-muted-foreground">RGB dHash pick (mean of R/G/B Hamming)</div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="rgb-mmax">Pick: max mean distance (8–96)</Label>
+                  <Badge variant="outline">{rgbMeanMax}</Badge>
+                </div>
+                <input
+                  id="rgb-mmax"
+                  type="range"
+                  min={8}
+                  max={96}
+                  step={1}
+                  value={rgbMeanMax}
+                  onChange={e => setRgbMeanMax(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="rgb-gap">Pick: min mean gap (1st vs 2nd)</Label>
+                  <Badge variant="outline">{rgbGapMin}</Badge>
+                </div>
+                <input
+                  id="rgb-gap"
+                  type="range"
+                  min={0}
+                  max={24}
+                  step={0.5}
+                  value={rgbGapMin}
+                  onChange={e => setRgbGapMin(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="scan-rgb-mmax">Continuous stop: max mean distance</Label>
+                  <Badge variant="outline">{scanStopRgbMeanMax}</Badge>
+                </div>
+                <input
+                  id="scan-rgb-mmax"
+                  type="range"
+                  min={8}
+                  max={96}
+                  step={1}
+                  value={scanStopRgbMeanMax}
+                  onChange={e => setScanStopRgbMeanMax(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="scan-rgb-gap">Continuous stop: min mean gap</Label>
+                  <Badge variant="outline">{scanStopRgbGapMin}</Badge>
+                </div>
+                <input
+                  id="scan-rgb-gap"
+                  type="range"
+                  min={0}
+                  max={32}
+                  step={0.5}
+                  value={scanStopRgbGapMin}
+                  onChange={e => setScanStopRgbGapMin(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
@@ -926,7 +1106,7 @@ export function ScannerLabClient() {
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-medium">{ref.name}</div>
                             <div className="font-mono text-xs text-muted-foreground">
-                              {ref.imageWidth}×{ref.imageHeight} · DCT pHash 256-bit ({ref.packed.length} bytes)
+                              {ref.imageWidth}×{ref.imageHeight} · pHash (32 B) + RGB dHash (32 B × 3)
                             </div>
                           </div>
                         </li>
@@ -1041,7 +1221,9 @@ export function ScannerLabClient() {
                 size="sm"
                 onClick={() => {
                   setLastRanked([])
+                  setLastRgbRanked([])
                   setLastPick(null)
+                  setLastRgbPick(null)
                   setLastPreviewUrl(null)
                   setLastCropMeta(null)
                   setLastHashInfo(null)
@@ -1064,7 +1246,7 @@ export function ScannerLabClient() {
         </Card>
       </div>
 
-      {(lastPreviewUrl || lastRanked.length > 0) && (
+      {(lastPreviewUrl || lastRanked.length > 0 || lastRgbRanked.length > 0) && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,280px)_1fr]">
           <Card>
             <CardHeader className="pb-3">
@@ -1101,12 +1283,13 @@ export function ScannerLabClient() {
               )}
               {lastHashInfo && (
                 <div className="font-mono text-xs text-muted-foreground">
-                  pHash packed bytes: {lastHashInfo.phashBytes}
+                  <div>pHash packed bytes: {lastHashInfo.phashBytes}</div>
+                  {lastHashInfo.rgbNote && <div className="mt-1">{lastHashInfo.rgbNote}</div>}
                 </div>
               )}
-              {lastPick && (
+              {hashMode === "phash" && lastPick && (
                 <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
-                  <div className="font-medium">Pick result</div>
+                  <div className="font-medium">Pick result (pHash)</div>
                   {lastPick.match ? (
                     <ul className="mt-2 list-inside list-disc space-y-1 text-xs">
                       <li>Winner: {lastPick.match.reference.name}</li>
@@ -1122,6 +1305,27 @@ export function ScannerLabClient() {
                   )}
                 </div>
               )}
+              {hashMode === "rgb_dhash" && lastRgbPick && (
+                <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+                  <div className="font-medium">Pick result (RGB dHash)</div>
+                  {lastRgbPick.match ? (
+                    <ul className="mt-2 list-inside list-disc space-y-1 text-xs">
+                      <li>Winner: {lastRgbPick.match.reference.name}</li>
+                      <li>
+                        Mean {lastRgbPick.match.meanDist.toFixed(1)} · R {lastRgbPick.match.distR} · G {lastRgbPick.match.distG} · B{" "}
+                        {lastRgbPick.match.distB}
+                      </li>
+                      {lastRgbPick.runnerUp && (
+                        <li>
+                          Runner-up: {lastRgbPick.runnerUp.reference.name} · mean {lastRgbPick.runnerUp.meanDist.toFixed(1)}
+                        </li>
+                      )}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{lastRgbPick.rejectReason}</p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -1129,7 +1333,9 @@ export function ScannerLabClient() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Full ranking</CardTitle>
               <CardDescription>
-                Sorted by pHash distance (lower is better). Green: accepted pick; amber: tight gap; red: over pick distance max.
+                {hashMode === "phash"
+                  ? "Sorted by pHash Hamming distance (lower is better). Green: accepted pick; amber: tight gap; red: over pick max."
+                  : "Sorted by mean of per-channel RGB dHash Hamming (lower is better). Same flag semantics using RGB pick sliders."}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1145,46 +1351,81 @@ export function ScannerLabClient() {
                     <tr className="border-b border-border">
                       <th className="p-2 font-medium">#</th>
                       <th className="p-2 font-medium">Card</th>
-                      <th className="p-2 font-medium">distance</th>
+                      <th className="p-2 font-medium">{hashMode === "phash" ? "distance" : "mean"}</th>
                       <th className="p-2 font-medium">Δ</th>
                       <th className="p-2 font-medium">flags</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {lastRanked.map((row, i) => {
-                      const next = lastRanked[i + 1]
-                      const delta = next ? next.distance - row.distance : null
-                      const isWinner = i === 0
-                      const ambiguous =
-                        isWinner && next != null && delta != null && delta < phashGapMin + Number.EPSILON
-                      const overTh = row.distance > phashDistanceMax
-                      const flags = [
-                        isWinner ? "best" : "",
-                        ambiguous ? "tight-gap" : "",
-                        overTh ? "over-distanceMax" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")
-                      return (
-                        <tr
-                          key={row.reference.id}
-                          className={`border-b border-border/80 ${
-                            isWinner && !overTh && !ambiguous ? "bg-emerald-500/15" : ""
-                          } ${ambiguous ? "bg-amber-500/15" : ""} ${overTh ? "bg-destructive/10" : ""}`}
-                        >
-                          <td className="p-2 font-mono text-muted-foreground">{i + 1}</td>
-                          <td className="p-2">
-                            <div className="flex items-center gap-2">
-                              <img src={row.reference.imageUrl} alt="" className="h-8 rounded border border-border/60" />
-                              <span className="font-medium">{row.reference.name}</span>
-                            </div>
-                          </td>
-                          <td className="p-2 font-mono">{row.distance}</td>
-                          <td className="p-2 font-mono">{delta != null ? delta.toFixed(2) : "—"}</td>
-                          <td className="p-2 text-muted-foreground">{flags || "—"}</td>
-                        </tr>
-                      )
-                    })}
+                    {hashMode === "phash"
+                      ? lastRanked.map((row, i) => {
+                          const next = lastRanked[i + 1]
+                          const delta = next ? next.distance - row.distance : null
+                          const isWinner = i === 0
+                          const ambiguous =
+                            isWinner && next != null && delta != null && delta < phashGapMin + Number.EPSILON
+                          const overTh = row.distance > phashDistanceMax
+                          const flags = [
+                            isWinner ? "best" : "",
+                            ambiguous ? "tight-gap" : "",
+                            overTh ? "over-distanceMax" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                          return (
+                            <tr
+                              key={row.reference.id}
+                              className={`border-b border-border/80 ${
+                                isWinner && !overTh && !ambiguous ? "bg-emerald-500/15" : ""
+                              } ${ambiguous ? "bg-amber-500/15" : ""} ${overTh ? "bg-destructive/10" : ""}`}
+                            >
+                              <td className="p-2 font-mono text-muted-foreground">{i + 1}</td>
+                              <td className="p-2">
+                                <div className="flex items-center gap-2">
+                                  <img src={row.reference.imageUrl} alt="" className="h-8 rounded border border-border/60" />
+                                  <span className="font-medium">{row.reference.name}</span>
+                                </div>
+                              </td>
+                              <td className="p-2 font-mono">{row.distance}</td>
+                              <td className="p-2 font-mono">{delta != null ? delta.toFixed(2) : "—"}</td>
+                              <td className="p-2 text-muted-foreground">{flags || "—"}</td>
+                            </tr>
+                          )
+                        })
+                      : lastRgbRanked.map((row, i) => {
+                          const next = lastRgbRanked[i + 1]
+                          const delta = next ? next.meanDist - row.meanDist : null
+                          const isWinner = i === 0
+                          const ambiguous =
+                            isWinner && next != null && delta != null && delta < rgbGapMin + Number.EPSILON
+                          const overTh = row.meanDist > rgbMeanMax
+                          const flags = [
+                            isWinner ? "best" : "",
+                            ambiguous ? "tight-gap" : "",
+                            overTh ? "over-meanMax" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                          return (
+                            <tr
+                              key={row.reference.id}
+                              className={`border-b border-border/80 ${
+                                isWinner && !overTh && !ambiguous ? "bg-emerald-500/15" : ""
+                              } ${ambiguous ? "bg-amber-500/15" : ""} ${overTh ? "bg-destructive/10" : ""}`}
+                            >
+                              <td className="p-2 font-mono text-muted-foreground">{i + 1}</td>
+                              <td className="p-2">
+                                <div className="flex items-center gap-2">
+                                  <img src={row.reference.imageUrl} alt="" className="h-8 rounded border border-border/60" />
+                                  <span className="font-medium">{row.reference.name}</span>
+                                </div>
+                              </td>
+                              <td className="p-2 font-mono">{row.meanDist.toFixed(1)}</td>
+                              <td className="p-2 font-mono">{delta != null ? delta.toFixed(2) : "—"}</td>
+                              <td className="p-2 text-muted-foreground">{flags || "—"}</td>
+                            </tr>
+                          )
+                        })}
                   </tbody>
                 </table>
               </div>
