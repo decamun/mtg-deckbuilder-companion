@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
-import { ArrowRight, Filter, Loader2, Search, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Filter, Loader2, Search, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -91,11 +91,15 @@ function fuzzyMatch(needle: string, haystack: string) {
   return true
 }
 
+const BROWSE_PAGE_SIZE = 24
+
 async function browseDecksFallback(params: {
   search: string
   commander: string
   format: string
   usesUnavailableFilters: boolean
+  offset: number
+  limit: number
 }): Promise<BrowseDeck[]> {
   if (params.usesUnavailableFilters) {
     throw new Error("Budget and bracket filters will be available once the browse search migration is applied.")
@@ -150,7 +154,45 @@ async function browseDecksFallback(params: {
         (params.format === "all" || deck.format === params.format)
       )
     })
-    .slice(0, 24)
+    .slice(params.offset, params.offset + params.limit)
+}
+
+function useBrowseGridColumns() {
+  const [cols, setCols] = useState(1)
+  useEffect(() => {
+    const read = () => {
+      if (typeof window === "undefined") return 1
+      if (window.matchMedia("(min-width: 1280px)").matches) return 3
+      if (window.matchMedia("(min-width: 768px)").matches) return 2
+      return 1
+    }
+    const apply = () => setCols(read())
+    apply()
+    const xl = window.matchMedia("(min-width: 1280px)")
+    const md = window.matchMedia("(min-width: 768px)")
+    xl.addEventListener("change", apply)
+    md.addEventListener("change", apply)
+    return () => {
+      xl.removeEventListener("change", apply)
+      md.removeEventListener("change", apply)
+    }
+  }, [])
+  return cols
+}
+
+async function mergeBrowseCovers(rows: BrowseDeck[]): Promise<BrowseDeck[]> {
+  const coverIds = rows
+    .map((deck) => deck.cover_image_scryfall_id)
+    .filter((id): id is string => Boolean(id))
+  if (coverIds.length === 0) {
+    return rows.map((deck) => ({ ...deck, cover_url: undefined }))
+  }
+  const coverCards = await getCardsByIds(coverIds)
+  const coverMap = new Map(coverCards.map((card) => [card.id, card]))
+  return rows.map((deck) => ({
+    ...deck,
+    cover_url: coverMap.get(deck.cover_image_scryfall_id ?? "")?.image_uris?.normal,
+  }))
 }
 
 export function BrowseSection() {
@@ -167,12 +209,24 @@ export function BrowseSection() {
   const [loading, setLoading] = useState(false)
   const [hasActiveSearch, setHasActiveSearch] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [listMode, setListMode] = useState<"preview" | "full">("preview")
+  const gridCols = useBrowseGridColumns()
+  const previewCap = gridCols * 3
   const searchRef = useRef<HTMLDivElement>(null)
+  const decksRef = useRef<BrowseDeck[]>([])
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
+  const loadMoreInFlight = useRef(false)
   const debouncedQuery = useDebounce(query, 220)
   const debouncedCommander = useDebounce(commander, 220)
   const debouncedMinBudget = useDebounce(minBudget, 220)
   const debouncedMaxBudget = useDebounce(maxBudget, 220)
   const visibleSuggestions = debouncedQuery.trim().length >= 2 ? suggestions : []
+
+  useEffect(() => {
+    decksRef.current = decks
+  }, [decks])
 
   const activeFilterCount = useMemo(
     () =>
@@ -207,6 +261,7 @@ export function BrowseSection() {
     let cancelled = false
 
     async function runSearch() {
+      setListMode("preview")
       const searchTerm = debouncedQuery.trim()
       const commanderTerm = debouncedCommander.trim()
       const hasSearchInput =
@@ -218,7 +273,9 @@ export function BrowseSection() {
         format !== "all"
 
       setLoading(true)
+      setLoadingMore(false)
       setError(null)
+      setHasMore(false)
       setHasActiveSearch(hasSearchInput)
       const { data, error: searchError } = await supabase.rpc("browse_decks", {
         p_search: searchTerm,
@@ -227,7 +284,8 @@ export function BrowseSection() {
         p_max_budget: parseMoney(debouncedMaxBudget),
         p_bracket: bracket === "all" ? null : Number(bracket),
         p_format: format === "all" ? "" : format,
-        p_limit: 24,
+        p_limit: BROWSE_PAGE_SIZE,
+        p_offset: 0,
       })
 
       if (cancelled) return
@@ -248,9 +306,15 @@ export function BrowseSection() {
               debouncedMinBudget.trim().length > 0 ||
               debouncedMaxBudget.trim().length > 0 ||
               bracket !== "all",
+            offset: 0,
+            limit: BROWSE_PAGE_SIZE,
           })
           if (cancelled) return
-          await populateDeckCovers(fallbackRows)
+          setHasMore(fallbackRows.length === BROWSE_PAGE_SIZE)
+          const withCovers = await mergeBrowseCovers(fallbackRows)
+          if (cancelled) return
+          setDecks(withCovers)
+          setLoading(false)
         } catch (fallbackError) {
           if (cancelled) return
           setError(fallbackError instanceof Error ? fallbackError.message : searchError.message)
@@ -261,23 +325,10 @@ export function BrowseSection() {
       }
 
       const rows = ((data ?? []) as BrowseDeck[]).map(normalizeDeck)
-      await populateDeckCovers(rows)
-    }
-
-    async function populateDeckCovers(rows: BrowseDeck[]) {
-      const coverIds = rows
-        .map((deck) => deck.cover_image_scryfall_id)
-        .filter((id): id is string => Boolean(id))
-      const coverCards = await getCardsByIds(coverIds)
+      setHasMore(rows.length === BROWSE_PAGE_SIZE)
+      const withCovers = await mergeBrowseCovers(rows)
       if (cancelled) return
-      const coverMap = new Map(coverCards.map((card) => [card.id, card]))
-      setDecks(
-        rows.map((deck) => ({
-          ...deck,
-          cover_url: coverMap.get(deck.cover_image_scryfall_id ?? "")?.image_uris
-            ?.normal,
-        }))
-      )
+      setDecks(withCovers)
       setLoading(false)
     }
 
@@ -294,6 +345,96 @@ export function BrowseSection() {
     format,
   ])
 
+  const loadMore = useCallback(async () => {
+    if (loadMoreInFlight.current || loadingMore || !hasMore || listMode !== "full") return
+
+    loadMoreInFlight.current = true
+
+    const offset = decksRef.current.length
+    const searchTerm = debouncedQuery.trim()
+    const commanderTerm = debouncedCommander.trim()
+
+    setLoadingMore(true)
+    setError(null)
+
+    try {
+      const { data, error: searchError } = await supabase.rpc("browse_decks", {
+        p_search: searchTerm,
+        p_commander: commanderTerm,
+        p_min_budget: parseMoney(debouncedMinBudget),
+        p_max_budget: parseMoney(debouncedMaxBudget),
+        p_bracket: bracket === "all" ? null : Number(bracket),
+        p_format: format === "all" ? "" : format,
+        p_limit: BROWSE_PAGE_SIZE,
+        p_offset: offset,
+      })
+
+      if (searchError) {
+        if (!isMissingBrowseRpc(searchError)) {
+          setError(searchError.message)
+          return
+        }
+
+        try {
+          const fallbackRows = await browseDecksFallback({
+            search: searchTerm,
+            commander: commanderTerm,
+            format,
+            usesUnavailableFilters:
+              debouncedMinBudget.trim().length > 0 ||
+              debouncedMaxBudget.trim().length > 0 ||
+              bracket !== "all",
+            offset,
+            limit: BROWSE_PAGE_SIZE,
+          })
+          setHasMore(fallbackRows.length === BROWSE_PAGE_SIZE)
+          const withCovers = await mergeBrowseCovers(fallbackRows)
+          setDecks((prev) => [...prev, ...withCovers])
+        } catch (fallbackError) {
+          setError(
+            fallbackError instanceof Error ? fallbackError.message : searchError.message
+          )
+        }
+        return
+      }
+
+      const rows = ((data ?? []) as BrowseDeck[]).map(normalizeDeck)
+      setHasMore(rows.length === BROWSE_PAGE_SIZE)
+      const withCovers = await mergeBrowseCovers(rows)
+      setDecks((prev) => [...prev, ...withCovers])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load more decks")
+    } finally {
+      loadMoreInFlight.current = false
+      setLoadingMore(false)
+    }
+  }, [
+    loadingMore,
+    hasMore,
+    listMode,
+    debouncedQuery,
+    debouncedCommander,
+    debouncedMinBudget,
+    debouncedMaxBudget,
+    bracket,
+    format,
+  ])
+
+  useEffect(() => {
+    if (listMode !== "full" || !hasMore) return
+    const node = loadMoreSentinelRef.current
+    if (!node) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadMore()
+      },
+      { rootMargin: "280px 0px", threshold: 0 }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [listMode, hasMore, loadMore, decks.length])
+
   const clearFilters = () => {
     setCommander("")
     setMinBudget("")
@@ -301,6 +442,20 @@ export function BrowseSection() {
     setBracket("all")
     setFormat("all")
   }
+
+  const stopShowingAll = useCallback(() => {
+    setListMode("preview")
+    requestAnimationFrame(() => {
+      const el = document.getElementById("browse")
+      if (!el) return
+      const top = el.getBoundingClientRect().top + window.scrollY - 56
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" })
+    })
+  }, [])
+
+  const visibleDecks = listMode === "preview" ? decks.slice(0, previewCap) : decks
+  const showExpandPreview =
+    listMode === "preview" && !loading && !error && decks.length > previewCap
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-12">
@@ -457,22 +612,32 @@ export function BrowseSection() {
         </AnimatePresence>
       </div>
 
+      {listMode === "full" && (
+        <div className="sticky top-14 z-40 -mx-4 mb-6 border-b border-border/70 bg-background/90 px-4 py-2.5 backdrop-blur-md supports-backdrop-filter:bg-background/75">
+          <Button type="button" variant="outline" size="sm" onClick={stopShowingAll}>
+            <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden />
+            Stop showing all
+          </Button>
+        </div>
+      )}
+
       {error ? (
         <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-6 text-sm text-destructive">
           {error}
         </div>
       ) : loading ? (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3, 4, 5, 6].map((key) => (
+          {Array.from({ length: Math.min(previewCap, 9) }, (_, i) => (
             <div
-              key={key}
+              key={i}
               className="h-72 animate-pulse rounded-2xl border border-border/60 bg-card/50"
             />
           ))}
         </div>
       ) : decks.length > 0 ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {decks.map((deck) => (
+        <>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {visibleDecks.map((deck) => (
             <Link key={deck.id} href={`/decks/${deck.id}`} className="group">
               <article className="relative h-72 overflow-hidden rounded-2xl border border-border bg-card transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/50">
                 <div className="absolute inset-0">
@@ -517,7 +682,28 @@ export function BrowseSection() {
               </article>
             </Link>
           ))}
-        </div>
+          </div>
+          {showExpandPreview && (
+            <div className="mt-10 flex justify-center">
+              <Button type="button" size="lg" onClick={() => setListMode("full")}>
+                Show all decks
+              </Button>
+            </div>
+          )}
+          {listMode === "full" && hasMore && (
+            <div
+              ref={loadMoreSentinelRef}
+              className="mt-10 flex min-h-14 items-center justify-center text-sm text-muted-foreground"
+            >
+              {loadingMore && (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  Loading more…
+                </span>
+              )}
+            </div>
+          )}
+        </>
       ) : hasActiveSearch ? (
         <div className="rounded-2xl border-2 border-dashed border-border py-20 text-center">
           <p className="mb-2 font-medium text-foreground">No decks found</p>

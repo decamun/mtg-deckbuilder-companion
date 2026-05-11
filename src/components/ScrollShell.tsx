@@ -1,12 +1,10 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import Link from "next/link"
-import { ArrowRight } from "lucide-react"
 import { BrewSection } from "@/components/BrewSection"
 import { BrowseSection } from "@/components/BrowseSection"
+import { BlogSection } from "@/components/BlogSection"
 import { DecksSection } from "@/components/DecksSection"
-import { BLOG_POSTS } from "@/lib/blog"
 import { supabase } from "@/lib/supabase/client"
 
 const SECTION_PATHS: Record<string, string> = {
@@ -133,51 +131,7 @@ export function ScrollShell({ initialSection }: Props) {
         ref={blogRef}
         className="flex min-h-[calc(100vh-3.5rem)] flex-col"
       >
-        <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-12">
-          <h2 className="font-heading text-4xl font-bold text-foreground mb-2">
-            Blog
-          </h2>
-          <p className="mb-10 text-muted-foreground">
-            Tips, guides, and strategy for Commander deckbuilding.
-          </p>
-
-          <div className="flex flex-col gap-6">
-            {BLOG_POSTS.map((post) => (
-              <article
-                key={post.slug}
-                className="rounded-2xl border border-border p-6 transition-colors hover:border-primary/40"
-              >
-                <time
-                  className="text-xs text-muted-foreground"
-                  dateTime={post.date}
-                >
-                  {new Date(post.date).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </time>
-                <h3 className="mt-1 mb-2 font-heading text-xl font-bold text-foreground">
-                  <Link
-                    href={`/blog/${post.slug}`}
-                    className="transition-colors hover:text-primary"
-                  >
-                    {post.title}
-                  </Link>
-                </h3>
-                <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
-                  {post.excerpt}
-                </p>
-                <Link
-                  href={`/blog/${post.slug}`}
-                  className="inline-flex items-center gap-1.5 text-sm text-primary transition-colors hover:text-primary/80"
-                >
-                  Read more <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </article>
-            ))}
-          </div>
-        </div>
+        <BlogSection />
       </section>
     </div>
   )
