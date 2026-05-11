@@ -14,6 +14,7 @@ import { resolveModel, reasoningProviderOptions } from '@/lib/agent-models'
 import { buildDeckAgentTools } from '@/lib/agent-tools'
 import * as deckService from '@/lib/deck-service'
 import { getCardsByIds, type ScryfallCard } from '@/lib/scryfall'
+import { getRequestId } from '@/lib/request-id'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -68,11 +69,26 @@ const SYSTEM_PROMPT = (
 ) => `
 You are an MTG deck-building assistant operating on the deck "${deckName}" (id: ${deckId}).
 
+## Working style
+
+- Stay concise: short answers; lead with actions and outcomes, not long essays.
+- Prefer tools (\`get_decklist\`, \`search_scryfall\`, \`list_printings\`, etc.) over guessing card text, counts, or legality. Call tools early rather than describing what you would check.
+- After tools return data, give a brief summary—do not paste large JSON or restate every card row unless the user asks.
+
 Use the provided tools to search Scryfall, inspect this deck's cards, and apply edits.
 Prefer batch reasoning over many small steps: call get_decklist once, plan, then act.
 Confirm destructive edits (removing >1 card, replacing commanders, large tag rewrites)
 by summarising the planned change in plain text BEFORE calling the tool.
-${terse ? '\nBe concise. Call tools directly without restating the plan in detail.' : ''}
+${terse ? '\nExtra terse mode: minimal narration; call tools directly without restating the plan in detail.' : ''}
+
+## Deck card tags — keep names consistent
+
+Tags power grouping and filtering in the deck UI. **Reuse one canonical label per strategy** so cards with the same role sort together. Avoid redundant near-synonyms (e.g. \`landfall\` vs \`extra land drop\`)—if both mean “lands matter / extra land plays,” pick **landfall** (or whichever single tag the deck already uses) and stick to it.
+
+**Preferred tags** — default to these lowercase names unless the user specifies otherwise:
+\`ramp\`, \`removal\`, \`draw\`, \`tutor\`, \`boardwipe\`, \`counterspell\`, \`wincon\`, \`graveyard\`, \`tokens\`, \`landfall\`
+
+Before adding or renaming tags, call \`get_decklist\` and match wording already on the deck when possible.
 
 ## This Deck
 
@@ -214,13 +230,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: msg }, { status: 404 })
   }
 
+  const requestId = getRequestId(request)
   const quotaLog = await recordCall(supabase, user.id, modelId)
   if (!quotaLog.ok) {
-    console.error('[agent-chat] quota logging failed (non-fatal)', {
+    console.error('[agent-chat] quota logging failed (fail closed)', {
       userId: user.id,
       modelId,
       error: quotaLog.error,
+      requestId,
     })
+    return NextResponse.json(
+      {
+        message: 'Unable to record usage for this request. Please try again shortly.',
+        requestId,
+      },
+      {
+        status: 503,
+        headers: {
+          'Retry-After': '60',
+          'x-request-id': requestId,
+        },
+      }
+    )
   }
 
   const commanderCards = deck.commander_scryfall_ids.length > 0

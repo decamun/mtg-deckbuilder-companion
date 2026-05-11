@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import nextPWA from "next-pwa";
 
 const isDev = process.env.NODE_ENV === "development";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -87,11 +86,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-const withPWA = nextPWA({
-  dest: "public",
-  disable: process.env.NODE_ENV === "development",
-  register: true,
-  skipWaiting: true,
-});
-
-export default withPWA(nextConfig);
+export default nextConfig;

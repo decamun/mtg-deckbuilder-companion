@@ -1,7 +1,19 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import type { McpContext } from './mcp-context'
+import { buildDeckStatsReport } from './deck-stats'
 import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfall'
+
+/** Shown to MCP clients so assistants align with in-app agent behavior (concision, tools-first, tag conventions). */
+const MCP_ASSISTANT_INSTRUCTIONS = `
+You are the idlebrew deck-building assistant. Always prefer tools over guessing—call get_decklist, search_scryfall, list_printings, and other registered tools rather than assuming cards or counts.
+
+Keep replies concise; summarize tool outcomes briefly. Do not paste large JSON decks unless the user asks.
+
+Deck card tags must stay consistent so filters group cards correctly. Avoid interchangeable synonyms for the same role (for example, pick landfall—not separate tags like "extra land drop"—for land-matter / extra-land packages unless the user dictates otherwise).
+
+Preferred lowercase tags: ramp, removal, draw, tutor, boardwipe, counterspell, wincon, graveyard, tokens, landfall. Before adding tags, read existing tags via get_decklist and reuse wording already on the deck when possible.
+`.trim()
 
 /**
  * Build an MCP server bound to a specific authenticated user.
@@ -11,10 +23,13 @@ import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfa
  */
 export function createMcpServer(context: McpContext) {
   const { deckService: decks } = context
-  const server = new McpServer({
-    name: 'idlebrew-MTG-Agent',
-    version: '2.0.0',
-  })
+  const server = new McpServer(
+    {
+      name: 'idlebrew-MTG-Agent',
+      version: '2.0.0',
+    },
+    { instructions: MCP_ASSISTANT_INSTRUCTIONS }
+  )
 
   const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] })
   const err = (text: string) => ({
@@ -149,6 +164,25 @@ export function createMcpServer(context: McpContext) {
         )
       } catch (e) {
         return errFromException('get_decklist failed', e)
+      }
+    }
+  )
+
+  server.tool(
+    'get_deck_stats',
+    'Full deck statistics aligned with the deck editor: total/mainboard/commander card counts, USD sum (when prices exist),' +
+      ' Commander / EDH format hints (banned cards, color identity, singleton copies, bracket game-changer caps),' +
+      ' and the Analytics tab metrics (avg CMC, type counts, lands breakdown, mana curve grid, opening probabilities, color balance).' +
+      ' Non-EDH formats currently omit format hints.',
+    { deck_id: z.string().describe('UUID of the deck') },
+    async ({ deck_id }) => {
+      try {
+        const deck = await decks.getDeck(deck_id)
+        const rows = await decks.getDecklist(deck_id)
+        const report = await buildDeckStatsReport(deck, rows)
+        return json('Deck stats:', report)
+      } catch (e) {
+        return errFromException('get_deck_stats failed', e)
       }
     }
   )

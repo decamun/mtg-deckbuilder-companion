@@ -33,6 +33,17 @@ export default function TermsOfService() {
       </section>
 
       <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Paid plans and billing</h2>
+        <p className="text-muted-foreground leading-relaxed">
+          idlebrew may introduce optional paid subscription plans or feature tiers. If we offer paid
+          plans, pricing, billing cycles, renewal, cancellation, refunds, and subscription changes
+          will be disclosed at checkout or on the billing settings screen before you are charged.
+          Until you explicitly subscribe to a paid plan and complete payment, your use of the Service
+          remains governed by the free tier described above.
+        </p>
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-lg font-semibold">User Accounts</h2>
         <p className="text-muted-foreground leading-relaxed">
           You may create an account using an email address or a supported OAuth provider (Google or
