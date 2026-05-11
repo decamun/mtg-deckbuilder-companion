@@ -681,4 +681,30 @@ export async function mergeDeckBranchByName(
   return mergeDeckBranchIntoCurrent(supabase, userId, deckId, br.id, conflictDefault, conflictOverrides)
 }
 
+export async function deleteDeckBranch(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  branchId: string
+): Promise<void> {
+  await loadOwnedDeck(supabase, userId, deckId)
+  const { error } = await supabase.rpc('delete_deck_branch', {
+    p_deck_id: deckId,
+    p_branch_id: branchId,
+  })
+  if (error) throw new DeckServiceError(error.message, 'db_error')
+}
+
+export async function deleteDeckBranchByName(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  branchName: string
+): Promise<void> {
+  const branches = await listDeckBranches(supabase, userId, deckId)
+  const br = branches.find((b) => b.name === branchName)
+  if (!br) throw new DeckServiceError(`Branch "${branchName}" not found`, 'not_found')
+  await deleteDeckBranch(supabase, userId, deckId, br.id)
+}
+
 export { DeckServiceError }

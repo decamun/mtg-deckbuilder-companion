@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { GitBranch, GitCompare, GitMerge, Plus } from "lucide-react"
+import { GitBranch, GitCompare, GitMerge, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import {
@@ -13,8 +13,14 @@ import {
   type DeckVersionRow,
 } from "@/lib/versions"
 import { supabase } from "@/lib/supabase/client"
-import type { DeckBranchRow } from "@/lib/deck-branches"
-import { createBranch, listBranches, renameBranch, switchBranch } from "@/lib/deck-branches"
+import {
+  createBranch,
+  deleteBranch,
+  listBranches,
+  renameBranch,
+  switchBranch,
+  type DeckBranchRow,
+} from "@/lib/deck-branches"
 import { VersionTimelineRow } from "./VersionTimelineRow"
 import { UnnamedVersionsGroup } from "./UnnamedVersionsGroup"
 import { AddNamedVersionDialog } from "./AddNamedVersionDialog"
@@ -62,9 +68,17 @@ export function VersionsTab({
   const [reverting, setReverting] = useState(false)
   const [renamingBranch, setRenamingBranch] = useState(false)
   const [renameDraft, setRenameDraft] = useState("")
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [branchIdToDelete, setBranchIdToDelete] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const currentBranch = useMemo(
     () => branches.find((b) => b.id === currentBranchId) ?? null,
+    [branches, currentBranchId]
+  )
+
+  const deletableBranches = useMemo(
+    () => branches.filter((b) => b.name !== "main" && b.id !== currentBranchId),
     [branches, currentBranchId]
   )
 
@@ -235,6 +249,25 @@ export function VersionsTab({
     void refresh()
   }
 
+  const openDeleteBranchDialog = () => {
+    setBranchIdToDelete(deletableBranches[0]?.id ?? null)
+    setDeleteOpen(true)
+  }
+
+  const performDeleteBranch = async () => {
+    if (!branchIdToDelete) return
+    setDeleting(true)
+    const err = await deleteBranch(deckId, branchIdToDelete)
+    setDeleting(false)
+    if (err) {
+      toast.error(err)
+      return
+    }
+    toast.success("Branch deleted")
+    setDeleteOpen(false)
+    void refresh()
+  }
+
   const mergeableOthers = useMemo(
     () => branches.filter((b) => b.id !== currentBranchId),
     [branches, currentBranchId]
@@ -287,7 +320,11 @@ export function VersionsTab({
               disabled={!isOwner || branches.length === 0 || !currentBranchId}
             >
               <SelectTrigger className="w-[200px] bg-background/50 border-border">
-                <SelectValue placeholder="Branch" />
+                <SelectValue placeholder="Branch">
+                  {(value: string | null) =>
+                    branches.find((b) => b.id === value)?.name ?? value ?? "Branch"
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {branches.map((b) => (
@@ -300,6 +337,11 @@ export function VersionsTab({
             {isOwner && (
               <Button size="sm" variant="outline" onClick={() => setNewBranchOpen(true)}>
                 <GitBranch className="w-3.5 h-3.5 mr-1.5" /> New branch
+              </Button>
+            )}
+            {isOwner && deletableBranches.length > 0 && (
+              <Button size="sm" variant="outline" onClick={openDeleteBranchDialog}>
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete branch
               </Button>
             )}
             {isOwner && mergeableOthers.length > 0 && (
@@ -453,6 +495,51 @@ export function VersionsTab({
           void refresh()
         }}
       />
+
+      <Dialog open={deleteOpen} onOpenChange={(open) => { if (!open && !deleting) setDeleteOpen(false) }}>
+        <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete branch</DialogTitle>
+            <DialogDescription>
+              This removes the branch and all version snapshots recorded on it. You cannot delete{" "}
+              <span className="font-medium text-foreground">main</span> or the branch you are currently on—switch first
+              if needed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="delete-branch-pick">Branch</Label>
+            <Select
+              value={branchIdToDelete ?? undefined}
+              onValueChange={(v) => {
+                if (v) setBranchIdToDelete(v)
+              }}
+            >
+              <SelectTrigger id="delete-branch-pick" className="w-full bg-background/50 border-border">
+                <SelectValue placeholder="Choose branch">
+                  {(value: string | null) =>
+                    deletableBranches.find((b) => b.id === value)?.name ?? "Choose branch"
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {deletableBranches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={performDeleteBranch} disabled={deleting || !branchIdToDelete}>
+              {deleting ? "Deleting…" : "Delete branch"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!tagTarget} onOpenChange={(open) => { if (!open && !savingTag) { setTagTarget(null); setCustomTag("") } }}>
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">

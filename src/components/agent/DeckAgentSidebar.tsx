@@ -88,6 +88,9 @@ function summariseOutput(toolName: string, output: unknown): string | undefined 
   if (toolName === "merge_deck_branch" && typeof o.conflict_rows === "number") {
     return `${o.conflict_rows} conflict row(s)`
   }
+  if (toolName === "delete_deck_branch" && typeof o.deleted === "string") {
+    return `removed ${o.deleted}`
+  }
   if (toolName === "set_primer" || toolName === "patch_primer") {
     const length = typeof o.length === "number" ? o.length : "?"
     return `saved (${length} chars)`

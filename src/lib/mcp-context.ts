@@ -27,6 +27,7 @@ export interface McpContext {
       sourceBranchName: string,
       conflictDefault: 'ours' | 'theirs'
     ) => Promise<{ conflictCount: number }>
+    deleteDeckBranchByName: (deckId: string, branchName: string) => Promise<void>
   }
 }
 
@@ -64,6 +65,8 @@ export function createMcpContext(supabase: SupabaseClient, userId: string): McpC
         deckService.switchDeckBranchByName(supabase, userId, deckId, branchName),
       mergeDeckBranchByName: (deckId, sourceBranchName, conflictDefault) =>
         deckService.mergeDeckBranchByName(supabase, userId, deckId, sourceBranchName, conflictDefault),
+      deleteDeckBranchByName: (deckId, branchName) =>
+        deckService.deleteDeckBranchByName(supabase, userId, deckId, branchName),
     },
   }
 }

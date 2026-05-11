@@ -501,6 +501,23 @@ export function createMcpServer(context: McpContext) {
     }
   )
 
+  server.tool(
+    'delete_deck_branch',
+    'Delete a named branch and all version snapshots stored on that branch. Cannot delete `main` or the branch you are currently on (switch first).',
+    {
+      deck_id: z.string(),
+      branch_name: z.string().min(1).describe('Branch name to delete'),
+    },
+    async ({ deck_id, branch_name }) => {
+      try {
+        await decks.deleteDeckBranchByName(deck_id, branch_name)
+        return ok(`Deleted branch "${branch_name}"`)
+      } catch (e) {
+        return errFromException('delete_deck_branch failed', e)
+      }
+    }
+  )
+
   return server
 }
 

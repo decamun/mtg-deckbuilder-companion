@@ -68,6 +68,14 @@ export async function switchBranch(deckId: string, branchId: string): Promise<bo
   return !error
 }
 
+export async function deleteBranch(deckId: string, branchId: string): Promise<string | null> {
+  const { error } = await supabase.rpc("delete_deck_branch", {
+    p_deck_id: deckId,
+    p_branch_id: branchId,
+  })
+  return error?.message ?? null
+}
+
 export async function applyMergedSnapshot(
   deckId: string,
   snapshot: VersionSnapshot,

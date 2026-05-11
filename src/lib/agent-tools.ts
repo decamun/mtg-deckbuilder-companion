@@ -22,6 +22,7 @@ export const DECK_AGENT_MUTATING_TOOLS = new Set([
   'create_deck_branch',
   'switch_deck_branch',
   'merge_deck_branch',
+  'delete_deck_branch',
 ])
 
 /**
@@ -344,6 +345,18 @@ export function buildDeckAgentTools(
           when_conflicted
         )
         return { merged_from: source_branch, conflict_rows: result.conflictCount }
+      },
+    }),
+
+    delete_deck_branch: tool({
+      description:
+        'Delete a named branch and its version history for this deck. Cannot delete `main` or the branch you are on—switch first.',
+      inputSchema: z.object({
+        branch_name: z.string().min(1).describe('Branch name to delete'),
+      }),
+      execute: async ({ branch_name }) => {
+        await deckService.deleteDeckBranchByName(supabase, userId, deckId, branch_name)
+        return { deleted: branch_name }
       },
     }),
   }

@@ -34,6 +34,7 @@ const TOOL_LABELS: Record<string, string> = {
   create_deck_branch: "Creating branch",
   switch_deck_branch: "Switching branch",
   merge_deck_branch: "Merging branch",
+  delete_deck_branch: "Deleting branch",
 }
 
 export function ToolChip({ toolName, state, inputSummary, outputSummary, errorText }: Props) {
