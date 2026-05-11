@@ -12,15 +12,27 @@ export type EdgeRefineOptions = {
   minStrongEdgeRatio?: number
   maxBoxCoverage?: number
   aspectSlack?: number
+  /** Fraction of frame treated as “inner” for stats and edge collection (0.1 → 10%–90%). */
+  innerPadFrac?: number
+  /**
+   * 0 = off. Down-weights strong edges in the lower part of the slot (hands, shirt, chest)
+   * where the physical card rarely sits, before thresholding.
+   */
+  lowerThirdBias?: number
+  /** Drop this fraction of total edge mass from each side when forming the bbox (outlier columns/rows). */
+  massTrimFrac?: number
 }
 
 const DEFAULTS: Required<EdgeRefineOptions> = {
   blurRadius: 10,
-  sobelK: 1.15,
-  marginPx: 10,
+  sobelK: 1.32,
+  marginPx: 8,
   minStrongEdgeRatio: 0.018,
-  maxBoxCoverage: 0.92,
-  aspectSlack: 0.22,
+  maxBoxCoverage: 0.74,
+  aspectSlack: 0.2,
+  innerPadFrac: 0.1,
+  lowerThirdBias: 0.55,
+  massTrimFrac: 0.045,
 }
 
 function luminanceFromImageData(data: Uint8ClampedArray, w: number, h: number): Float32Array {
@@ -111,6 +123,97 @@ function clampAspectBox(
     sh = targetH
   }
   return { sx, sy, sw, sh }
+}
+
+function innerRoiRect(w: number, h: number, innerPadFrac: number) {
+  const p = innerPadFrac
+  return {
+    x0: Math.floor(w * p),
+    x1: Math.ceil(w * (1 - p)),
+    y0: Math.floor(h * p),
+    y1: Math.ceil(h * (1 - p)),
+  }
+}
+
+/** Down-weight lower frame (shirt / hands) before edge thresholding. */
+function lowerRegionEdgeWeight(y: number, h: number, bias: number): number {
+  if (bias <= 0) return 1
+  const ny = (y + 0.5) / h
+  if (ny < 0.4) return 1
+  const t = (ny - 0.4) / 0.6
+  const f = 1 - bias * t * t
+  return Math.max(0.32, f)
+}
+
+/**
+ * Column/row mass trimming: ignore sparse fringe columns and rows so a few
+ * strong edges (hair, shelf) do not stretch the bbox away from the card.
+ */
+function trimmedStrongBounds(
+  mask: Uint8Array,
+  w: number,
+  h: number,
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+  trimFrac: number
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const colW = new Float32Array(w)
+  const rowW = new Float32Array(h)
+  let total = 0
+  for (let y = y0; y < y1; y++) {
+    const yo = y * w
+    for (let x = x0; x < x1; x++) {
+      if (!mask[yo + x]!) continue
+      colW[x] += 1
+      rowW[y] += 1
+      total += 1
+    }
+  }
+  if (total < 48) return null
+  const trimLo = total * Math.min(0.15, Math.max(0.01, trimFrac))
+  let acc = 0
+  let minX = x1 - 1
+  for (let x = x0; x < x1; x++) {
+    acc += colW[x]!
+    if (acc >= trimLo) {
+      minX = x
+      break
+    }
+  }
+  acc = 0
+  let maxX = x0
+  for (let x = x1 - 1; x >= x0; x--) {
+    acc += colW[x]!
+    if (acc >= trimLo) {
+      maxX = x
+      break
+    }
+  }
+  acc = 0
+  let minY = y1 - 1
+  for (let y = y0; y < y1; y++) {
+    acc += rowW[y]!
+    if (acc >= trimLo) {
+      minY = y
+      break
+    }
+  }
+  acc = 0
+  let maxY = y0
+  for (let y = y1 - 1; y >= y0; y--) {
+    acc += rowW[y]!
+    if (acc >= trimLo) {
+      maxY = y
+      break
+    }
+  }
+  if (maxX <= minX || maxY <= minY) return null
+  const bw = maxX - minX + 1
+  const bh = maxY - minY + 1
+  if (bw < w * 0.2 || bh < h * 0.2) return null
+  return { minX, minY, maxX, maxY }
 }
 
 function floatGrayToDataUrl(gray: Float32Array, w: number, h: number, mode: "symmetric" | "positive"): string {
@@ -273,23 +376,30 @@ function runPipeline(src: HTMLCanvasElement, o: Required<EdgeRefineOptions>): Pi
     hp[i] = lum[i]! - blur[i]!
   }
   const mag = sobelMagnitude(hp, w, h)
+  const inner = innerRoiRect(w, h, o.innerPadFrac)
+  const { x0, x1, y0, y1 } = inner
 
-  const x0 = Math.floor(w * 0.08)
-  const x1 = Math.ceil(w * 0.92)
-  const y0 = Math.floor(h * 0.08)
-  const y1 = Math.ceil(h * 0.92)
-  let sum = 0
-  let sumsq = 0
-  let inner = 0
-  for (let y = y0; y < y1; y++) {
-    for (let x = x0; x < x1; x++) {
-      const v = mag[y * w + x]!
-      sum += v
-      sumsq += v * v
-      inner++
+  const magEff = new Float32Array(w * h)
+  for (let y = 0; y < h; y++) {
+    const yo = y * w
+    const wy = lowerRegionEdgeWeight(y, h, o.lowerThirdBias)
+    for (let x = 0; x < w; x++) {
+      magEff[yo + x] = mag[yo + x]! * wy
     }
   }
-  if (inner === 0) {
+
+  let sum = 0
+  let sumsq = 0
+  let innerCount = 0
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const v = magEff[y * w + x]!
+      sum += v
+      sumsq += v * v
+      innerCount++
+    }
+  }
+  if (innerCount === 0) {
     return {
       applied: false,
       skipReason: "empty inner window",
@@ -305,28 +415,49 @@ function runPipeline(src: HTMLCanvasElement, o: Required<EdgeRefineOptions>): Pi
       paddedMaxY: 0,
       finalBbox: null,
       hp,
-      mag,
+      mag: magEff,
       mask: emptyMask(),
       w,
       h,
     }
   }
-  const mean = sum / inner
-  const std = Math.sqrt(Math.max(0, sumsq / inner - mean * mean))
+  const mean = sum / innerCount
+  const std = Math.sqrt(Math.max(0, sumsq / innerCount - mean * mean))
   const thresh = mean + o.sobelK * Math.max(std, 1e-6)
 
-  let minX = w
-  let minY = h
-  let maxX = 0
-  let maxY = 0
-  let strong = 0
   const mask = new Uint8Array(w * h)
+  let strong = 0
   for (let y = y0; y < y1; y++) {
+    const yo = y * w
     for (let x = x0; x < x1; x++) {
-      const i = y * w + x
-      if (mag[i]! > thresh) {
+      const i = yo + x
+      if (magEff[i]! > thresh) {
         mask[i] = 1
         strong++
+      }
+    }
+  }
+
+  const trimmed = trimmedStrongBounds(mask, w, h, x0, x1, y0, y1, o.massTrimFrac)
+  let minX: number
+  let minY: number
+  let maxX: number
+  let maxY: number
+  if (trimmed) {
+    minX = trimmed.minX
+    minY = trimmed.minY
+    maxX = trimmed.maxX
+    maxY = trimmed.maxY
+  } else {
+    minX = w
+    minY = h
+    maxX = 0
+    maxY = 0
+    for (let y = y0; y < y1; y++) {
+      const yo = y * w
+      for (let x = x0; x < x1; x++) {
+        const i = yo + x
+        if (!mask[i]) continue
         if (x < minX) minX = x
         if (x > maxX) maxX = x
         if (y < minY) minY = y
@@ -357,7 +488,7 @@ function runPipeline(src: HTMLCanvasElement, o: Required<EdgeRefineOptions>): Pi
       paddedMaxY: 0,
       finalBbox: null,
       hp,
-      mag,
+      mag: magEff,
       mask,
       w,
       h,
@@ -386,7 +517,7 @@ function runPipeline(src: HTMLCanvasElement, o: Required<EdgeRefineOptions>): Pi
       paddedMaxY: pMaxY,
       finalBbox: { sx, sy, sw, sh },
       hp,
-      mag,
+      mag: magEff,
       mask,
       w,
       h,
@@ -409,7 +540,7 @@ function runPipeline(src: HTMLCanvasElement, o: Required<EdgeRefineOptions>): Pi
       paddedMaxY: pMaxY,
       finalBbox: { sx, sy, sw, sh },
       hp,
-      mag,
+      mag: magEff,
       mask,
       w,
       h,
@@ -430,7 +561,7 @@ function runPipeline(src: HTMLCanvasElement, o: Required<EdgeRefineOptions>): Pi
     paddedMaxY: pMaxY,
     finalBbox: { sx, sy, sw, sh },
     hp,
-    mag,
+    mag: magEff,
     mask,
     w,
     h,
@@ -479,10 +610,7 @@ export function analyzeEdgeRefinementDebug(rawSlot: HTMLCanvasElement, opts?: Ed
   const p = runPipeline(rawSlot, o)
   const w = p.w
   const h = p.h
-  const x0 = Math.floor(w * 0.08)
-  const x1 = Math.ceil(w * 0.92)
-  const y0 = Math.floor(h * 0.08)
-  const y1 = Math.ceil(h * 0.92)
+  const { x0, x1, y0, y1 } = innerRoiRect(w, h, o.innerPadFrac)
   const { mean, std } = meanStdMag(p.mag, w, h, x0, x1, y0, y1)
 
   const rawSlotUrl = rawSlot.toDataURL("image/png")
