@@ -265,7 +265,7 @@ export async function POST(request: Request) {
   const result = streamText({
     model: resolveModel(modelId),
     system: SYSTEM_PROMPT(deck.name, deck.id, isHaiku, deckContext),
-    messages: convertToModelMessages(body.messages),
+    messages: await convertToModelMessages(body.messages),
     tools,
     stopWhen: stepCountIs(tier.maxStepsPerCall),
     providerOptions: reasoningProviderOptions(modelId, body.enableReasoning ?? !isHaiku),
