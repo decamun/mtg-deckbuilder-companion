@@ -44,7 +44,14 @@ import {
 } from "@/lib/deck-scanner-visual"
 import { getCardImageUrl, getCardsByIds, getCardsCollection, type ScryfallCard } from "@/lib/scryfall"
 import { loadUserDeckScryfallPrintings } from "@/lib/scanner-deck-load"
-import { formatUnknownScannerError, runCardOcrFuzzySearch, type OcrSearchHit } from "@/lib/scanner-ocr-search"
+import {
+  createOcrFusePoolIndex,
+  formatUnknownScannerError,
+  runCardOcrFuzzySearch,
+  searchOcrPoolHits,
+  tesseractReadText,
+  type OcrSearchHit,
+} from "@/lib/scanner-ocr-search"
 import { supabase } from "@/lib/supabase/client"
 
 type LogEntry = { at: string; level: "info" | "warn" | "error"; message: string }
@@ -79,6 +86,9 @@ export function ScannerLabClient() {
   const streamRef = useRef<MediaStream | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const scanRafRef = useRef<number | null>(null)
+  const ocrFuseRef = useRef<ReturnType<typeof createOcrFusePoolIndex> | null>(null)
+  const continuousOcrInFlightRef = useRef(false)
+  const continuousLastOcrAtRef = useRef(0)
 
   const [log, setLog] = useState<LogEntry[]>([])
   const pushLog = useCallback((level: LogEntry["level"], message: string) => {
@@ -97,6 +107,13 @@ export function ScannerLabClient() {
   const [phashGapMin, setPhashGapMin] = useState(DEFAULT_PHASH_PICK.gapMin)
   const [scanStopDistanceMax, setScanStopDistanceMax] = useState(44)
   const [scanStopGapMin, setScanStopGapMin] = useState(8)
+  const [continuousOcrInLoop, setContinuousOcrInLoop] = useState(true)
+  const [continuousOcrIntervalMs, setContinuousOcrIntervalMs] = useState(900)
+  /** Stop when best Fuse score is at most this (lower = stricter match). */
+  const [continuousOcrFuseScoreMax, setContinuousOcrFuseScoreMax] = useState(0.38)
+  /** Require (2nd score − 1st score) at least this when a runner-up exists (reduces ambiguous picks). */
+  const [continuousOcrFuseGapMin, setContinuousOcrFuseGapMin] = useState(0.05)
+  const [continuousOcrMinQueryChars, setContinuousOcrMinQueryChars] = useState(4)
   const [continuousScanning, setContinuousScanning] = useState(false)
 
   const [lastPreviewUrl, setLastPreviewUrl] = useState<string | null>(null)
@@ -398,6 +415,11 @@ export function ScannerLabClient() {
   )
 
   useEffect(() => {
+    const pool = okPhashRefs.map(r => ({ id: r.id, name: r.name, searchText: r.searchText }))
+    ocrFuseRef.current = pool.length > 0 ? createOcrFusePoolIndex(pool) : null
+  }, [okPhashRefs])
+
+  useEffect(() => {
     if (!continuousScanning || cameraError || okPhashRefs.length === 0) {
       if (scanRafRef.current != null) {
         cancelAnimationFrame(scanRafRef.current)
@@ -407,6 +429,15 @@ export function ScannerLabClient() {
     }
 
     let cancelled = false
+    continuousLastOcrAtRef.current = performance.now()
+    continuousOcrInFlightRef.current = false
+
+    const stopRaf = () => {
+      if (scanRafRef.current != null) {
+        cancelAnimationFrame(scanRafRef.current)
+        scanRafRef.current = null
+      }
+    }
 
     const tick = () => {
       if (cancelled) return
@@ -416,29 +447,33 @@ export function ScannerLabClient() {
         return
       }
       const raw = captureRawSlotFromVideo(video)
-      if (raw) {
-        const refined = refineCardCanvasByEdges(raw)
-        const packed = computeDctPhash256FromCanvas(refined)
-        const ranked = rankPhashMatches(packed, okPhashRefs)
-        const best = ranked[0]
-        const second = ranked[1]
-        const gap = second ? second.distance - best.distance : scanStopGapMin
-        if (
-          best &&
-          best.distance <= scanStopDistanceMax &&
-          gap >= scanStopGapMin &&
-          (second != null || okPhashRefs.length === 1)
-        ) {
-          if (scanRafRef.current != null) {
-            cancelAnimationFrame(scanRafRef.current)
-            scanRafRef.current = null
-          }
+      if (!raw) {
+        scanRafRef.current = requestAnimationFrame(tick)
+        return
+      }
+      const refined = refineCardCanvasByEdges(raw)
+      const packed = computeDctPhash256FromCanvas(refined)
+      const ranked = rankPhashMatches(packed, okPhashRefs)
+      const best = ranked[0]
+      const second = ranked[1]
+      const gap = second ? second.distance - best.distance : scanStopGapMin
+      const phashHit =
+        best != null &&
+        best.distance <= scanStopDistanceMax &&
+        gap >= scanStopGapMin &&
+        (second != null || okPhashRefs.length === 1)
+
+      if (phashHit) {
+        stopRaf()
+        const vw = video.videoWidth
+        const vh = video.videoHeight
+        if (!cancelled) {
           setContinuousScanning(false)
-          runAnalysis(refined, "live camera (continuous hit)", video.videoWidth, video.videoHeight, raw)
+          runAnalysis(refined, "live camera (continuous pHash hit)", vw, vh, raw)
           queueMicrotask(() => {
             window.confirm(
               [
-                "Continuous scan: threshold reached.",
+                "Continuous scan: pHash threshold reached.",
                 `Best match: ${best.reference.name}`,
                 `pHash distance ${best.distance}`,
                 `Gap to second ${gap.toFixed(1)}`,
@@ -447,21 +482,105 @@ export function ScannerLabClient() {
               ].join("\n")
             )
           })
-          return
         }
+        return
       }
+
+      const fuse = ocrFuseRef.current
+      const now = performance.now()
+      if (
+        continuousOcrInLoop &&
+        fuse &&
+        !continuousOcrInFlightRef.current &&
+        now - continuousLastOcrAtRef.current >= continuousOcrIntervalMs
+      ) {
+        continuousLastOcrAtRef.current = now
+        continuousOcrInFlightRef.current = true
+        const snap = document.createElement("canvas")
+        snap.width = refined.width
+        snap.height = refined.height
+        const sctx = snap.getContext("2d")
+        if (sctx) {
+          sctx.drawImage(refined, 0, 0)
+        }
+        const vw = video.videoWidth
+        const vh = video.videoHeight
+        void (async () => {
+          try {
+            if (!sctx) return
+            const { rawText, query } = await tesseractReadText(snap)
+            if (cancelled) return
+            const hits = searchOcrPoolHits(fuse, query, 10)
+            const top = hits[0]
+            const runner = hits[1]
+            const scoreOk =
+              top?.fuseScore != null &&
+              top.fuseScore <= continuousOcrFuseScoreMax &&
+              query.length >= continuousOcrMinQueryChars
+            const gapOk =
+              runner == null ||
+              runner.fuseScore == null ||
+              top?.fuseScore == null ||
+              runner.fuseScore - top.fuseScore >= continuousOcrFuseGapMin
+            if (scoreOk && gapOk && top) {
+              stopRaf()
+              if (!cancelled) {
+                setContinuousScanning(false)
+                setOcrRaw(rawText)
+                setOcrQuery(query)
+                setOcrHits(hits)
+                runAnalysis(refined, "live camera (continuous OCR hit)", vw, vh, raw)
+                queueMicrotask(() => {
+                  window.confirm(
+                    [
+                      "Continuous scan: OCR / fuzzy text threshold reached.",
+                      `Best match: ${top.name}`,
+                      top.fuseScore != null ? `Fuse score ${top.fuseScore.toFixed(4)} (lower is better)` : "",
+                      `OCR query length: ${query.length} characters`,
+                      runner?.fuseScore != null && top.fuseScore != null
+                        ? `Gap to second: ${(runner.fuseScore - top.fuseScore).toFixed(4)}`
+                        : "",
+                      "",
+                      "Scanning has stopped. Last frame is shown in Last crop / ranking.",
+                    ]
+                      .filter(Boolean)
+                      .join("\n")
+                  )
+                })
+              }
+            }
+          } catch (e) {
+            if (!cancelled) {
+              pushLog("warn", `Continuous OCR: ${formatUnknownScannerError(e)}`)
+            }
+          } finally {
+            continuousOcrInFlightRef.current = false
+          }
+        })()
+      }
+
       scanRafRef.current = requestAnimationFrame(tick)
     }
 
     scanRafRef.current = requestAnimationFrame(tick)
     return () => {
       cancelled = true
-      if (scanRafRef.current != null) {
-        cancelAnimationFrame(scanRafRef.current)
-        scanRafRef.current = null
-      }
+      stopRaf()
     }
-  }, [cameraError, continuousScanning, okPhashRefs, runAnalysis, scanStopDistanceMax, scanStopGapMin])
+  }, [
+    cameraError,
+    continuousOcrFuseGapMin,
+    continuousOcrFuseScoreMax,
+    continuousOcrInLoop,
+    continuousOcrIntervalMs,
+    continuousOcrMinQueryChars,
+    continuousScanning,
+    okPhashRefs,
+    pushLog,
+    runAnalysis,
+    scanStopDistanceMax,
+    scanStopGapMin,
+  ])
 
   const rankedStats = useMemo(() => {
     const scores = lastRanked.map(r => r.distance)
@@ -559,7 +678,7 @@ export function ScannerLabClient() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">pHash match &amp; continuous scan</CardTitle>
             <CardDescription>
-              Primary matcher is grayscale DCT pHash (hash size 16, ImageHash-style sizing). Lower Hamming distance is better. Pick defaults: distance ≤ {DEFAULT_PHASH_PICK.distanceMax}, gap ≥ {DEFAULT_PHASH_PICK.gapMin}.
+              Continuous mode checks <strong className="font-normal">pHash every frame</strong>, and on a slower cadence runs <strong className="font-normal">Tesseract + Fuse</strong> on a snapshot of the refined crop. Stops when either path meets its thresholds. Pick defaults: distance ≤ {DEFAULT_PHASH_PICK.distanceMax}, gap ≥ {DEFAULT_PHASH_PICK.gapMin}.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -626,6 +745,90 @@ export function ScannerLabClient() {
                 onChange={e => setScanStopGapMin(Number(e.target.value))}
                 className="w-full"
               />
+            </div>
+            <div className="rounded-md border border-border/60 bg-muted/15 p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  id="cont-ocr-en"
+                  type="checkbox"
+                  checked={continuousOcrInLoop}
+                  onChange={e => setContinuousOcrInLoop(e.target.checked)}
+                  className="h-4 w-4 rounded border border-border"
+                />
+                <Label htmlFor="cont-ocr-en" className="cursor-pointer font-medium">
+                  OCR in continuous scan (throttled; stops on Fuse score + gap heuristics)
+                </Label>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="ocr-int">OCR min interval (ms)</Label>
+                  <Badge variant="outline">{continuousOcrIntervalMs}</Badge>
+                </div>
+                <input
+                  id="ocr-int"
+                  type="range"
+                  min={400}
+                  max={3200}
+                  step={100}
+                  value={continuousOcrIntervalMs}
+                  onChange={e => setContinuousOcrIntervalMs(Number(e.target.value))}
+                  className="w-full"
+                  disabled={!continuousOcrInLoop}
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="ocr-fmax">OCR stop: max Fuse score (1st hit)</Label>
+                  <Badge variant="outline">{continuousOcrFuseScoreMax.toFixed(2)}</Badge>
+                </div>
+                <input
+                  id="ocr-fmax"
+                  type="range"
+                  min={0.12}
+                  max={0.55}
+                  step={0.01}
+                  value={continuousOcrFuseScoreMax}
+                  onChange={e => setContinuousOcrFuseScoreMax(Number(e.target.value))}
+                  className="w-full"
+                  disabled={!continuousOcrInLoop}
+                />
+                <p className="text-[11px] text-muted-foreground">Lower is a better text match. Require best ≤ this value.</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="ocr-fgap">OCR stop: min Fuse gap (2nd − 1st score)</Label>
+                  <Badge variant="outline">{continuousOcrFuseGapMin.toFixed(2)}</Badge>
+                </div>
+                <input
+                  id="ocr-fgap"
+                  type="range"
+                  min={0}
+                  max={0.22}
+                  step={0.01}
+                  value={continuousOcrFuseGapMin}
+                  onChange={e => setContinuousOcrFuseGapMin(Number(e.target.value))}
+                  className="w-full"
+                  disabled={!continuousOcrInLoop}
+                />
+                <p className="text-[11px] text-muted-foreground">When a runner-up exists, require their score minus the best to be at least this (reduces ties).</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="ocr-qmin">OCR stop: min normalized query length</Label>
+                  <Badge variant="outline">{continuousOcrMinQueryChars}</Badge>
+                </div>
+                <input
+                  id="ocr-qmin"
+                  type="range"
+                  min={2}
+                  max={12}
+                  step={1}
+                  value={continuousOcrMinQueryChars}
+                  onChange={e => setContinuousOcrMinQueryChars(Number(e.target.value))}
+                  className="w-full"
+                  disabled={!continuousOcrInLoop}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -786,7 +989,10 @@ export function ScannerLabClient() {
                       return
                     }
                     setContinuousScanning(true)
-                    pushLog("info", "Continuous scan started (uses thresholds in the right-hand card).")
+                    pushLog(
+                      "info",
+                      `Continuous scan started (pHash every frame; OCR every ≥${continuousOcrIntervalMs}ms when enabled).`
+                    )
                   }
                 }}
                 disabled={

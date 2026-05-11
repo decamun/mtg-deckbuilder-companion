@@ -1,3 +1,4 @@
+import type { IFuseOptions } from "fuse.js"
 import Fuse from "fuse.js"
 import Tesseract from "tesseract.js"
 
@@ -13,6 +14,43 @@ export type OcrSearchHit = {
   /** Fuse score (lower is better when present). */
   fuseScore: number | null
   snippet: string
+}
+
+/** Fuse index options for ranking OCR text against the pool (same as manual OCR). */
+export const OCR_FUSE_POOL_OPTIONS: IFuseOptions<OcrPoolEntry> = {
+  keys: ["searchText"],
+  threshold: 0.52,
+  distance: 200,
+  ignoreLocation: true,
+  minMatchCharLength: 2,
+  includeScore: true,
+}
+
+export function createOcrFusePoolIndex(pool: ReadonlyArray<OcrPoolEntry>): Fuse<OcrPoolEntry> {
+  return new Fuse([...pool], OCR_FUSE_POOL_OPTIONS)
+}
+
+export function searchOcrPoolHits(fuse: Fuse<OcrPoolEntry>, query: string, limit: number): OcrSearchHit[] {
+  const q = query.replace(/\s+/g, " ").trim()
+  if (q.length < 2) return []
+  return fuse.search(q, { limit }).map(r => ({
+    id: r.item.id,
+    name: r.item.name,
+    fuseScore: r.score ?? null,
+    snippet: r.item.searchText.slice(0, 160).replace(/\s+/g, " "),
+  }))
+}
+
+export async function tesseractReadText(image: string | HTMLCanvasElement): Promise<{ rawText: string; query: string }> {
+  let rawText: string
+  try {
+    const { data } = await Tesseract.recognize(image, "eng", { logger: () => {} })
+    rawText = data.text ?? ""
+  } catch (e) {
+    throw new Error(`Tesseract: ${formatUnknownScannerError(e)}`)
+  }
+  const query = rawText.replace(/\s+/g, " ").trim().slice(0, 4000)
+  return { rawText, query }
 }
 
 /** Stable string for thrown rejections that are not `Error` instances (common with WASM / workers). */
@@ -51,38 +89,8 @@ export async function runCardOcrFuzzySearch(
     return { rawText: "", query: "", hits: [] }
   }
 
-  let rawText: string
-  try {
-    const { data } = await Tesseract.recognize(image, "eng", { logger: () => {} })
-    rawText = data.text ?? ""
-  } catch (e) {
-    throw new Error(`Tesseract: ${formatUnknownScannerError(e)}`)
-  }
-
-  const query = rawText.replace(/\s+/g, " ").trim().slice(0, 4000)
-
-  let hits: OcrSearchHit[]
-  try {
-    const fuse = new Fuse(pool, {
-      keys: ["searchText"],
-      threshold: 0.52,
-      distance: 200,
-      ignoreLocation: true,
-      minMatchCharLength: 2,
-      includeScore: true,
-    })
-
-    const results = query.length >= 2 ? fuse.search(query, { limit: maxResults }) : []
-
-    hits = results.map(r => ({
-      id: r.item.id,
-      name: r.item.name,
-      fuseScore: r.score ?? null,
-      snippet: r.item.searchText.slice(0, 160).replace(/\s+/g, " "),
-    }))
-  } catch (e) {
-    throw new Error(`Fuse search: ${formatUnknownScannerError(e)}`)
-  }
-
+  const { rawText, query } = await tesseractReadText(image)
+  const fuse = createOcrFusePoolIndex(pool)
+  const hits = searchOcrPoolHits(fuse, query, maxResults)
   return { rawText, query, hits }
 }
