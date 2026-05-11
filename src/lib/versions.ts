@@ -1,5 +1,11 @@
 import { supabase } from "@/lib/supabase/client"
 
+/**
+ * Deck version snapshots are full JSON deck states per row (simple replay and RLS-friendly).
+ * For very large histories, consider future optimizations: parent-relative deltas, external blob storage,
+ * or periodic compaction — branching keeps hot history scoped per `branch_id` for smaller timelines.
+ */
+
 export interface VersionSnapshotCard {
   scryfall_id: string
   printing_scryfall_id: string | null
@@ -30,6 +36,7 @@ export interface VersionSnapshot {
 export interface DeckVersionRow {
   id: string
   deck_id: string
+  branch_id: string
   parent_id: string | null
   name: string | null
   is_bookmarked: boolean
@@ -40,117 +47,43 @@ export interface DeckVersionRow {
   created_by: string | null
 }
 
-async function buildSnapshot(deckId: string): Promise<VersionSnapshot | null> {
-  const { data: deck, error: deckErr } = await supabase
+async function hasVersionSinceOnBranch(deckId: string, sinceIso: string): Promise<boolean> {
+  const { data: deck } = await supabase
     .from("decks")
-    .select("name, description, format, budget_usd, bracket, commander_scryfall_ids, cover_image_scryfall_id, is_public, primer_markdown")
+    .select("current_branch_id")
     .eq("id", deckId)
-    .single()
-  if (deckErr || !deck) return null
-
-  const { data: cards, error: cardsErr } = await supabase
-    .from("deck_cards")
-    .select("scryfall_id, printing_scryfall_id, finish, oracle_id, name, quantity, zone, tags")
-    .eq("deck_id", deckId)
-  if (cardsErr) return null
-
-  return {
-    version: 1,
-    deck: {
-      name: deck.name,
-      description: deck.description ?? null,
-      format: deck.format ?? null,
-      budget_usd: deck.budget_usd ?? null,
-      bracket: deck.bracket ?? null,
-      commanders: deck.commander_scryfall_ids ?? [],
-      cover_image_scryfall_id: deck.cover_image_scryfall_id ?? null,
-      is_public: !!deck.is_public,
-    },
-    cards: (cards ?? []).map(c => ({
-      scryfall_id: c.scryfall_id,
-      printing_scryfall_id: c.printing_scryfall_id ?? null,
-      finish: (c.finish ?? "nonfoil") as VersionSnapshotCard["finish"],
-      oracle_id: c.oracle_id ?? null,
-      name: c.name,
-      quantity: c.quantity,
-      zone: c.zone ?? "mainboard",
-      tags: c.tags ?? [],
-    })),
-    primer_markdown: deck.primer_markdown ?? "",
-  }
-}
-
-async function getLatestVersionId(deckId: string): Promise<string | null> {
-  const { data } = await supabase
-    .from("deck_versions")
-    .select("id")
-    .eq("deck_id", deckId)
-    .order("created_at", { ascending: false })
-    .limit(1)
     .maybeSingle()
-  return data?.id ?? null
-}
+  const branchId = deck?.current_branch_id as string | undefined
+  if (!branchId) return false
 
-async function hasVersionSince(deckId: string, sinceIso: string): Promise<boolean> {
   const { data } = await supabase
     .from("deck_versions")
     .select("id")
     .eq("deck_id", deckId)
+    .eq("branch_id", branchId)
     .gte("created_at", sinceIso)
     .limit(1)
     .maybeSingle()
   return !!data?.id
 }
 
-async function insertSnapshotVersion(
-  deckId: string,
-  name: string | null,
-  bookmarked: boolean,
-  summary: string,
-  parentId?: string | null
-): Promise<DeckVersionRow | null> {
-  const snapshot = await buildSnapshot(deckId)
-  if (!snapshot) return null
-
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data, error } = await supabase
-    .from("deck_versions")
-    .insert({
-      deck_id: deckId,
-      parent_id: parentId ?? (await getLatestVersionId(deckId)),
-      name,
-      is_bookmarked: bookmarked,
-      tags: [],
-      change_summary: summary,
-      snapshot,
-      created_by: user?.id ?? null,
-    })
-    .select()
-    .single()
-  if (error) return null
-  return data as DeckVersionRow
-}
-
 async function createSnapshotVersion(
   deckId: string,
   name: string | null,
   bookmarked: boolean,
-  summary: string
+  summary: string,
+  explicitParentId?: string | null
 ): Promise<DeckVersionRow | null> {
   const { data: { user } } = await supabase.auth.getUser()
-  const parentId = await getLatestVersionId(deckId)
-
   const { data, error } = await supabase.rpc("create_deck_version_snapshot", {
     p_deck_id: deckId,
-    p_parent_id: parentId,
+    p_parent_id: explicitParentId ?? null,
     p_name: name,
     p_is_bookmarked: bookmarked,
     p_change_summary: summary,
     p_created_by: user?.id ?? null,
   })
-  if (error) {
-    return insertSnapshotVersion(deckId, name, bookmarked, summary, parentId)
-  }
+  if (error) return null
   return data as DeckVersionRow
 }
 
@@ -169,10 +102,10 @@ async function flushDeck(deckId: string) {
   pending.delete(deckId)
   if (entry.timer) clearTimeout(entry.timer)
 
-  if (await hasVersionSince(deckId, entry.sinceIso)) return
+  if (await hasVersionSinceOnBranch(deckId, entry.sinceIso)) return
 
   const summary = Array.from(new Set(entry.summaries)).join("; ")
-  await insertSnapshotVersion(deckId, null, false, summary)
+  await createSnapshotVersion(deckId, null, false, summary)
 }
 
 /** Record a fallback client-side version if database triggers did not already create one. */
@@ -203,13 +136,34 @@ export async function createNamedVersion(
   return createSnapshotVersion(deckId, name, bookmarked, `Named version: ${name}`)
 }
 
-export async function getVersions(deckId: string): Promise<DeckVersionRow[]> {
+/** All versions on a branch timeline, including the shared fork tip when it lives on another branch. */
+export async function getVersionsForBranch(deckId: string, branchId: string): Promise<DeckVersionRow[]> {
+  const { data: br } = await supabase
+    .from("deck_branches")
+    .select("head_version_id")
+    .eq("id", branchId)
+    .maybeSingle()
+  const headId = br?.head_version_id as string | undefined
+
+  let q = supabase.from("deck_versions").select("*").eq("deck_id", deckId).order("created_at", { ascending: false })
+  if (headId) {
+    q = q.or(`branch_id.eq.${branchId},id.eq.${headId}`)
+  } else {
+    q = q.eq("branch_id", branchId)
+  }
+  const { data } = await q
+  return ((data ?? []) as DeckVersionRow[]).map(row => ({ ...row, tags: row.tags ?? [] }))
+}
+
+/** Full version graph for merge-base computation (same deck). */
+export async function getDeckVersionAncestry(
+  deckId: string
+): Promise<{ id: string; parent_id: string | null; snapshot: VersionSnapshot }[]> {
   const { data } = await supabase
     .from("deck_versions")
-    .select("*")
+    .select("id, parent_id, snapshot")
     .eq("deck_id", deckId)
-    .order("created_at", { ascending: false })
-  return ((data ?? []) as DeckVersionRow[]).map(row => ({ ...row, tags: row.tags ?? [] }))
+  return (data ?? []) as { id: string; parent_id: string | null; snapshot: VersionSnapshot }[]
 }
 
 export async function getVersion(versionId: string): Promise<DeckVersionRow | null> {
@@ -248,6 +202,15 @@ export async function revertToVersion(deckId: string, versionId: string): Promis
   if (error) return false
   const target = await getVersion(versionId)
   const label = target?.name ? `"${target.name}"` : new Date(target?.created_at ?? Date.now()).toLocaleString()
-  await createSnapshotVersion(deckId, null, false, `Reverted to ${label}`)
+  await createSnapshotVersion(deckId, null, false, `Reverted to ${label}`, versionId)
   return true
+}
+
+/** Record a new snapshot from the live deck (used after merge apply). */
+export async function appendDeckVersionSnapshot(
+  deckId: string,
+  summary: string,
+  explicitParentId?: string | null
+): Promise<DeckVersionRow | null> {
+  return createSnapshotVersion(deckId, null, false, summary, explicitParentId)
 }

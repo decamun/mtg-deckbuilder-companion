@@ -1,4 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { VersionSnapshot } from './versions'
+import {
+  buildMergedSnapshot,
+  collectAllMergeConflicts,
+  defaultConflictChoices,
+  findMergeBaseVersionId,
+  getSnapshotAtVersionId,
+  type ConflictChoices,
+} from './deck-branch-merge'
 import { getCard, type ScryfallCard } from './scryfall'
 
 /**
@@ -28,6 +37,7 @@ export interface DeckRow {
   primer_markdown: string
   created_at: string
   updated_at?: string
+  current_branch_id?: string | null
 }
 
 export interface DeckCardRow {
@@ -85,29 +95,24 @@ async function loadOwnedDeckCard(
   return { card: card as DeckCardRow, deck }
 }
 
-async function getLatestVersionId(
-  supabase: SupabaseClient,
-  deckId: string
-): Promise<string | null> {
-  const { data } = await supabase
-    .from('deck_versions')
-    .select('id')
-    .eq('deck_id', deckId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  return data?.id ?? null
-}
-
-async function hasVersionSince(
+async function hasVersionSinceOnBranch(
   supabase: SupabaseClient,
   deckId: string,
   sinceIso: string
 ): Promise<boolean> {
+  const { data: deck } = await supabase
+    .from('decks')
+    .select('current_branch_id')
+    .eq('id', deckId)
+    .maybeSingle()
+  const branchId = deck?.current_branch_id as string | undefined
+  if (!branchId) return false
+
   const { data } = await supabase
     .from('deck_versions')
     .select('id')
     .eq('deck_id', deckId)
+    .eq('branch_id', branchId)
     .gte('created_at', sinceIso)
     .limit(1)
     .maybeSingle()
@@ -121,48 +126,15 @@ async function recordDeckVersion(
   summary: string,
   sinceIso: string
 ): Promise<void> {
-  if (await hasVersionSince(supabase, deckId, sinceIso)) return
+  if (await hasVersionSinceOnBranch(supabase, deckId, sinceIso)) return
 
-  const deck = await loadOwnedDeck(supabase, userId, deckId)
-  const { data: cards, error: cardsErr } = await supabase
-    .from('deck_cards')
-    .select('scryfall_id, printing_scryfall_id, finish, oracle_id, name, quantity, zone, tags')
-    .eq('deck_id', deckId)
-  if (cardsErr) return
-
-  const snapshot = {
-    version: 1,
-    deck: {
-      name: deck.name,
-      description: deck.description ?? null,
-      format: deck.format ?? null,
-      budget_usd: deck.budget_usd ?? null,
-      bracket: deck.bracket ?? null,
-      commanders: deck.commander_scryfall_ids ?? [],
-      cover_image_scryfall_id: deck.cover_image_scryfall_id ?? null,
-      is_public: !!deck.is_public,
-    },
-    cards: (cards ?? []).map((c) => ({
-      scryfall_id: c.scryfall_id,
-      printing_scryfall_id: c.printing_scryfall_id ?? null,
-      finish: c.finish ?? 'nonfoil',
-      oracle_id: c.oracle_id ?? null,
-      name: c.name,
-      quantity: c.quantity,
-      zone: c.zone ?? 'mainboard',
-      tags: c.tags ?? [],
-    })),
-    primer_markdown: deck.primer_markdown ?? '',
-  }
-
-  const { error } = await supabase.from('deck_versions').insert({
-    deck_id: deckId,
-    parent_id: await getLatestVersionId(supabase, deckId),
-    name: null,
-    is_bookmarked: false,
-    change_summary: summary,
-    snapshot,
-    created_by: userId,
+  const { error } = await supabase.rpc('create_deck_version_snapshot', {
+    p_deck_id: deckId,
+    p_parent_id: null,
+    p_name: null,
+    p_is_bookmarked: false,
+    p_change_summary: summary,
+    p_created_by: userId,
   })
   if (error) console.warn('Failed to record deck version:', error.message)
 }
@@ -526,6 +498,187 @@ export async function patchPrimer(
     )
   const updated = current.replace(oldString, newString)
   return setPrimer(supabase, userId, deckId, updated)
+}
+
+export interface DeckBranchRow {
+  id: string
+  deck_id: string
+  name: string
+  head_version_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function listDeckBranches(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string
+): Promise<DeckBranchRow[]> {
+  await loadOwnedDeck(supabase, userId, deckId)
+  const { data, error } = await supabase
+    .from('deck_branches')
+    .select('*')
+    .eq('deck_id', deckId)
+    .order('name')
+  if (error) throw new DeckServiceError(error.message, 'db_error')
+  return (data ?? []) as DeckBranchRow[]
+}
+
+export async function createDeckBranch(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  name: string
+): Promise<DeckBranchRow> {
+  await loadOwnedDeck(supabase, userId, deckId)
+  const trimmed = name.trim().replace(/\s+/g, ' ')
+  if (!trimmed) throw new DeckServiceError('Branch name is required', 'invalid')
+
+  const { data: deck, error: deckErr } = await supabase
+    .from('decks')
+    .select('current_branch_id')
+    .eq('id', deckId)
+    .maybeSingle()
+  if (deckErr || !deck?.current_branch_id) {
+    throw new DeckServiceError('Deck has no active branch', 'invalid')
+  }
+
+  const { data: cur } = await supabase
+    .from('deck_branches')
+    .select('head_version_id')
+    .eq('id', deck.current_branch_id)
+    .maybeSingle()
+
+  const { data, error } = await supabase
+    .from('deck_branches')
+    .insert({
+      deck_id: deckId,
+      name: trimmed,
+      head_version_id: cur?.head_version_id ?? null,
+    })
+    .select()
+    .single()
+  if (error) throw new DeckServiceError(error.message, 'db_error')
+  return data as DeckBranchRow
+}
+
+export async function switchDeckBranch(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  branchId: string
+): Promise<void> {
+  await loadOwnedDeck(supabase, userId, deckId)
+  const { error } = await supabase.rpc('switch_deck_branch', {
+    p_deck_id: deckId,
+    p_branch_id: branchId,
+  })
+  if (error) throw new DeckServiceError(error.message, 'db_error')
+}
+
+export async function switchDeckBranchByName(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  branchName: string
+): Promise<void> {
+  await loadOwnedDeck(supabase, userId, deckId)
+  const { data, error } = await supabase
+    .from('deck_branches')
+    .select('id')
+    .eq('deck_id', deckId)
+    .eq('name', branchName.trim())
+    .maybeSingle()
+  if (error) throw new DeckServiceError(error.message, 'db_error')
+  if (!data?.id) throw new DeckServiceError(`Branch "${branchName}" not found`, 'not_found')
+  await switchDeckBranch(supabase, userId, deckId, data.id)
+}
+
+export async function mergeDeckBranchIntoCurrent(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  sourceBranchId: string,
+  conflictDefault: 'ours' | 'theirs',
+  conflictOverrides?: ConflictChoices
+): Promise<{ conflictCount: number }> {
+  const deck = await loadOwnedDeck(supabase, userId, deckId)
+  const destBranchId = deck.current_branch_id
+  if (!destBranchId) throw new DeckServiceError('Deck has no active branch', 'invalid')
+  if (sourceBranchId === destBranchId) {
+    throw new DeckServiceError('Cannot merge a branch into itself', 'invalid')
+  }
+
+  const { data: branches, error: brErr } = await supabase
+    .from('deck_branches')
+    .select('id, name, head_version_id')
+    .eq('deck_id', deckId)
+  if (brErr) throw new DeckServiceError(brErr.message, 'db_error')
+
+  const destBr = branches?.find((b) => b.id === destBranchId)
+  const srcBr = branches?.find((b) => b.id === sourceBranchId)
+  if (!destBr?.head_version_id) {
+    throw new DeckServiceError('Current branch has no version history to merge against', 'invalid')
+  }
+  if (!srcBr?.head_version_id) {
+    throw new DeckServiceError('Source branch has no snapshots yet', 'invalid')
+  }
+
+  const { data: graph, error: gErr } = await supabase
+    .from('deck_versions')
+    .select('id, parent_id, snapshot')
+    .eq('deck_id', deckId)
+  if (gErr) throw new DeckServiceError(gErr.message, 'db_error')
+
+  const rows = graph ?? []
+  const lcaId = findMergeBaseVersionId(rows, destBr.head_version_id, srcBr.head_version_id)
+  const baseSnap = getSnapshotAtVersionId(rows, lcaId)
+  const destRow = rows.find((r) => r.id === destBr.head_version_id)
+  const srcRow = rows.find((r) => r.id === srcBr.head_version_id)
+  const destSnap = destRow?.snapshot as VersionSnapshot | undefined
+  const srcSnap = srcRow?.snapshot as VersionSnapshot | undefined
+  if (!destSnap || !srcSnap) {
+    throw new DeckServiceError('Could not load branch snapshots', 'db_error')
+  }
+
+  const conflicts = collectAllMergeConflicts(baseSnap, destSnap, srcSnap)
+  const choices: ConflictChoices = {
+    ...defaultConflictChoices(conflicts, conflictDefault),
+    ...conflictOverrides,
+  }
+  const merged = buildMergedSnapshot(baseSnap, destSnap, srcSnap, choices)
+
+  const { error: e1 } = await supabase.rpc('apply_deck_snapshot_json', {
+    p_deck_id: deckId,
+    p_snapshot: merged,
+  })
+  if (e1) throw new DeckServiceError(e1.message, 'db_error')
+
+  const { error: e2 } = await supabase.rpc('create_deck_version_snapshot', {
+    p_deck_id: deckId,
+    p_parent_id: null,
+    p_name: null,
+    p_is_bookmarked: false,
+    p_change_summary: `Merged branch "${srcBr.name}" into "${destBr.name}"`,
+    p_created_by: userId,
+  })
+  if (e2) throw new DeckServiceError(e2.message, 'db_error')
+
+  return { conflictCount: conflicts.length }
+}
+
+export async function mergeDeckBranchByName(
+  supabase: SupabaseClient,
+  userId: string,
+  deckId: string,
+  sourceBranchName: string,
+  conflictDefault: 'ours' | 'theirs',
+  conflictOverrides?: ConflictChoices
+): Promise<{ conflictCount: number }> {
+  const branches = await listDeckBranches(supabase, userId, deckId)
+  const br = branches.find((b) => b.name === sourceBranchName)
+  if (!br) throw new DeckServiceError(`Branch "${sourceBranchName}" not found`, 'not_found')
+  return mergeDeckBranchIntoCurrent(supabase, userId, deckId, br.id, conflictDefault, conflictOverrides)
 }
 
 export { DeckServiceError }

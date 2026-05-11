@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { ManaText } from "@/components/mana/ManaText"
 import type { DeckCard } from "@/lib/types"
 import { getCardTypeGroup } from "@/lib/card-types"
+import { buildDiffEntries, type CardStack, type DiffEntry, type DiffStatus } from "@/lib/deck-diff-core"
 
 function primaryCardImage(card: DeckCard): string | undefined {
   return card.face_images?.[0]?.normal ?? card.face_images?.[0]?.small ?? card.image_url
@@ -23,121 +24,9 @@ type DiffSide = {
   cards: DeckCard[]
 }
 
-type DiffStatus = "added" | "removed" | "changed" | "unchanged"
-
-type CardStack = {
-  card: DeckCard
-  quantity: number
-}
-
-type DiffEntry = {
-  key: string
-  before?: CardStack
-  after?: CardStack
-  status: DiffStatus
-  typeGroup: string
-  sortName: string
-}
-
-
 interface DeckDiffViewProps {
   before: DiffSide
   after: DiffSide
-}
-
-const TYPE_ORDER = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land", "Other"]
-
-function typeGroup(card: DeckCard | undefined): string {
-  return getCardTypeGroup(card?.type_line)
-}
-
-function cardComparisonKey(card: DeckCard): string {
-  return [
-    card.zone || "mainboard",
-    card.oracle_id || card.scryfall_id,
-    card.effective_printing_id || card.printing_scryfall_id || card.scryfall_id,
-    card.finish || "nonfoil",
-  ].join("|")
-}
-
-function cardBaseKey(card: DeckCard): string {
-  return [
-    card.zone || "mainboard",
-    card.oracle_id || card.scryfall_id,
-    card.name,
-  ].join("|")
-}
-
-function aggregateCards(cards: DeckCard[]): Map<string, CardStack> {
-  const stacks = new Map<string, CardStack>()
-  for (const card of cards) {
-    const key = cardComparisonKey(card)
-    const existing = stacks.get(key)
-    const quantity = existing ? existing.quantity + card.quantity : card.quantity
-    stacks.set(key, {
-      card: { ...(existing?.card ?? card), quantity },
-      quantity,
-    })
-  }
-  return stacks
-}
-
-function createEntry(key: string, before?: CardStack, after?: CardStack): DiffEntry {
-  const status: DiffStatus = before && after
-    ? before.quantity === after.quantity && cardComparisonKey(before.card) === cardComparisonKey(after.card) ? "unchanged" : "changed"
-    : before ? "removed" : "added"
-  const displayCard = after?.card ?? before?.card
-
-  return {
-    key,
-    before,
-    after,
-    status,
-    typeGroup: typeGroup(displayCard),
-    sortName: displayCard?.name ?? "",
-  }
-}
-
-function buildDiff(beforeCards: DeckCard[], afterCards: DeckCard[]): DiffEntry[] {
-  const before = aggregateCards(beforeCards)
-  const after = aggregateCards(afterCards)
-  const entries: DiffEntry[] = []
-
-  for (const [key, beforeStack] of before) {
-    const afterStack = after.get(key)
-    if (!afterStack) continue
-    entries.push(createEntry(key, beforeStack, afterStack))
-    before.delete(key)
-    after.delete(key)
-  }
-
-  const afterByBase = new Map<string, Array<[string, CardStack]>>()
-  for (const entry of after) {
-    const key = cardBaseKey(entry[1].card)
-    afterByBase.set(key, [...(afterByBase.get(key) ?? []), entry])
-  }
-
-  for (const [beforeKey, beforeStack] of Array.from(before.entries())) {
-    const baseKey = cardBaseKey(beforeStack.card)
-    const candidates = afterByBase.get(baseKey) ?? []
-    const match = candidates.shift()
-    if (candidates.length === 0) afterByBase.delete(baseKey)
-    if (!match) continue
-
-    const [afterKey, afterStack] = match
-    entries.push(createEntry(`${beforeKey}=>${afterKey}`, beforeStack, afterStack))
-    before.delete(beforeKey)
-    after.delete(afterKey)
-  }
-
-  for (const [key, beforeStack] of before) entries.push(createEntry(key, beforeStack))
-  for (const [key, afterStack] of after) entries.push(createEntry(key, undefined, afterStack))
-
-  return entries.sort((a, b) => {
-    const typeDelta = TYPE_ORDER.indexOf(a.typeGroup) - TYPE_ORDER.indexOf(b.typeGroup)
-    if (typeDelta !== 0) return typeDelta
-    return a.sortName.localeCompare(b.sortName)
-  })
 }
 
 function statusClasses(status: DiffStatus, present: boolean): string {
@@ -187,7 +76,7 @@ function CardCell({
   onMouseEnter,
   onMouseLeave,
 }: {
-  stack?: CardStack
+  stack?: CardStack<DeckCard>
   status: DiffStatus
   onMouseEnter: (card: DeckCard, rect: DOMRect) => void
   onMouseLeave: () => void
@@ -243,7 +132,9 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
   const [changesOnly, setChangesOnly] = useState(true)
   const [hoverPreview, setHoverPreview] = useState<{ card: DeckCard; x: number; y: number } | null>(null)
 
-  const allEntries = useMemo(() => buildDiff(before.cards, after.cards), [before.cards, after.cards])
+  const allEntries = useMemo((): DiffEntry<DeckCard>[] => {
+    return buildDiffEntries<DeckCard>(before.cards, after.cards, (c) => getCardTypeGroup(c?.type_line))
+  }, [before.cards, after.cards])
   const entries = changesOnly ? allEntries.filter(entry => entry.status !== "unchanged") : allEntries
   const changedCount = allEntries.filter(entry => entry.status !== "unchanged").length
   const grouped = useMemo(() => {
@@ -313,13 +204,13 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
                     </div>
                     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
                       <CardCell
-                        stack={entry.before}
+                        stack={entry.before as CardStack<DeckCard> | undefined}
                         status={entry.status}
                         onMouseEnter={showHoverPreview}
                         onMouseLeave={hideHoverPreview}
                       />
                       <CardCell
-                        stack={entry.after}
+                        stack={entry.after as CardStack<DeckCard> | undefined}
                         status={entry.status}
                         onMouseEnter={showHoverPreview}
                         onMouseLeave={hideHoverPreview}

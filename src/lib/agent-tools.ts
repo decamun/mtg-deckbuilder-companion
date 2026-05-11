@@ -19,6 +19,9 @@ export const DECK_AGENT_MUTATING_TOOLS = new Set([
   'set_cover_image',
   'set_primer',
   'patch_primer',
+  'create_deck_branch',
+  'switch_deck_branch',
+  'merge_deck_branch',
 ])
 
 /**
@@ -284,6 +287,63 @@ export function buildDeckAgentTools(
       execute: async ({ old_string, new_string }) => {
         const row = await deckService.patchPrimer(supabase, userId, deckId, old_string, new_string)
         return { saved: true, length: row.primer_markdown.length }
+      },
+    }),
+
+    list_deck_branches: tool({
+      description:
+        'List named branches for this deck (default branch is `main`). Each branch has its own version timeline; edits apply to the branch selected in the editor.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const rows = await deckService.listDeckBranches(supabase, userId, deckId)
+        return rows.map((b) => ({
+          id: b.id,
+          name: b.name,
+          head_version_id: b.head_version_id,
+        }))
+      },
+    }),
+
+    create_deck_branch: tool({
+      description:
+        'Create a new branch from the tip of the current branch (Git-style fork). Does not switch branches; call switch_deck_branch to work on the new line.',
+      inputSchema: z.object({
+        name: z.string().min(1).describe('Branch name (unique per deck, e.g. "combo-line")'),
+      }),
+      execute: async ({ name }) => {
+        const row = await deckService.createDeckBranch(supabase, userId, deckId, name)
+        return { id: row.id, name: row.name, head_version_id: row.head_version_id }
+      },
+    }),
+
+    switch_deck_branch: tool({
+      description:
+        'Switch this deck\'s working copy to another branch by name (e.g. `main`). Loads that branch\'s latest snapshot into the live decklist.',
+      inputSchema: z.object({
+        branch_name: z.string().min(1).describe('Existing branch name for this deck'),
+      }),
+      execute: async ({ branch_name }) => {
+        await deckService.switchDeckBranchByName(supabase, userId, deckId, branch_name)
+        return { switched_to: branch_name }
+      },
+    }),
+
+    merge_deck_branch: tool({
+      description:
+        'Merge another branch into the current branch by name. Uses a three-way merge; when both sides changed the same card row, `when_conflicted` picks the default (`ours` = current branch head, `theirs` = source branch). For finer control use the deck editor merge UI.',
+      inputSchema: z.object({
+        source_branch: z.string().min(1).describe('Branch name to merge into the current branch'),
+        when_conflicted: z.enum(['ours', 'theirs']).default('ours'),
+      }),
+      execute: async ({ source_branch, when_conflicted }) => {
+        const result = await deckService.mergeDeckBranchByName(
+          supabase,
+          userId,
+          deckId,
+          source_branch,
+          when_conflicted
+        )
+        return { merged_from: source_branch, conflict_rows: result.conflictCount }
       },
     }),
   }

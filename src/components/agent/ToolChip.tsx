@@ -30,6 +30,10 @@ const TOOL_LABELS: Record<string, string> = {
   get_primer: "Reading primer",
   set_primer: "Writing primer",
   patch_primer: "Patching primer",
+  list_deck_branches: "Listing branches",
+  create_deck_branch: "Creating branch",
+  switch_deck_branch: "Switching branch",
+  merge_deck_branch: "Merging branch",
 }
 
 export function ToolChip({ toolName, state, inputSummary, outputSummary, errorText }: Props) {

@@ -19,6 +19,14 @@ export interface McpContext {
     setCoverImage: (deckId: string, scryfallId: string | null) => Promise<deckService.DeckRow>
     setPrimer: (deckId: string, markdown: string) => Promise<deckService.DeckRow>
     patchPrimer: (deckId: string, oldString: string, newString: string) => Promise<deckService.DeckRow>
+    listDeckBranches: (deckId: string) => Promise<deckService.DeckBranchRow[]>
+    createDeckBranch: (deckId: string, name: string) => Promise<deckService.DeckBranchRow>
+    switchDeckBranchByName: (deckId: string, branchName: string) => Promise<void>
+    mergeDeckBranchByName: (
+      deckId: string,
+      sourceBranchName: string,
+      conflictDefault: 'ours' | 'theirs'
+    ) => Promise<{ conflictCount: number }>
   }
 }
 
@@ -50,6 +58,12 @@ export function createMcpContext(supabase: SupabaseClient, userId: string): McpC
         deckService.setPrimer(supabase, userId, deckId, markdown),
       patchPrimer: (deckId, oldString, newString) =>
         deckService.patchPrimer(supabase, userId, deckId, oldString, newString),
+      listDeckBranches: (deckId) => deckService.listDeckBranches(supabase, userId, deckId),
+      createDeckBranch: (deckId, name) => deckService.createDeckBranch(supabase, userId, deckId, name),
+      switchDeckBranchByName: (deckId, branchName) =>
+        deckService.switchDeckBranchByName(supabase, userId, deckId, branchName),
+      mergeDeckBranchByName: (deckId, sourceBranchName, conflictDefault) =>
+        deckService.mergeDeckBranchByName(supabase, userId, deckId, sourceBranchName, conflictDefault),
     },
   }
 }

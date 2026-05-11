@@ -8,6 +8,8 @@ import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfa
 const MCP_ASSISTANT_INSTRUCTIONS = `
 You are the idlebrew deck-building assistant. Always prefer tools over guessing—call get_decklist, search_scryfall, list_printings, and other registered tools rather than assuming cards or counts.
 
+Branches: decks default to branch \`main\`. Use list_deck_branches, switch_deck_branch, create_deck_branch, and merge_deck_branch when the user works with parallel deck lines; merge_deck_branch defaults conflicting rows to the current branch unless you pass when_conflicted=theirs.
+
 Keep replies concise; summarize tool outcomes briefly. Do not paste large JSON decks unless the user asks.
 
 Deck card tags must stay consistent so filters group cards correctly. Avoid interchangeable synonyms for the same role (for example, pick landfall—not separate tags like "extra land drop"—for land-matter / extra-land packages unless the user dictates otherwise).
@@ -426,6 +428,75 @@ export function createMcpServer(context: McpContext) {
         return ok(`Primer patched (${row.primer_markdown.length} chars)`)
       } catch (e) {
         return errFromException('patch_primer failed', e)
+      }
+    }
+  )
+
+  server.tool(
+    'list_deck_branches',
+    'List named branches for a deck (default `main`). Each branch has its own version history.',
+    { deck_id: z.string().describe('UUID of the deck') },
+    async ({ deck_id }) => {
+      try {
+        const rows = await decks.listDeckBranches(deck_id)
+        return json(
+          'Branches:',
+          rows.map((b) => ({ id: b.id, name: b.name, head_version_id: b.head_version_id }))
+        )
+      } catch (e) {
+        return errFromException('list_deck_branches failed', e)
+      }
+    }
+  )
+
+  server.tool(
+    'create_deck_branch',
+    'Create a new branch from the current branch tip (does not switch to it).',
+    {
+      deck_id: z.string(),
+      name: z.string().min(1).describe('Unique branch name for this deck'),
+    },
+    async ({ deck_id, name }) => {
+      try {
+        const row = await decks.createDeckBranch(deck_id, name)
+        return ok(`Created branch "${row.name}" (id=${row.id})`)
+      } catch (e) {
+        return errFromException('create_deck_branch failed', e)
+      }
+    }
+  )
+
+  server.tool(
+    'switch_deck_branch',
+    'Switch the live decklist to another branch by name (loads that branch head).',
+    {
+      deck_id: z.string(),
+      branch_name: z.string().min(1),
+    },
+    async ({ deck_id, branch_name }) => {
+      try {
+        await decks.switchDeckBranchByName(deck_id, branch_name)
+        return ok(`Switched to branch "${branch_name}"`)
+      } catch (e) {
+        return errFromException('switch_deck_branch failed', e)
+      }
+    }
+  )
+
+  server.tool(
+    'merge_deck_branch',
+    'Merge a source branch into the deck\'s current branch. Three-way merge; when_conflicted defaults to ours for overlapping edits.',
+    {
+      deck_id: z.string(),
+      source_branch: z.string().min(1),
+      when_conflicted: z.enum(['ours', 'theirs']).default('ours'),
+    },
+    async ({ deck_id, source_branch, when_conflicted }) => {
+      try {
+        const r = await decks.mergeDeckBranchByName(deck_id, source_branch, when_conflicted)
+        return ok(`Merged "${source_branch}" (${r.conflictCount} conflict row(s) with default side)`)
+      } catch (e) {
+        return errFromException('merge_deck_branch failed', e)
       }
     }
   )

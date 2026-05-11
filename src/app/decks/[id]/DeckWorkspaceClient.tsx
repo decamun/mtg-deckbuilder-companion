@@ -2064,6 +2064,7 @@ export default function DeckWorkspaceClient({
             onViewVersion={(id) => { setTab('decklist'); void enterVersionView(id) }}
             onDiffWithVersion={(id, label) => { void openDiffWithVersion(id, label) }}
             onReverted={() => { setViewing(null); void fetchDeck() }}
+            onBranchSwitched={() => { void fetchDeck() }}
           />
         )}
         </div>

@@ -75,6 +75,8 @@ function summariseInput(toolName: string, input: unknown): string | undefined {
 }
 
 function summariseOutput(toolName: string, output: unknown): string | undefined {
+  if (toolName === "get_decklist" && Array.isArray(output)) return `${output.length} entries`
+  if (toolName === "list_deck_branches" && Array.isArray(output)) return `${output.length} branch(es)`
   if (typeof output !== "object" || !output) return undefined
   const o = output as Record<string, unknown>
   if (toolName === "search_scryfall") {
@@ -83,7 +85,9 @@ function summariseOutput(toolName: string, output: unknown): string | undefined 
     return `${cards} of ${total} returned`
   }
   if (toolName === "add_card") return `quantity now ${String(o.quantity ?? "?")}`
-  if (toolName === "get_decklist" && Array.isArray(o)) return `${o.length} entries`
+  if (toolName === "merge_deck_branch" && typeof o.conflict_rows === "number") {
+    return `${o.conflict_rows} conflict row(s)`
+  }
   if (toolName === "set_primer" || toolName === "patch_primer") {
     const length = typeof o.length === "number" ? o.length : "?"
     return `saved (${length} chars)`

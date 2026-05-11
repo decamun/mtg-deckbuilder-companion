@@ -1,25 +1,30 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { GitCompare, Plus } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { GitBranch, GitCompare, GitMerge, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import {
   createNamedVersion,
-  getVersions,
+  getVersionsForBranch,
   setVersionBookmark,
   setVersionTags,
   revertToVersion,
   type DeckVersionRow,
 } from "@/lib/versions"
 import { supabase } from "@/lib/supabase/client"
+import type { DeckBranchRow } from "@/lib/deck-branches"
+import { createBranch, listBranches, renameBranch, switchBranch } from "@/lib/deck-branches"
 import { VersionTimelineRow } from "./VersionTimelineRow"
 import { UnnamedVersionsGroup } from "./UnnamedVersionsGroup"
 import { AddNamedVersionDialog } from "./AddNamedVersionDialog"
+import { NewBranchDialog } from "./NewBranchDialog"
+import { BranchMergeDialog } from "./BranchMergeDialog"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface Props {
   deckId: string
@@ -27,44 +32,82 @@ interface Props {
   onViewVersion: (versionId: string) => void
   onDiffWithVersion: (versionId: string, label: string) => void
   onReverted: () => void
+  onBranchSwitched?: () => void
 }
 
 const BUILT_IN_VERSION_TAGS = ["paper-build"]
 
-const tagLabel = (tag: string) => tag === "paper-build" ? "Paper build" : tag
+const tagLabel = (tag: string) => (tag === "paper-build" ? "Paper build" : tag)
 
-export function VersionsTab({ deckId, isOwner, onViewVersion, onDiffWithVersion, onReverted }: Props) {
+export function VersionsTab({
+  deckId,
+  isOwner,
+  onViewVersion,
+  onDiffWithVersion,
+  onReverted,
+  onBranchSwitched,
+}: Props) {
   const [rows, setRows] = useState<DeckVersionRow[]>([])
+  const [branches, setBranches] = useState<DeckBranchRow[]>([])
+  const [currentBranchId, setCurrentBranchId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
+  const [newBranchOpen, setNewBranchOpen] = useState(false)
+  const [mergeOpen, setMergeOpen] = useState(false)
+  const [mergeSource, setMergeSource] = useState<DeckBranchRow | null>(null)
   const [revertTargetId, setRevertTargetId] = useState<string | null>(null)
   const [tagTarget, setTagTarget] = useState<DeckVersionRow | null>(null)
   const [customTag, setCustomTag] = useState("")
   const [savingTag, setSavingTag] = useState(false)
   const [reverting, setReverting] = useState(false)
+  const [renamingBranch, setRenamingBranch] = useState(false)
+  const [renameDraft, setRenameDraft] = useState("")
 
-  const refresh = async () => {
+  const currentBranch = useMemo(
+    () => branches.find((b) => b.id === currentBranchId) ?? null,
+    [branches, currentBranchId]
+  )
+
+  const refresh = useCallback(async () => {
     setLoading(true)
-    setRows(await getVersions(deckId))
+    const [{ data: deckRow }, branchList] = await Promise.all([
+      supabase.from("decks").select("current_branch_id").eq("id", deckId).maybeSingle(),
+      listBranches(deckId),
+    ])
+    const bid = (deckRow?.current_branch_id as string | undefined) ?? null
+    setCurrentBranchId(bid)
+    setBranches(branchList)
+    if (bid) {
+      setRows(await getVersionsForBranch(deckId, bid))
+    } else {
+      setRows([])
+    }
     setLoading(false)
-  }
+  }, [deckId])
 
   useEffect(() => {
-    void Promise.resolve().then(refresh)
-    const ch = supabase.channel(`deck-versions-${deckId}`)
+    void Promise.resolve().then(() => refresh())
+    const ch = supabase
+      .channel(`deck-versions-${deckId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "deck_versions", filter: `deck_id=eq.${deckId}` }, () => {
         void refresh()
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "deck_branches", filter: `deck_id=eq.${deckId}` }, () => {
+        void refresh()
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "decks", filter: `id=eq.${deckId}` }, () => {
+        void refresh()
+      })
       .subscribe()
-    return () => { void supabase.removeChannel(ch) }
-    // refresh intentionally reads the current deck id; resubscribe only when it changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deckId])
+    return () => {
+      void supabase.removeChannel(ch)
+    }
+  }, [deckId, refresh])
 
-  const bookmarked = useMemo(() => rows.filter(r => r.is_bookmarked && r.name), [rows])
+  const bookmarked = useMemo(() => rows.filter((r) => r.is_bookmarked && r.name), [rows])
   const knownTags = useMemo(() => {
     const tags = new Set(BUILT_IN_VERSION_TAGS)
-    rows.forEach(row => (row.tags ?? []).forEach(tag => tags.add(tag)))
+    rows.forEach((row) => (row.tags ?? []).forEach((tag) => tags.add(tag)))
     return Array.from(tags).sort((a, b) => {
       if (a === "paper-build") return -1
       if (b === "paper-build") return 1
@@ -81,15 +124,16 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onDiffWithVersion,
     return byTag
   }, [rows])
 
-  // Build timeline groups: named versions are top-level rows; unnamed rows
-  // between two named anchors are bucketed into a collapsed group.
   const groups = useMemo(() => {
     type Group = { kind: "named"; row: DeckVersionRow } | { kind: "unnamed"; rows: DeckVersionRow[] }
     const out: Group[] = []
     let bucket: DeckVersionRow[] = []
     for (const r of rows) {
       if (r.name) {
-        if (bucket.length) { out.push({ kind: "unnamed", rows: bucket }); bucket = [] }
+        if (bucket.length) {
+          out.push({ kind: "unnamed", rows: bucket })
+          bucket = []
+        }
         out.push({ kind: "named", row: r })
       } else {
         bucket.push(r)
@@ -115,7 +159,7 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onDiffWithVersion,
 
   const handleToggleTag = async (row: DeckVersionRow, tag: string) => {
     const tags = row.tags ?? []
-    const next = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag]
+    const next = tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag]
     await setVersionTags(row.id, next)
     toast.success(tags.includes(tag) ? `Removed ${tagLabel(tag)}` : `Marked as ${tagLabel(tag)}`)
     void refresh()
@@ -149,49 +193,189 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onDiffWithVersion,
     void refresh()
   }
 
+  const handleSelectBranch = async (branchId: string) => {
+    if (branchId === currentBranchId) return
+    const ok = await switchBranch(deckId, branchId)
+    if (!ok) {
+      toast.error("Failed to switch branch")
+      return
+    }
+    toast.success("Switched branch")
+    onBranchSwitched?.()
+    void refresh()
+  }
+
+  const handleCreateBranch = async (name: string) => {
+    const row = await createBranch(deckId, name)
+    if (!row) {
+      toast.error("Could not create branch (duplicate name?)")
+      return
+    }
+    toast.success(`Created branch "${row.name}"`)
+    void refresh()
+  }
+
+  const startRenameBranch = () => {
+    if (!currentBranch) return
+    setRenameDraft(currentBranch.name)
+    setRenamingBranch(true)
+  }
+
+  const commitRenameBranch = async () => {
+    if (!currentBranch) return
+    const next = renameDraft.trim()
+    if (!next || next === currentBranch.name) {
+      setRenamingBranch(false)
+      return
+    }
+    const ok = await renameBranch(currentBranch.id, next)
+    if (!ok) toast.error("Rename failed (name may already exist)")
+    else toast.success("Branch renamed")
+    setRenamingBranch(false)
+    void refresh()
+  }
+
+  const mergeableOthers = useMemo(
+    () => branches.filter((b) => b.id !== currentBranchId),
+    [branches, currentBranchId]
+  )
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold">Versions</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button size="sm" variant="outline" disabled={knownTags.every(tag => !latestByTag.has(tag))} />}>
-              <GitCompare className="w-3.5 h-3.5 mr-1.5" /> View diff with...
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-popover border-border text-foreground">
-              <DropdownMenuItem
-                disabled={!latestByTag.get("paper-build")}
-                onClick={() => {
-                  const row = latestByTag.get("paper-build")
-                  if (row) onDiffWithVersion(row.id, `Latest ${tagLabel("paper-build")}`)
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold">Versions</h2>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <GitBranch className="h-4 w-4 shrink-0" />
+            {renamingBranch && currentBranch ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  autoFocus
+                  className="h-8 w-44 bg-background/50 border-border"
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onBlur={() => void commitRenameBranch()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void commitRenameBranch()
+                    if (e.key === "Escape") setRenamingBranch(false)
+                  }}
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="font-medium text-foreground underline-offset-4 hover:underline disabled:opacity-50"
+                title="Double-click to rename"
+                disabled={!isOwner || !currentBranch}
+                onDoubleClick={() => {
+                  if (isOwner) startRenameBranch()
                 }}
               >
-                Latest paper-build
-              </DropdownMenuItem>
-              {knownTags.filter(tag => tag !== "paper-build").length > 0 && (
-                <>
-                  <DropdownMenuSeparator />
-                  {knownTags.filter(tag => tag !== "paper-build").map(tag => {
-                    const row = latestByTag.get(tag)
-                    return (
-                      <DropdownMenuItem
-                        key={tag}
-                        disabled={!row}
-                        onClick={() => { if (row) onDiffWithVersion(row.id, `Latest ${tagLabel(tag)}`) }}
-                      >
-                        Latest {tagLabel(tag)}
-                      </DropdownMenuItem>
-                    )
-                  })}
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {isOwner && (
-            <Button size="sm" onClick={() => setAddOpen(true)}>
-              <Plus className="w-3.5 h-3.5 mr-1.5" /> Add named version
-            </Button>
-          )}
+                {currentBranch?.name ?? "…"}
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={currentBranchId ?? undefined}
+              onValueChange={(v) => {
+                if (!v) return
+                void handleSelectBranch(v)
+              }}
+              disabled={!isOwner || branches.length === 0 || !currentBranchId}
+            >
+              <SelectTrigger className="w-[200px] bg-background/50 border-border">
+                <SelectValue placeholder="Branch" />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {isOwner && (
+              <Button size="sm" variant="outline" onClick={() => setNewBranchOpen(true)}>
+                <GitBranch className="w-3.5 h-3.5 mr-1.5" /> New branch
+              </Button>
+            )}
+            {isOwner && mergeableOthers.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button size="sm" variant="outline" disabled={!currentBranch?.head_version_id}>
+                      <GitMerge className="w-3.5 h-3.5 mr-1.5" /> Merge into {currentBranch?.name ?? "…"}
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="w-56 bg-popover border-border text-foreground">
+                  {mergeableOthers.map((b) => (
+                    <DropdownMenuItem
+                      key={b.id}
+                      disabled={!b.head_version_id}
+                      onClick={() => {
+                        setMergeSource(b)
+                        setMergeOpen(true)
+                      }}
+                    >
+                      {b.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button size="sm" variant="outline" disabled={knownTags.every((tag) => !latestByTag.has(tag))}>
+                    <GitCompare className="w-3.5 h-3.5 mr-1.5" /> View diff with...
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end" className="w-56 bg-popover border-border text-foreground">
+                <DropdownMenuItem
+                  disabled={!latestByTag.get("paper-build")}
+                  onClick={() => {
+                    const row = latestByTag.get("paper-build")
+                    if (row) onDiffWithVersion(row.id, `Latest ${tagLabel("paper-build")}`)
+                  }}
+                >
+                  Latest paper-build
+                </DropdownMenuItem>
+                {knownTags.filter((tag) => tag !== "paper-build").length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {knownTags
+                      .filter((tag) => tag !== "paper-build")
+                      .map((tag) => {
+                        const row = latestByTag.get(tag)
+                        return (
+                          <DropdownMenuItem
+                            key={tag}
+                            disabled={!row}
+                            onClick={() => {
+                              if (row) onDiffWithVersion(row.id, `Latest ${tagLabel(tag)}`)
+                            }}
+                          >
+                            Latest {tagLabel(tag)}
+                          </DropdownMenuItem>
+                        )
+                      })}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {isOwner && (
+              <Button size="sm" onClick={() => setAddOpen(true)}>
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> Add named version
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -199,7 +383,7 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onDiffWithVersion,
         <section>
           <h3 className="text-sm font-medium text-muted-foreground mb-2">Bookmarked</h3>
           <div className="grid sm:grid-cols-2 gap-2">
-            {bookmarked.map(r => (
+            {bookmarked.map((r) => (
               <VersionTimelineRow
                 key={r.id}
                 row={r}
@@ -221,7 +405,7 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onDiffWithVersion,
         {loading && <div className="text-sm text-muted-foreground">Loading…</div>}
         {!loading && rows.length === 0 && (
           <div className="text-sm text-muted-foreground italic">
-            No versions yet. Edits to this deck will appear here automatically.
+            No versions on this branch yet. Edits will appear here automatically.
           </div>
         )}
         <div className="space-y-2">
@@ -256,6 +440,20 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onDiffWithVersion,
       </section>
 
       <AddNamedVersionDialog open={addOpen} onOpenChange={setAddOpen} onSubmit={handleAddNamed} />
+      <NewBranchDialog open={newBranchOpen} onOpenChange={setNewBranchOpen} onSubmit={handleCreateBranch} />
+      <BranchMergeDialog
+        open={mergeOpen}
+        onOpenChange={setMergeOpen}
+        deckId={deckId}
+        branches={branches}
+        currentBranchId={currentBranchId ?? ""}
+        sourceBranch={mergeSource}
+        onMerged={() => {
+          onBranchSwitched?.()
+          void refresh()
+        }}
+      />
+
       <Dialog open={!!tagTarget} onOpenChange={(open) => { if (!open && !savingTag) { setTagTarget(null); setCustomTag("") } }}>
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
           <DialogHeader>
@@ -272,13 +470,19 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onDiffWithVersion,
               onChange={(event) => setCustomTag(event.target.value)}
               placeholder="e.g. tournament-list"
               className="bg-background/50 border-border"
-              onKeyDown={(event) => { if (event.key === "Enter") void submitCustomTag() }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void submitCustomTag()
+              }}
               autoFocus
             />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { setTagTarget(null); setCustomTag("") }} disabled={savingTag}>Cancel</Button>
-            <Button onClick={submitCustomTag} disabled={savingTag || !customTag.trim()}>{savingTag ? "Saving..." : "Save tag"}</Button>
+            <Button variant="ghost" onClick={() => { setTagTarget(null); setCustomTag("") }} disabled={savingTag}>
+              Cancel
+            </Button>
+            <Button onClick={submitCustomTag} disabled={savingTag || !customTag.trim()}>
+              {savingTag ? "Saving..." : "Save tag"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -291,8 +495,12 @@ export function VersionsTab({ deckId, isOwner, onViewVersion, onDiffWithVersion,
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setRevertTargetId(null)} disabled={reverting}>Cancel</Button>
-            <Button onClick={performRevert} disabled={reverting}>{reverting ? "Reverting..." : "Revert deck"}</Button>
+            <Button variant="ghost" onClick={() => setRevertTargetId(null)} disabled={reverting}>
+              Cancel
+            </Button>
+            <Button onClick={performRevert} disabled={reverting}>
+              {reverting ? "Reverting..." : "Revert deck"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
