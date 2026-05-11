@@ -421,7 +421,7 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen, onAssistantRes
           <div className="rounded-md border border-border bg-muted/40 p-3">
             <p className="mb-1 text-xs text-muted-foreground">MCP server URL</p>
             <code className="break-all font-mono text-xs text-foreground">
-              https://idlebrew.com/api/mcp
+              https://idlebrew.app/api/mcp
             </code>
           </div>
           <p className="text-xs text-muted-foreground">

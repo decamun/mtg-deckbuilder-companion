@@ -24,7 +24,7 @@ The Model Context Protocol (MCP) is an open standard that lets AI assistants tal
 The idlebrew MCP server endpoint is:
 
 \`\`\`
-https://idlebrew.com/api/mcp
+https://idlebrew.app/api/mcp
 \`\`\`
 
 Once connected your assistant can search Scryfall, list your decks, read full decklists, add or remove cards, retag cards, change printings and finishes, update commanders, and write or edit deck primers in Markdown — the same operations available in the in-browser deck assistant, both interfaces staying in sync.
@@ -69,16 +69,18 @@ Add the idlebrew entry to \`mcpServers\`:
 {
   "mcpServers": {
     "idlebrew": {
-      "type": "streamable-http",
-      "url": "https://idlebrew.com/api/mcp"
+      "type": "http",
+      "url": "https://idlebrew.app/api/mcp"
     }
   }
 }
 \`\`\`
 
+Use \`"type": "http"\` exactly here — Claude Desktop rejects \`"streamable-http"\` as an invalid server type.
+
 If you already have other servers in \`mcpServers\`, add \`"idlebrew"\` alongside them; do not replace the whole file.
 
-**Fully quit and reopen Claude Desktop** (a new conversation alone is not enough). On first connect a browser tab will open at \`idlebrew.com/oauth/authorize\` asking you to sign in and approve access. After you click **Authorize**, the tab redirects back to Claude Desktop and the idlebrew tools appear in the tools panel (the plug icon). Try asking:
+**Fully quit and reopen Claude Desktop** (a new conversation alone is not enough). On first connect a browser tab will open at \`idlebrew.app/oauth/authorize\` asking you to sign in and approve access. After you click **Authorize**, the tab redirects back to Claude Desktop and the idlebrew tools appear in the tools panel (the plug icon). Try asking:
 
 > *"List my idlebrew decks."*
 
@@ -93,7 +95,7 @@ Claude Code (the CLI tool) has its own HTTP transport that sends headers directl
 ### Option A: CLI command (quickest)
 
 \`\`\`bash
-claude mcp add --transport http idlebrew https://idlebrew.com/api/mcp \\
+claude mcp add --transport http idlebrew https://idlebrew.app/api/mcp \\
   --header "Authorization: Bearer YOUR_KEY"
 \`\`\`
 
@@ -101,7 +103,7 @@ This writes to \`~/.claude/mcp.json\` (global, available in every project). To s
 
 \`\`\`bash
 claude mcp add --transport http --scope project idlebrew \\
-  https://idlebrew.com/api/mcp \\
+  https://idlebrew.app/api/mcp \\
   --header "Authorization: Bearer YOUR_KEY"
 \`\`\`
 
@@ -118,7 +120,7 @@ Both files use the same format:
   "mcpServers": {
     "idlebrew": {
       "type": "http",
-      "url": "https://idlebrew.com/api/mcp",
+      "url": "https://idlebrew.app/api/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_KEY"
       }
@@ -152,7 +154,7 @@ Once connected you can prompt Claude Code with things like:
   "mcpServers": {
     "idlebrew": {
       "type": "streamable-http",
-      "url": "https://idlebrew.com/api/mcp"
+      "url": "https://idlebrew.app/api/mcp"
     }
   }
 }
@@ -162,7 +164,7 @@ Once connected you can prompt Claude Code with things like:
 
 You can also use the GUI: open **Cursor Settings → MCP → Add new global MCP server** and paste the JSON block into the editor.
 
-After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shift+P\` / \`Cmd+Shift+P\`). Cursor will open a browser tab to \`idlebrew.com/oauth/authorize\` for sign-in. After authorizing, the tab returns to Cursor and the idlebrew tools become available in the Agent chat. Verify with:
+After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shift+P\` / \`Cmd+Shift+P\`). Cursor will open a browser tab to \`idlebrew.app/oauth/authorize\` for sign-in. After authorizing, the tab returns to Cursor and the idlebrew tools become available in the Agent chat. Verify with:
 
 > *"What decks do I have on idlebrew?"*
 
@@ -194,7 +196,7 @@ After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shi
 
 ## Troubleshooting
 
-**Browser tab didn't open** (Claude Desktop / Cursor OAuth) — The client should open \`idlebrew.com/oauth/authorize\` automatically on first connect. If nothing happens, fully quit the client and reopen it. If your default browser is set to something the OS doesn't recognize, set a real browser as default and retry.
+**Browser tab didn't open** (Claude Desktop / Cursor OAuth) — The client should open \`idlebrew.app/oauth/authorize\` automatically on first connect. If nothing happens, fully quit the client and reopen it. If your default browser is set to something the OS doesn't recognize, set a real browser as default and retry.
 
 **OAuth tab loops or shows "Unknown client"** — Each Claude Desktop or Cursor install registers itself dynamically the first time it connects. If the metadata gets out of sync, delete the idlebrew entry from your config, fully quit the client, then re-add the entry. The next connect will register a fresh client.
 
@@ -203,6 +205,8 @@ After saving, run **Cursor: Reload Window** from the command palette (\`Ctrl+Shi
 **429 Too Many Requests** — The server enforces a limit of 120 requests per minute per credential. Wait a minute and retry, or break your work into smaller prompts.
 
 **Tools not appearing after a config change** — Claude Desktop requires a full quit-and-reopen. Cursor requires **Reload Window**. Claude Code picks up changes at the next session start; run \`claude mcp list\` to confirm the entry exists before opening a session.
+
+**"Skipped invalid MCP server config entries" in Claude logs** — Re-check the Claude Desktop JSON shape. For remote idlebrew connections, the server block must use \`"type": "http"\` with the MCP URL.
 
 **Wrong deck being modified** — Each connection is scoped to the account that authorized it. Confirm you are logged in to the same idlebrew account that owns the deck. To switch accounts, revoke the connection on the profile page and re-authorize from the client.
 `,

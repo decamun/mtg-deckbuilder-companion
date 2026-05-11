@@ -175,7 +175,7 @@ export function ApiKeysCard() {
               <div className="mt-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
                 <p className="mb-1 text-muted-foreground">MCP server URL</p>
                 <code className="break-all font-mono text-foreground">
-                  https://idlebrew.com/api/mcp
+                  https://idlebrew.app/api/mcp
                 </code>
               </div>
               <Link
