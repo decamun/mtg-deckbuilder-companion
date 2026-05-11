@@ -64,7 +64,7 @@ export function BlogSection() {
       </p>
 
       {listMode === "full" && (
-        <div className="sticky top-14 z-40 -mx-4 mb-8 border-b border-border/70 bg-background/90 px-4 py-2.5 shadow-sm backdrop-blur-md supports-backdrop-filter:bg-background/75">
+        <div className="sticky top-14 z-40 -mx-4 mb-8 border-b border-border/70 bg-background/90 px-4 py-2.5 backdrop-blur-md supports-backdrop-filter:bg-background/75">
           <Button type="button" variant="outline" size="sm" onClick={stopShowingAll}>
             <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden />
             Stop showing all
