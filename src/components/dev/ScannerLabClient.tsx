@@ -47,6 +47,7 @@ import { loadUserDeckScryfallPrintings } from "@/lib/scanner-deck-load"
 import {
   createOcrFusePoolIndex,
   formatUnknownScannerError,
+  normalizeOcrTextForFuseSearch,
   runCardOcrFuzzySearch,
   searchOcrPoolHits,
   tesseractReadText,
@@ -89,6 +90,7 @@ export function ScannerLabClient() {
   const ocrFuseRef = useRef<ReturnType<typeof createOcrFusePoolIndex> | null>(null)
   const continuousOcrInFlightRef = useRef(false)
   const continuousLastOcrAtRef = useRef(0)
+  const refineLiveLastAtRef = useRef(0)
 
   const [log, setLog] = useState<LogEntry[]>([])
   const pushLog = useCallback((level: LogEntry["level"], message: string) => {
@@ -131,6 +133,7 @@ export function ScannerLabClient() {
   const [refineDebug, setRefineDebug] = useState<EdgeRefinementDebug | null>(null)
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrRaw, setOcrRaw] = useState("")
+  const [ocrWhitespaceQuery, setOcrWhitespaceQuery] = useState("")
   const [ocrQuery, setOcrQuery] = useState("")
   const [ocrHits, setOcrHits] = useState<OcrSearchHit[]>([])
   const [videoDims, setVideoDims] = useState<{ w: number; h: number } | null>(null)
@@ -206,6 +209,7 @@ export function ScannerLabClient() {
       setLastHashInfo(null)
       setRefineDebug(null)
       setOcrRaw("")
+      setOcrWhitespaceQuery("")
       setOcrQuery("")
       setOcrHits([])
       const rows: ReferenceRow[] = []
@@ -452,6 +456,11 @@ export function ScannerLabClient() {
         return
       }
       const refined = refineCardCanvasByEdges(raw)
+      const rLive = performance.now()
+      if (rLive - refineLiveLastAtRef.current >= 220) {
+        refineLiveLastAtRef.current = rLive
+        setRefineDebug(analyzeEdgeRefinementDebug(raw))
+      }
       const packed = computeDctPhash256FromCanvas(refined)
       const ranked = rankPhashMatches(packed, okPhashRefs)
       const best = ranked[0]
@@ -508,15 +517,22 @@ export function ScannerLabClient() {
         void (async () => {
           try {
             if (!sctx) return
-            const { rawText, query } = await tesseractReadText(snap)
+            const { rawText, query: whitespaceQuery } = await tesseractReadText(snap)
             if (cancelled) return
-            const hits = searchOcrPoolHits(fuse, query, 10)
+            const fuseQuery = normalizeOcrTextForFuseSearch(whitespaceQuery)
+            const hits = searchOcrPoolHits(fuse, whitespaceQuery, 10)
+            if (!cancelled) {
+              setOcrRaw(rawText)
+              setOcrWhitespaceQuery(whitespaceQuery)
+              setOcrQuery(fuseQuery)
+              setOcrHits(hits)
+            }
             const top = hits[0]
             const runner = hits[1]
             const scoreOk =
               top?.fuseScore != null &&
               top.fuseScore <= continuousOcrFuseScoreMax &&
-              query.length >= continuousOcrMinQueryChars
+              fuseQuery.length >= continuousOcrMinQueryChars
             const gapOk =
               runner == null ||
               runner.fuseScore == null ||
@@ -526,9 +542,6 @@ export function ScannerLabClient() {
               stopRaf()
               if (!cancelled) {
                 setContinuousScanning(false)
-                setOcrRaw(rawText)
-                setOcrQuery(query)
-                setOcrHits(hits)
                 runAnalysis(refined, "live camera (continuous OCR hit)", vw, vh, raw)
                 queueMicrotask(() => {
                   window.confirm(
@@ -536,7 +549,7 @@ export function ScannerLabClient() {
                       "Continuous scan: OCR / fuzzy text threshold reached.",
                       `Best match: ${top.name}`,
                       top.fuseScore != null ? `Fuse score ${top.fuseScore.toFixed(4)} (lower is better)` : "",
-                      `OCR query length: ${query.length} characters`,
+                      `Fuse query length: ${fuseQuery.length} characters (alphanumeric filter)`,
                       runner?.fuseScore != null && top.fuseScore != null
                         ? `Gap to second: ${(runner.fuseScore - top.fuseScore).toFixed(4)}`
                         : "",
@@ -600,9 +613,10 @@ export function ScannerLabClient() {
     setOcrLoading(true)
     try {
       const pool = okPhashRefs.map(r => ({ id: r.id, name: r.name, searchText: r.searchText }))
-      const { rawText, query, hits } = await runCardOcrFuzzySearch(lastPreviewUrl, pool)
+      const { rawText, whitespaceQuery, fuseQuery, hits } = await runCardOcrFuzzySearch(lastPreviewUrl, pool)
       setOcrRaw(rawText)
-      setOcrQuery(query)
+      setOcrWhitespaceQuery(whitespaceQuery)
+      setOcrQuery(fuseQuery)
       setOcrHits(hits)
       pushLog("info", `OCR + fuzzy search: ${hits.length} hits (Tesseract first run may download language data).`)
     } catch (e) {
@@ -784,15 +798,15 @@ export function ScannerLabClient() {
                 <input
                   id="ocr-fmax"
                   type="range"
-                  min={0.12}
-                  max={0.55}
+                  min={0.01}
+                  max={0.98}
                   step={0.01}
                   value={continuousOcrFuseScoreMax}
                   onChange={e => setContinuousOcrFuseScoreMax(Number(e.target.value))}
                   className="w-full"
                   disabled={!continuousOcrInLoop}
                 />
-                <p className="text-[11px] text-muted-foreground">Lower is a better text match. Require best ≤ this value.</p>
+                <p className="text-[11px] text-muted-foreground">Lower is a better text match. Require best ≤ this value (range 0.01–0.98).</p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
@@ -803,7 +817,7 @@ export function ScannerLabClient() {
                   id="ocr-fgap"
                   type="range"
                   min={0}
-                  max={0.22}
+                  max={0.45}
                   step={0.01}
                   value={continuousOcrFuseGapMin}
                   onChange={e => setContinuousOcrFuseGapMin(Number(e.target.value))}
@@ -1033,6 +1047,7 @@ export function ScannerLabClient() {
                   setLastHashInfo(null)
                   setRefineDebug(null)
                   setOcrRaw("")
+                  setOcrWhitespaceQuery("")
                   setOcrQuery("")
                   setOcrHits([])
                   pushLog("info", "Cleared last capture analytics.")
@@ -1178,88 +1193,126 @@ export function ScannerLabClient() {
         </div>
       )}
 
-      {(refineDebug || ocrRaw || ocrHits.length > 0) && (
+      {(refineDebug ||
+        continuousScanning ||
+        ocrRaw ||
+        ocrWhitespaceQuery ||
+        ocrQuery ||
+        ocrHits.length > 0) && (
         <div className="grid gap-4 xl:grid-cols-2">
-          {refineDebug && (
+          {(refineDebug || continuousScanning) && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Edge refinement debug</CardTitle>
-                <CardDescription>
-                  Built from the <strong className="font-normal">raw</strong> 5:7 slot (before letterbox re-fit). Threshold = mean + k·σ on Sobel(inner); strong pixels {refineDebug.strongEdgeCount}.{" "}
-                  {refineDebug.applied ? "Refine applied." : `Skipped: ${refineDebug.skipReason ?? "unknown"}`}
-                </CardDescription>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle className="text-base">Edge refinement debug</CardTitle>
+                  {continuousScanning ? (
+                    <Badge variant="secondary" className="font-mono text-[10px]">
+                      Live ~4–5 Hz
+                    </Badge>
+                  ) : null}
+                </div>
+                {refineDebug ? (
+                  <CardDescription>
+                    Built from the <strong className="font-normal">raw</strong> 5:7 slot (before letterbox re-fit). Threshold = mean + k·σ on Sobel(inner); strong pixels {refineDebug.strongEdgeCount}.{" "}
+                    {refineDebug.applied ? "Refine applied." : `Skipped: ${refineDebug.skipReason ?? "unknown"}`}
+                  </CardDescription>
+                ) : (
+                  <CardDescription>
+                    Throttled snapshots (~220ms) while continuous scan is running.
+                  </CardDescription>
+                )}
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
-                <div className="font-mono text-muted-foreground">
-                  thresh {refineDebug.thresh.toFixed(2)} · inner mean|σ mag {refineDebug.innerSample.meanMag.toFixed(2)} |{" "}
-                  {refineDebug.innerSample.stdMag.toFixed(2)}
-                </div>
-                {refineDebug.rawBbox && (
-                  <div className="font-mono text-muted-foreground">
-                    raw bbox px: {refineDebug.rawBbox.minX},{refineDebug.rawBbox.minY} → {refineDebug.rawBbox.maxX},{refineDebug.rawBbox.maxY}
-                  </div>
-                )}
-                {refineDebug.finalBbox && (
-                  <div className="font-mono text-muted-foreground">
-                    final 5:7 box: {refineDebug.finalBbox.sx},{refineDebug.finalBbox.sy} size {refineDebug.finalBbox.sw}×{refineDebug.finalBbox.sh}
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {[
-                    ["Raw slot", refineDebug.dataUrls.rawSlot],
-                    ["High-pass", refineDebug.dataUrls.highPass],
-                    ["Sobel magnitude", refineDebug.dataUrls.sobelMag],
-                    ["Strong mask", refineDebug.dataUrls.strongMask],
-                    ["BBox overlay", refineDebug.dataUrls.bboxOverlay],
-                    ...(refineDebug.dataUrls.refinedSlot ? [["Refined out", refineDebug.dataUrls.refinedSlot]] as const : []),
-                  ].map(([label, src]) => (
-                    <div key={label} className="space-y-1">
-                      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
-                      <img src={src} alt="" className="w-full rounded border border-border bg-black object-contain" />
+                {refineDebug ? (
+                  <>
+                    <div className="font-mono text-muted-foreground">
+                      thresh {refineDebug.thresh.toFixed(2)} · inner mean|σ mag {refineDebug.innerSample.meanMag.toFixed(2)} |{" "}
+                      {refineDebug.innerSample.stdMag.toFixed(2)}
                     </div>
-                  ))}
-                </div>
+                    {refineDebug.rawBbox && (
+                      <div className="font-mono text-muted-foreground">
+                        raw bbox px: {refineDebug.rawBbox.minX},{refineDebug.rawBbox.minY} → {refineDebug.rawBbox.maxX},{refineDebug.rawBbox.maxY}
+                      </div>
+                    )}
+                    {refineDebug.finalBbox && (
+                      <div className="font-mono text-muted-foreground">
+                        final 5:7 box: {refineDebug.finalBbox.sx},{refineDebug.finalBbox.sy} size {refineDebug.finalBbox.sw}×{refineDebug.finalBbox.sh}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {[
+                        ["Raw slot", refineDebug.dataUrls.rawSlot],
+                        ["High-pass", refineDebug.dataUrls.highPass],
+                        ["Sobel magnitude", refineDebug.dataUrls.sobelMag],
+                        ["Strong mask", refineDebug.dataUrls.strongMask],
+                        ["BBox overlay", refineDebug.dataUrls.bboxOverlay],
+                        ...(refineDebug.dataUrls.refinedSlot ? [["Refined out", refineDebug.dataUrls.refinedSlot]] as const : []),
+                      ].map(([label, src]) => (
+                        <div key={label} className="space-y-1">
+                          <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
+                          <img src={src} alt="" className="w-full rounded border border-border bg-black object-contain" />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Waiting for the first edge snapshot…</p>
+                )}
               </CardContent>
             </Card>
           )}
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">OCR + fuzzy pool</CardTitle>
-              <CardDescription>
-                Tesseract reads the <strong className="font-normal">last JPEG preview</strong> (refined crop). Fuse.js ranks loaded references on name + type line + oracle text. First run downloads WASM/data (~few MB).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button type="button" variant="secondary" size="sm" onClick={() => void runOcrOnLastCapture()} disabled={ocrLoading || !lastPreviewUrl || okPhashRefs.length === 0}>
-                {ocrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Run OCR on last capture
-              </Button>
-              {(ocrRaw || ocrQuery) && (
-                <div className="rounded-md border border-border bg-muted/20 p-2 font-mono text-[11px]">
-                  <div className="text-muted-foreground">Query (normalized)</div>
-                  <div className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap">{ocrQuery || "—"}</div>
-                  <div className="mt-2 text-muted-foreground">Raw OCR</div>
-                  <div className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap">{ocrRaw || "—"}</div>
+          {((continuousScanning && continuousOcrInLoop) || ocrRaw || ocrWhitespaceQuery || ocrQuery || ocrHits.length > 0) && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle className="text-base">OCR + fuzzy pool</CardTitle>
+                  {continuousScanning && continuousOcrInLoop ? (
+                    <Badge variant="secondary" className="font-mono text-[10px]">
+                      Live (OCR interval)
+                    </Badge>
+                  ) : null}
                 </div>
-              )}
-              {ocrHits.length > 0 && (
-                <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
-                  {ocrHits.map((h, i) => (
-                    <li key={`${h.id}-${i}`} className="rounded border border-border/60 bg-card/40 p-2">
-                      <div className="font-medium">
-                        #{i + 1} {h.name}
-                      </div>
-                      <div className="font-mono text-[11px] text-muted-foreground">
-                        fuse score {h.fuseScore != null ? h.fuseScore.toFixed(4) : "—"} · id {h.id}
-                      </div>
-                      <div className="mt-1 line-clamp-3 text-xs text-muted-foreground">{h.snippet}</div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
+                <CardDescription>
+                  Manual run uses the last JPEG preview; continuous scan pushes each throttled Tesseract pass into this panel. Fuse search strips to Unicode letters and digits (NFKC) before matching name, type line, and oracle text.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button type="button" variant="secondary" size="sm" onClick={() => void runOcrOnLastCapture()} disabled={ocrLoading || !lastPreviewUrl || okPhashRefs.length === 0}>
+                  {ocrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Run OCR on last capture
+                </Button>
+                {continuousScanning && continuousOcrInLoop && !ocrRaw && !ocrWhitespaceQuery && !ocrQuery && ocrHits.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Waiting for the first throttled OCR pass…</p>
+                ) : null}
+                {(ocrRaw || ocrWhitespaceQuery || ocrQuery) && (
+                  <div className="rounded-md border border-border bg-muted/20 p-2 font-mono text-[11px]">
+                    <div className="text-muted-foreground">Fuse query (letters and digits only)</div>
+                    <div className="mt-1 max-h-20 overflow-y-auto whitespace-pre-wrap break-all">{ocrQuery || "—"}</div>
+                    <div className="mt-2 text-muted-foreground">Whitespace-normalized OCR</div>
+                    <div className="mt-1 max-h-20 overflow-y-auto whitespace-pre-wrap break-all">{ocrWhitespaceQuery || "—"}</div>
+                    <div className="mt-2 text-muted-foreground">Raw OCR</div>
+                    <div className="mt-1 max-h-28 overflow-y-auto whitespace-pre-wrap break-all">{ocrRaw || "—"}</div>
+                  </div>
+                )}
+                {ocrHits.length > 0 && (
+                  <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+                    {ocrHits.map((h, i) => (
+                      <li key={`${h.id}-${i}`} className="rounded border border-border/60 bg-card/40 p-2">
+                        <div className="font-medium">
+                          #{i + 1} {h.name}
+                        </div>
+                        <div className="font-mono text-[11px] text-muted-foreground">
+                          fuse score {h.fuseScore != null ? h.fuseScore.toFixed(4) : "—"} · id {h.id}
+                        </div>
+                        <div className="mt-1 line-clamp-3 text-xs text-muted-foreground">{h.snippet}</div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 

@@ -26,12 +26,35 @@ export const OCR_FUSE_POOL_OPTIONS: IFuseOptions<OcrPoolEntry> = {
   includeScore: true,
 }
 
+/**
+ * Collapse OCR noise (punctuation, symbols, brackets) so Fuse matches oracle text.
+ * Keeps Unicode letters and numbers; NFKC helps full-width / odd apostrophe forms.
+ */
+export function normalizeOcrTextForFuseSearch(raw: string): string {
+  const spaced = raw.replace(/\s+/g, " ").trim()
+  if (!spaced) return ""
+  try {
+    return spaced
+      .normalize("NFKC")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 4000)
+  } catch {
+    return spaced
+      .replace(/[^a-zA-Z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 4000)
+  }
+}
+
 export function createOcrFusePoolIndex(pool: ReadonlyArray<OcrPoolEntry>): Fuse<OcrPoolEntry> {
   return new Fuse([...pool], OCR_FUSE_POOL_OPTIONS)
 }
 
-export function searchOcrPoolHits(fuse: Fuse<OcrPoolEntry>, query: string, limit: number): OcrSearchHit[] {
-  const q = query.replace(/\s+/g, " ").trim()
+export function searchOcrPoolHits(fuse: Fuse<OcrPoolEntry>, ocrOutput: string, limit: number): OcrSearchHit[] {
+  const q = normalizeOcrTextForFuseSearch(ocrOutput)
   if (q.length < 2) return []
   return fuse.search(q, { limit }).map(r => ({
     id: r.item.id,
@@ -84,13 +107,14 @@ export async function runCardOcrFuzzySearch(
   image: string | HTMLCanvasElement,
   pool: OcrPoolEntry[],
   maxResults = 12
-): Promise<{ rawText: string; query: string; hits: OcrSearchHit[] }> {
+): Promise<{ rawText: string; whitespaceQuery: string; fuseQuery: string; hits: OcrSearchHit[] }> {
   if (pool.length === 0) {
-    return { rawText: "", query: "", hits: [] }
+    return { rawText: "", whitespaceQuery: "", fuseQuery: "", hits: [] }
   }
 
-  const { rawText, query } = await tesseractReadText(image)
+  const { rawText, query: whitespaceQuery } = await tesseractReadText(image)
+  const fuseQuery = normalizeOcrTextForFuseSearch(whitespaceQuery)
   const fuse = createOcrFusePoolIndex(pool)
-  const hits = searchOcrPoolHits(fuse, query, maxResults)
-  return { rawText, query, hits }
+  const hits = searchOcrPoolHits(fuse, whitespaceQuery, maxResults)
+  return { rawText, whitespaceQuery, fuseQuery, hits }
 }
