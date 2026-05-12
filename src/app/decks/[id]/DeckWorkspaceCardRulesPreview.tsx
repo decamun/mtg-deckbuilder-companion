@@ -47,24 +47,26 @@ export function DeckWorkspaceCardRulesPreview({
 }) {
   if (!fields) {
     return (
-      <div className={cn("flex min-h-[5.5rem] items-center text-sm italic text-muted-foreground", className)}>
-        Hover a card in your decklist to read its rules text here.
+      <div className={cn("flex h-full min-h-0 flex-col", className)}>
+        <div className="flex flex-1 items-center justify-center text-sm italic text-muted-foreground">
+          Hover a card in your decklist to read its rules text here.
+        </div>
       </div>
     )
   }
 
   return (
-    <div className={cn("flex min-h-[5.5rem] flex-col gap-2 text-sm", className)}>
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+    <div className={cn("flex h-full min-h-0 flex-col gap-2 text-sm", className)}>
+      <div className="flex shrink-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <ManaText text={fields.name} className="text-base font-semibold text-foreground" />
         {fields.mana_cost ? <ManaText text={fields.mana_cost} className="text-sm text-muted-foreground" /> : null}
       </div>
       {fields.type_line ? (
-        <div className="border-b border-border pb-1.5 text-xs text-muted-foreground">
+        <div className="shrink-0 border-b border-border pb-1.5 text-xs text-muted-foreground">
           <ManaText text={fields.type_line} />
         </div>
       ) : null}
-      <div className="max-h-[min(42vh,15rem)] min-h-0 flex-1 overflow-y-auto text-[13px] leading-relaxed text-foreground">
+      <div className="min-h-0 flex-1 overflow-y-auto text-[13px] leading-relaxed text-foreground">
         {fields.oracle_text?.trim() ? (
           <ManaText text={fields.oracle_text} className="whitespace-pre-wrap" />
         ) : (

@@ -103,13 +103,20 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
   } = props
 
   const previewFields = rulesHoverPayloadToFields(rulesHover)
+  const hasCommanders = commanderCards.length > 0
 
   return (
     <>
-      <div className="sticky top-0 z-20 -mx-6 mb-6 border-b border-border bg-background/95 px-6 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4">
-          {commanderCards.length > 0 && (
-            <div className="flex shrink-0 flex-wrap gap-3">
+      <div className="sticky top-0 z-20 -mx-6 mb-6 border-b border-border bg-background/95 px-6 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/80 [--deck-rules-row-h:min(42vh,15rem)] [--deck-rules-cmd-ch:7.25rem]">
+        <div
+          className={`flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:min-h-[var(--deck-rules-row-h)] ${
+            hasCommanders
+              ? "min-h-[calc(var(--deck-rules-cmd-ch)+0.75rem+var(--deck-rules-row-h))]"
+              : "min-h-[var(--deck-rules-row-h)]"
+          }`}
+        >
+          {hasCommanders && (
+            <div className="flex shrink-0 flex-wrap content-center items-center gap-3 lg:min-h-0 lg:self-stretch lg:py-0.5">
               {commanderCards.map((c) => (
                 <button
                   key={c.id}
@@ -137,8 +144,8 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
               ))}
             </div>
           )}
-          <div className="min-h-0 min-w-0 flex-1 rounded-xl border border-border bg-card/60 p-3 shadow-inner">
-            <DeckWorkspaceCardRulesPreview fields={previewFields} />
+          <div className="flex h-[var(--deck-rules-row-h)] min-h-0 w-full min-w-0 flex-1 flex-col rounded-xl border border-border bg-card/60 p-3 shadow-inner lg:shrink-0">
+            <DeckWorkspaceCardRulesPreview fields={previewFields} className="min-h-0 flex-1" />
           </div>
         </div>
       </div>
