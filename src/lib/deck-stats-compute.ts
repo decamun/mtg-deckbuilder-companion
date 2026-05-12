@@ -68,12 +68,12 @@ export function isLandTypeLine(typeLine: string | undefined): boolean {
   return !!typeLine && primaryTypeLine(typeLine).includes('Land')
 }
 
-function isBasicLand(typeLine: string | undefined): boolean {
+export function isBasicLand(typeLine: string | undefined): boolean {
   return !!typeLine && primaryTypeLine(typeLine).includes('Basic') && primaryTypeLine(typeLine).includes('Land')
 }
 
 /** MDFCs where the front face is NOT a land but the back face IS (e.g. "Sorcery // Land") */
-function isMdfcWithLandBack(typeLine: string | undefined): boolean {
+export function isMdfcWithLandBack(typeLine: string | undefined): boolean {
   if (!typeLine) return false
   const sep = typeLine.indexOf(' // ')
   if (sep === -1) return false
