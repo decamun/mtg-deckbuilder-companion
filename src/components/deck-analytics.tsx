@@ -1,8 +1,17 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { Shuffle, Plus } from "lucide-react"
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
+import { createPortal } from "react-dom"
+import { CircleHelp, Plus, Shuffle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { ManaText } from "@/components/mana/ManaText"
 import {
   buildManaCurveData,
@@ -12,6 +21,8 @@ import {
   computeStatsLineSummary,
   PROB_TURNS,
   SPIDER_COLOR_KEYS,
+  type OpeningMeasureId,
+  type ProbRowValueKind,
   type CurveData,
   type DeckStatsCard,
   TYPE_PRIORITY,
@@ -263,6 +274,150 @@ function probColor(p: number): string {
   return 'text-red-400'
 }
 
+const OPENING_MEASURE_HELP: Record<OpeningMeasureId, readonly string[]> = {
+  land_drop: [
+    'Hypergeometric chance that at least T playable land sources appear among the first N maindeck cards you see, where N is the small count under each turn header and land sources match the deck summary (MDFC spell backs that are lands count).',
+    'The deck is modeled as uniformly shuffled with no mulligans, matching the section subtitle about going first on the play.',
+    'This is a coarse land-drop signal only: taplands, sequencing, and color correctness are not part of the calculation.',
+  ],
+  land_drop_draw: [
+    'Same land-drop question as the baseline row, except N is increased by one for each draw-tagged spell you could cast by that turn (mana value at most turn minus one).',
+    'Only nonland spells with a known numeric mana value are included; unknown mana values are skipped so we never invent a cost.',
+    'It is still optimistic about which spells you actually cast, so treat it as a helpful upper-ish signal rather than a full game replay.',
+  ],
+  expected_mana: [
+    'Expected generic units from E[min(land sources drawn, turn)] plus E[min(ramp spells drawn in time, turn minus one)], counting each qualifying land source or ramp spell as one unit if it shows up in time.',
+    'Ramp eligibility follows your ramp tags and the same mana-value filter as the commander row; Oracle text is not parsed for how much mana a card really makes.',
+    'The numbers are expectations, not percentages—commander tax, color requirements, and fast mana that breaks the one-unit shortcut are all ignored.',
+  ],
+  cast_commander: [
+    'Joint probability that min(land sources seen by N, turn) plus min(eligible ramp copies seen in the earlier window, turn minus one) reaches that commander mana value under one random deck order.',
+    'Eligible ramp means ramp-tagged nonlands with mana value at most turn minus one, observed within the smaller draw window; land sources again include MDFC land backs.',
+    'Tax, color pips, and whether you cast ramp before the commander are ignored—use it to compare lists at the same level of abstraction, not as a tournament clock.',
+  ],
+}
+
+const OPENING_COLUMN_HELP = [
+  'Bold headers are turns on the play before that turn land drop; the small count is how many maindeck cards you have seen so far, including your opener, and sets N for the hypergeometric draws.',
+  'Commanders are excluded from that pile so the counts line up with the Analytics mainboard column.',
+  'Expected mana prints a plain number in the same grid; every other numeric row is a percentage chance.',
+] as const
+
+function MeasureHelpIcon({
+  paragraphs,
+  'aria-label': ariaLabel,
+}: {
+  paragraphs: readonly string[]
+  'aria-label': string
+}) {
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  const closeTimer = useRef<number | null>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 288, maxH: 320 })
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimer.current != null) {
+      window.clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }, [])
+
+  const scheduleClose = useCallback(() => {
+    clearCloseTimer()
+    closeTimer.current = window.setTimeout(() => setOpen(false), 140)
+  }, [clearCloseTimer])
+
+  const positionPanel = useCallback(() => {
+    const btn = btnRef.current
+    if (!btn) return
+    const br = btn.getBoundingClientRect()
+    const margin = 8
+    const width = Math.min(288, window.innerWidth - margin * 2)
+    const left = Math.max(margin, Math.min(br.left, window.innerWidth - width - margin))
+    let top = br.bottom + 6
+    const panel = panelRef.current
+    const ph = panel?.offsetHeight ?? 0
+    if (ph > 0 && top + ph > window.innerHeight - margin) {
+      top = Math.max(margin, br.top - ph - 6)
+    }
+    const maxH = Math.max(120, Math.min(360, window.innerHeight - top - margin))
+    setPos({ top, left, width, maxH })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!open) return
+    positionPanel()
+    const raf = window.requestAnimationFrame(() => positionPanel())
+    const onScroll = () => positionPanel()
+    window.addEventListener("scroll", onScroll, true)
+    window.addEventListener("resize", onScroll)
+    return () => {
+      clearCloseTimer()
+      window.cancelAnimationFrame(raf)
+      window.removeEventListener("scroll", onScroll, true)
+      window.removeEventListener("resize", onScroll)
+    }
+  }, [open, positionPanel, paragraphs, clearCloseTimer])
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className={cn(
+          "inline-flex shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground",
+          "align-middle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        )}
+        aria-label={ariaLabel}
+        onPointerEnter={() => {
+          clearCloseTimer()
+          setOpen(true)
+        }}
+        onPointerLeave={scheduleClose}
+      >
+        <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+      </button>
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="tooltip"
+            onPointerEnter={() => {
+              clearCloseTimer()
+              setOpen(true)
+            }}
+            onPointerLeave={scheduleClose}
+            style={{
+              position: "fixed",
+              top: pos.top,
+              left: pos.left,
+              width: pos.width,
+              maxHeight: pos.maxH,
+              zIndex: 80,
+            }}
+            className="overflow-y-auto rounded-md border border-border bg-popover p-3 text-left text-[11px] leading-snug text-popover-foreground shadow-lg"
+          >
+            {paragraphs.map((t, i) => (
+              <p key={i} className={i === 0 ? undefined : "mt-2"}>
+                {t}
+              </p>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
+  )
+}
+
+function formatProbCell(valueKind: ProbRowValueKind, p: number): ReactNode {
+  if (valueKind === "expected_mana") {
+    return <span className="font-semibold text-sky-300 tabular-nums">{p.toFixed(2)}</span>
+  }
+  return <span className={`font-semibold ${probColor(p)}`}>{(p * 100).toFixed(0)}%</span>
+}
+
 function ProbabilityTable({
   cards,
   commanders,
@@ -278,57 +433,69 @@ function ProbabilityTable({
   if (data.deckSize === 0) {
     return (
       <div className="rounded-lg border border-border bg-card/60 p-4">
-        <h3 className="font-heading text-base tracking-wider mb-2">Opening Probabilities</h3>
+        <h3 className="font-heading text-base tracking-wider mb-2">Opening Performance</h3>
         <div className="h-24 flex items-center justify-center text-sm text-muted-foreground">
-          Add cards to compute probabilities.
+          Add cards to compute opening stats.
         </div>
       </div>
     )
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card/60 p-4">
-      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-        <h3 className="font-heading text-base tracking-wider">Opening Probabilities</h3>
-        <span className="text-[10px] text-muted-foreground">
-          Going first · {data.deckSize}-card deck · {data.lands} lands
-        </span>
+    <div className="min-h-[24rem] overflow-visible rounded-lg border border-border bg-card/60 p-4 sm:min-h-[28rem]">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
+        <h3 className="font-heading text-base tracking-wider">Opening Performance</h3>
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
+          <span className="min-w-0 leading-snug">
+            Going first · {data.deckSize}-card deck · {data.lands} land sources
+          </span>
+          <MeasureHelpIcon
+            paragraphs={OPENING_COLUMN_HELP}
+            aria-label="How to read the turn columns"
+          />
+        </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overflow-y-visible pb-1">
         <table className="w-full text-xs tabular-nums">
           <thead>
             <tr className="text-muted-foreground border-b border-border/60">
-              <th className="text-left font-normal py-1.5 pr-3">Turn</th>
+              <th className="py-1.5 pr-3 text-left font-normal align-bottom">
+                <div className="text-foreground/80">Turn</div>
+                <div className="text-[10px] text-muted-foreground/80">Cards seen (Nc)</div>
+              </th>
               {PROB_TURNS.map((T, i) => (
-                <th key={T} className="text-center font-normal py-1.5 px-2 min-w-[44px]">
-                  <div className="text-foreground/80 font-semibold">{T}</div>
-                  <div className="text-[10px] text-muted-foreground/80">
-                    {data.cardsSeen[i]}c
-                  </div>
+                <th key={T} className="min-w-[44px] px-2 py-1.5 text-center font-normal">
+                  <div className="font-semibold text-foreground/80">{T}</div>
+                  <div className="text-[10px] text-muted-foreground/80">{data.cardsSeen[i]}c</div>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {data.rows.map((row, idx) => (
-              <tr key={idx} className="border-b border-border/30 last:border-0">
-                <td className="py-1.5 pr-3">
-                  <div className="font-medium truncate max-w-[200px]" title={row.label}>
+              <tr
+                key={`${idx}-${row.measureId}-${row.valueKind}-${row.label}`}
+                className="border-b border-border/30 last:border-0"
+              >
+                <td className="py-1.5 pr-3 align-top">
+                  <div className="font-medium truncate max-w-[220px]" title={row.label}>
                     {row.label}
                   </div>
-                  {row.hint && (
-                    <div className="text-[10px] text-muted-foreground">{row.hint}</div>
-                  )}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] text-muted-foreground">
+                    {row.hint ? <span className="min-w-0 leading-snug">{row.hint}</span> : null}
+                    <MeasureHelpIcon
+                      paragraphs={OPENING_MEASURE_HELP[row.measureId]}
+                      aria-label={`About ${row.label}`}
+                    />
+                  </div>
                 </td>
                 {row.cells.map((p, i) => (
-                  <td key={i} className="text-center py-1.5 px-2">
+                  <td key={i} className="px-2 py-1.5 text-center">
                     {p === null ? (
                       <span className="text-muted-foreground/40">—</span>
                     ) : (
-                      <span className={`font-semibold ${probColor(p)}`}>
-                        {(p * 100).toFixed(0)}%
-                      </span>
+                      formatProbCell(row.valueKind, p)
                     )}
                   </td>
                 ))}
@@ -338,13 +505,10 @@ function ProbabilityTable({
         </table>
       </div>
 
-      <div className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
-        Header shows turn number and cards seen by that turn.
-        &ldquo;With draw&rdquo; treats each <span className="text-foreground/80">draw</span>-tagged spell
-        castable by then as +1 card seen.
-        &ldquo;With ramp&rdquo; treats each <span className="text-foreground/80">ramp</span>-tagged spell
-        castable by then as +1 mana source.
-      </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+        Going first on the play with a uniformly shuffled maindeck. Draw and ramp helpers only count spells with a
+        known mana value. Commander tax and colored mana are not modeled—hover the (i) icons for row-by-row detail.
+      </p>
     </div>
   )
 }
