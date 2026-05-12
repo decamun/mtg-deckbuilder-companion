@@ -385,10 +385,17 @@ export function computeStatsLineSummary(
 
 export type ProbRowValueKind = 'probability' | 'expected_mana'
 
+export type OpeningMeasureId =
+  | 'land_drop'
+  | 'land_drop_draw'
+  | 'expected_mana'
+  | 'cast_commander'
+
 export interface ProbRow {
   label: string
   hint?: string
   valueKind: ProbRowValueKind
+  measureId: OpeningMeasureId
   cells: (number | null)[]
 }
 
@@ -437,6 +444,7 @@ export function buildProbabilityRows(
   rows.push({
     label: 'Land drop',
     valueKind: 'probability',
+    measureId: 'land_drop',
     hint: `${landSources} land sources`,
     cells: PROB_TURNS.map((T, i) => {
       if (T > deckSize) return null
@@ -448,6 +456,7 @@ export function buildProbabilityRows(
     rows.push({
       label: 'Land drop',
       valueKind: 'probability',
+      measureId: 'land_drop_draw',
       hint: 'with draw',
       cells: PROB_TURNS.map((T, i) => {
         const seen = Math.min(deckSize, cardsSeen[i] + drawCount(T))
@@ -459,6 +468,7 @@ export function buildProbabilityRows(
   rows.push({
     label: 'Expected mana',
     valueKind: 'expected_mana',
+    measureId: 'expected_mana',
     hint: 'E[min(lands,T)]+E[min(ramp,T-1)] generic',
     cells: PROB_TURNS.map((T, i) => {
       if (T > deckSize) return null
@@ -481,6 +491,7 @@ export function buildProbabilityRows(
     rows.push({
       label: `Cast ${cmd.name}`,
       valueKind: 'probability',
+      measureId: 'cast_commander',
       hint: `CMC ${cmc} · capped land+ramp`,
       cells: PROB_TURNS.map((T, i) => {
         const nT = cardsSeen[i]
