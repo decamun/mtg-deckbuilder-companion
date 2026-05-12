@@ -92,6 +92,32 @@ export function countLandSources(cards: DeckStatsCard[]): number {
   return n
 }
 
+function hasDefinedCmc(c: DeckStatsCard): c is DeckStatsCard & { cmc: number } {
+  return typeof c.cmc === 'number' && Number.isFinite(c.cmc)
+}
+
+function matchesRampTags(card: DeckStatsCard): boolean {
+  const tags = card.tags
+  if (!tags || tags.length === 0) return false
+  for (const t of tags) {
+    const low = t.toLowerCase()
+    for (const n of RAMP_TAGS) {
+      if (low === n || low.includes(n)) return true
+    }
+  }
+  return false
+}
+
+function deckRampSpellsNumeric(cards: DeckStatsCard[]): DeckStatsCard[] {
+  return cards.filter(c => !isLandTypeLine(c.type_line) && matchesRampTags(c) && hasDefinedCmc(c))
+}
+
+function rampQtyForMaxCmc(rampSp: DeckStatsCard[], maxCmc: number): number {
+  return rampSp
+    .filter((c): c is DeckStatsCard & { cmc: number } => hasDefinedCmc(c) && c.cmc <= maxCmc)
+    .reduce((s, c) => s + c.quantity, 0)
+}
+
 function cardColors(c: DeckStatsCard): CurveColorKey[] {
   const cs = (c.colors || []).filter((x): x is CurveColorKey =>
     x === 'W' || x === 'U' || x === 'B' || x === 'R' || x === 'G'
@@ -162,6 +188,74 @@ export function hypergeomExpectedMin(N: number, K: number, n: number, cap: numbe
   }
   return expected
 }
+/**
+ * P(min(L,capL) + min(R,capR) >= need) for one random ordering of the deck:
+ * - L = land sources among the first nT cards
+ * - R = eligible ramp among the first nPrev cards (nPrev <= nT)
+ * Deck splits into K_L land sources, K_R ramp copies, K_O = N - K_L - K_R other.
+ */
+export function probCappedLandRampGteCmc(
+  N: number,
+  K_L: number,
+  K_R: number,
+  nT: number,
+  nPrev: number,
+  capL: number,
+  capR: number,
+  need: number,
+): number {
+  if (need <= 0) return 1
+  if (N <= 0) return 0
+  const nTot = Math.min(Math.max(0, nT), N)
+  const nPr = Math.min(Math.max(0, nPrev), nTot)
+  const delta = nTot - nPr
+
+  const kL = Math.min(Math.max(0, K_L), N)
+  const kR = Math.min(Math.max(0, K_R), N - kL)
+  const kO = N - kL - kR
+  if (kO < 0) return 0
+
+  const lf = new Float64Array(N + 1)
+  lf[0] = 0
+  for (let i = 1; i <= N; i++) lf[i] = lf[i - 1] + Math.log(i)
+
+  const logChoose = (n: number, k: number) =>
+    k < 0 || k > n ? -Infinity : lf[n] - lf[k] - lf[n - k]
+
+  let sum = 0
+  const l1Max = Math.min(nPr, kL)
+  for (let l1 = 0; l1 <= l1Max; l1++) {
+    const rMax = Math.min(nPr - l1, kR)
+    for (let r = 0; r <= rMax; r++) {
+      const o1 = nPr - l1 - r
+      if (o1 < 0 || o1 > kO) continue
+      const logP1 = logChoose(kL, l1) + logChoose(kR, r) + logChoose(kO, o1) - logChoose(N, nPr)
+      if (!Number.isFinite(logP1) || logP1 < -700) continue
+      const p1 = Math.exp(logP1)
+
+      if (delta === 0) {
+        const L = l1
+        if (Math.min(L, capL) + Math.min(r, capR) >= need) sum += p1
+        continue
+      }
+
+      const rem = N - nPr
+      const kLRem = kL - l1
+      const maxL2 = Math.min(delta, kLRem)
+      for (let l2 = 0; l2 <= maxL2; l2++) {
+        const logP2 =
+          logChoose(kLRem, l2) + logChoose(rem - kLRem, delta - l2) - logChoose(rem, delta)
+        if (!Number.isFinite(logP2) || logP2 < -700) continue
+        const p2 = Math.exp(logP2)
+        const L = l1 + l2
+        if (Math.min(L, capL) + Math.min(r, capR) >= need) sum += p1 * p2
+      }
+    }
+  }
+  return Math.min(1, Math.max(0, sum))
+}
+
+
 
 export interface CurveCell {
   count: number
@@ -264,10 +358,13 @@ export function computeStatsLineSummary(
     .filter(c => isMdfcWithLandBack(c.type_line))
     .reduce((s, c) => s + c.quantity, 0)
 
+  const rampSp = deckRampSpellsNumeric(cards)
   const onCurve = commanders.map(cmd => {
     const cmc = cmd.cmc ?? 0
-    const cardsSeen = Math.max(0, Math.min(deckSize, 6 + cmc))
-    const p = hypergeomAtLeast(deckSize, landSources, cardsSeen, cmc)
+    const nT = Math.max(0, Math.min(deckSize, 7 + cmc - 1))
+    const nPrev = cmc >= 2 ? Math.max(0, Math.min(deckSize, 7 + cmc - 2)) : 0
+    const kRamp = rampQtyForMaxCmc(rampSp, cmc - 1)
+    const p = probCappedLandRampGteCmc(deckSize, landSources, kRamp, nT, nPrev, cmc, cmc - 1, cmc)
     return { name: cmd.name, cmc, probability: p }
   })
 
@@ -295,10 +392,6 @@ export interface ProbRow {
   cells: (number | null)[]
 }
 
-function hasDefinedCmc(c: DeckStatsCard): c is DeckStatsCard & { cmc: number } {
-  return typeof c.cmc === 'number' && Number.isFinite(c.cmc)
-}
-
 function hasTagMatch(card: DeckStatsCard, needles: string[]): boolean {
   const tags = card.tags
   if (!tags || tags.length === 0) return false
@@ -311,7 +404,7 @@ function hasTagMatch(card: DeckStatsCard, needles: string[]): boolean {
   return false
 }
 
-const isRamp = (c: DeckStatsCard) => hasTagMatch(c, RAMP_TAGS)
+const isRamp = (c: DeckStatsCard) => matchesRampTags(c)
 const isDraw = (c: DeckStatsCard) => hasTagMatch(c, DRAW_TAGS)
 
 export function buildProbabilityRows(
@@ -388,10 +481,13 @@ export function buildProbabilityRows(
     rows.push({
       label: `Cast ${cmd.name}`,
       valueKind: 'probability',
-      hint: `CMC ${cmc}`,
+      hint: `CMC ${cmc} · capped land+ramp`,
       cells: PROB_TURNS.map((T, i) => {
         if (T < cmc) return null
-        return hypergeomAtLeast(deckSize, landSources, cardsSeen[i], cmc)
+        const nT = cardsSeen[i]
+        const nPrev = T >= 2 ? cardsSeen[T - 2] : 0
+        const kRamp = rampQtyCastableBy(T - 1)
+        return probCappedLandRampGteCmc(deckSize, landSources, kRamp, nT, nPrev, T, T - 1, cmc)
       }),
     })
   }
