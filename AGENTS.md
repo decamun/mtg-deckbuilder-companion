@@ -31,6 +31,39 @@ when they are sufficient.
   so it can merge independently. Avoid mixing unrelated bug fixes into the
   feature branch when the fix should stand alone.
 
+### GitHub issues as the default todo backlog
+
+Use **GitHub issues** as the canonical place to track follow-up work that outlives
+a single agent turn (tech-debt audits, multi-step refactors, security triage,
+test-harness work, doc cleanups, and similar). Prefer creating issues over relying
+only on the in-session todo tool or ad-hoc notes that other agents and humans
+cannot see.
+
+**When to create issues**
+
+- Any audit or review that produces **more than one** actionable item, unless the
+  user explicitly asks to keep everything in chat or in an existing issue.
+- Work that should be **schedulable, linkable, and closable** from a PR
+  (`Fixes #123`, `Closes #123`).
+
+**How to create them**
+
+- From the repo root, use the GitHub CLI when it is available and authenticated:
+  `gh issue create --title "…" --body-file ./path-to-body.md` (multi-line bodies
+  avoid shell escaping problems). Add `--label` only for labels that already exist
+  on the repo unless the user asked for new labels.
+- Group related items into **scoped issues** (one theme per issue) with a short
+  summary, concrete file paths, and **acceptance criteria** checklists in the body.
+- If `gh` is missing or not logged in, **paste proposed issue titles and bodies**
+  in the agent response so the user can create them manually; do not silently drop
+  the backlog.
+
+**Relationship to in-session todos**
+
+- Use the session todo list only for **immediate execution ordering** inside the
+  current task. **Do not** treat it as the long-term backlog: mirror durable items
+  to GitHub issues before ending the turn when follow-up remains.
+
 1. Install dependencies on the host with `npm ci` if `node_modules` is missing
    or incomplete.
 2. Start the frontend with hosted Supabase settings:
