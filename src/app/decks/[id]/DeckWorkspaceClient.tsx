@@ -1618,6 +1618,15 @@ export default function DeckWorkspaceClient({
           <DndContext sensors={dndSensors} onDragEnd={handleTagDragEnd}>
           {Object.entries(groupedCards)
             .sort(([a], [b]) => {
+              if (grouping === 'mana') {
+                const manaSortKey = (name: string) => {
+                  const prefix = 'Mana Value '
+                  if (!name.startsWith(prefix)) return 0
+                  const n = Number(name.slice(prefix.length))
+                  return Number.isFinite(n) ? n : 0
+                }
+                return manaSortKey(a) - manaSortKey(b)
+              }
               if (a === 'Untagged') return 1
               if (b === 'Untagged') return -1
               return 0
