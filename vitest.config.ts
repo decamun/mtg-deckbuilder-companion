@@ -11,7 +11,23 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'node',
-    include: ['src/lib/**/*.test.ts'],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'node',
+          environment: 'node',
+          include: ['src/lib/**/*.test.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'components',
+          environment: 'jsdom',
+          include: ['src/components/**/*.test.tsx'],
+        },
+      },
+    ],
   },
 })

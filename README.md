@@ -75,6 +75,12 @@ docker compose exec web npm run build
 docker compose down
 ```
 
+## Vitest layout
+
+- `src/lib/**/*.test.ts` is the node-only lane for pure utilities and server-safe logic.
+- `src/components/**/*.test.tsx` is the co-located jsdom lane for React component tests with React Testing Library.
+- `npm test` runs both Vitest projects, so CI covers the node and component harnesses with one command.
+
 ## Worktrees and agents
 
 Use the alternate compose file when a second checkout needs its own frontend port:
