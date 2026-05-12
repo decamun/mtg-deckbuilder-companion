@@ -82,6 +82,20 @@ function isMdfcWithLandBack(typeLine: string | undefined): boolean {
   return !front.includes('Land') && back.includes('Land')
 }
 
+/**
+ * Cards that can be played as a land: primary type line Land (including
+ * "Land // ..." MDFCs) plus spell-front MDFCs whose back face is a land.
+ * Same scope as `stats_line.lands.total_display` and the land-drop hypergeom K.
+ */
+export function countLandSources(cards: DeckStatsCard[]): number {
+  let n = 0
+  for (const c of cards) {
+    if (isLandTypeLine(c.type_line)) n += c.quantity
+    else if (isMdfcWithLandBack(c.type_line)) n += c.quantity
+  }
+  return n
+}
+
 function cardColors(c: DeckStatsCard): CurveColorKey[] {
   const cs = (c.colors || []).filter((x): x is CurveColorKey =>
     x === 'W' || x === 'U' || x === 'B' || x === 'R' || x === 'G'
@@ -168,7 +182,7 @@ export interface StatsLineSummary {
   avg_cmc_all_cards: number
   type_counts: Record<DeckStatCardType, number>
   lands: {
-    /** Matches UI “Lands” badge: type Land + MDFC-with-land-back adjustment */
+    /** Matches UI "Lands" badge and opening hypergeom K: land-type + MDFC spell // land */
     total_display: number
     /** Quantity typed as Land excluding MDFC adjustment detail */
     land_type_quantity: number
@@ -208,7 +222,7 @@ export function computeStatsLineSummary(
   }
 
   const deckSize = cards.reduce((s, c) => s + c.quantity, 0)
-  const lands = typeCounts.Land
+  const landSources = countLandSources(cards)
 
   const basicLandCount = cards
     .filter(c => isBasicLand(c.type_line))
@@ -221,7 +235,7 @@ export function computeStatsLineSummary(
   const onCurve = commanders.map(cmd => {
     const cmc = cmd.cmc ?? 0
     const cardsSeen = Math.max(0, Math.min(deckSize, 6 + cmc))
-    const p = hypergeomAtLeast(deckSize, lands, cardsSeen, cmc)
+    const p = hypergeomAtLeast(deckSize, landSources, cardsSeen, cmc)
     return { name: cmd.name, cmc, probability: p }
   })
 
@@ -230,7 +244,7 @@ export function computeStatsLineSummary(
     avg_cmc_all_cards: avgCmcAll,
     type_counts: typeCounts,
     lands: {
-      total_display: typeCounts.Land + mdfcLandCount,
+      total_display: landSources,
       land_type_quantity: typeCounts.Land,
       basic: basicLandCount,
       non_basic: typeCounts.Land - basicLandCount,
@@ -266,7 +280,7 @@ export function buildProbabilityRows(
   commanders: DeckStatsCard[]
 ): { rows: ProbRow[]; cardsSeen: number[]; deckSize: number; lands: number } {
   const deckSize = cards.reduce((s, c) => s + c.quantity, 0)
-  const lands = cards.reduce((s, c) => s + (isLandTypeLine(c.type_line) ? c.quantity : 0), 0)
+  const landSources = countLandSources(cards)
 
   const cardsSeen = PROB_TURNS.map(T => Math.min(deckSize, 7 + T - 1))
 
@@ -286,10 +300,10 @@ export function buildProbabilityRows(
 
   rows.push({
     label: 'Land drop',
-    hint: `${lands} lands`,
+    hint: `${landSources} land sources`,
     cells: PROB_TURNS.map((T, i) => {
       if (T > deckSize) return null
-      return hypergeomAtLeast(deckSize, lands, cardsSeen[i], T)
+      return hypergeomAtLeast(deckSize, landSources, cardsSeen[i], T)
     }),
   })
 
@@ -299,7 +313,7 @@ export function buildProbabilityRows(
       hint: 'with draw',
       cells: PROB_TURNS.map((T, i) => {
         const seen = Math.min(deckSize, cardsSeen[i] + drawCount(T))
-        return hypergeomAtLeast(deckSize, lands, seen, T)
+        return hypergeomAtLeast(deckSize, landSources, seen, T)
       }),
     })
   }
@@ -313,25 +327,29 @@ export function buildProbabilityRows(
       hint: `CMC ${cmc}`,
       cells: PROB_TURNS.map((T, i) => {
         if (T < cmc) return null
-        return hypergeomAtLeast(deckSize, lands, cardsSeen[i], cmc)
+        return hypergeomAtLeast(deckSize, landSources, cardsSeen[i], cmc)
       }),
     })
 
     if (hasRamp) {
       rows.push({
         label: `Cast ${cmd.name}`,
-        hint: 'with ramp',
+        hint: 'with ramp (approx.)',
         cells: PROB_TURNS.map((T, i) => {
-          const ramp = Math.min(rampCount(T), deckSize - lands)
-          if (T + ramp < cmc) return null
-          const pool = Math.min(deckSize, lands + ramp)
-          return hypergeomAtLeast(deckSize, pool, cardsSeen[i], cmc)
+          if (T < cmc) return null
+          // Do not add ramp to hypergeom K (ramp spells are not lands). Previous logic also
+          // allowed impossible early turns via T + ramp >= cmc without T >= cmc.
+          // Heuristic: at most one ramp cast per prior turn, each reducing generic land count by 1.
+          const assumedRampBenefit = Math.min(rampCount(T), T - 1)
+          const landsRequired = Math.max(0, cmc - assumedRampBenefit)
+          if (landsRequired === 0) return 1
+          return hypergeomAtLeast(deckSize, landSources, cardsSeen[i], landsRequired)
         }),
       })
     }
   }
 
-  return { rows, cardsSeen, deckSize, lands }
+  return { rows, cardsSeen, deckSize, lands: landSources }
 }
 
 export interface SpiderTotals {
@@ -394,11 +412,12 @@ export function buildSpiderTotals(cards: DeckStatsCard[]): SpiderTotals {
       produced = inferProducedFromText(c.oracle_text)
     }
 
-    const land = isLandTypeLine(c.type_line)
-    const bucket = land ? productionLands : productionNonLands
+    const primaryLand = isLandTypeLine(c.type_line)
+    const landForProduction = primaryLand || isMdfcWithLandBack(c.type_line)
+    const bucket = landForProduction ? productionLands : productionNonLands
     for (const color of produced) bucket[color] += q
 
-    if (!land) {
+    if (!primaryLand) {
       const cardPips = parsePips(c.mana_cost)
       for (const color of SPIDER_COLOR_KEYS) pips[color] += cardPips[color] * q
     }

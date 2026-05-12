@@ -342,8 +342,9 @@ function ProbabilityTable({
         Header shows turn number and cards seen by that turn.
         &ldquo;With draw&rdquo; treats each <span className="text-foreground/80">draw</span>-tagged spell
         castable by then as +1 card seen.
-        &ldquo;With ramp&rdquo; treats each <span className="text-foreground/80">ramp</span>-tagged spell
-        castable by then as +1 mana source.
+        &ldquo;With ramp (approx.)&rdquo; lowers the generic land count needed by at most one per prior turn
+        (capped by ramp-tagged spells castable by then); it does not model colored pips, mana to cast ramp,
+        or whether those spells were actually drawn.
       </div>
     </div>
   )
