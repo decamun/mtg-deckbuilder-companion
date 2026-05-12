@@ -5,7 +5,7 @@ import { createPortal } from "react-dom"
 import { Badge } from "@/components/ui/badge"
 import { ManaText } from "@/components/mana/ManaText"
 import type { DeckCard } from "@/lib/types"
-import { getCardTypeGroup } from "@/lib/card-types"
+import { getCardTypeGroup, typeGroupSectionSortMeta } from "@/lib/card-types"
 
 function primaryCardImage(card: DeckCard): string | undefined {
   return card.face_images?.[0]?.normal ?? card.face_images?.[0]?.small ?? card.image_url
@@ -45,7 +45,12 @@ interface DeckDiffViewProps {
   after: DiffSide
 }
 
-const TYPE_ORDER = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land", "Other"]
+function typeGroupCompare(a: string, b: string): number {
+  const ma = typeGroupSectionSortMeta(a)
+  const mb = typeGroupSectionSortMeta(b)
+  if (ma.tier !== mb.tier) return ma.tier - mb.tier
+  return ma.name.localeCompare(mb.name)
+}
 
 function typeGroup(card: DeckCard | undefined): string {
   return getCardTypeGroup(card?.type_line)
@@ -134,7 +139,7 @@ function buildDiff(beforeCards: DeckCard[], afterCards: DeckCard[]): DiffEntry[]
   for (const [key, afterStack] of after) entries.push(createEntry(key, undefined, afterStack))
 
   return entries.sort((a, b) => {
-    const typeDelta = TYPE_ORDER.indexOf(a.typeGroup) - TYPE_ORDER.indexOf(b.typeGroup)
+    const typeDelta = typeGroupCompare(a.typeGroup, b.typeGroup)
     if (typeDelta !== 0) return typeDelta
     return a.sortName.localeCompare(b.sortName)
   })
@@ -253,7 +258,7 @@ export function DeckDiffView({ before, after }: DeckDiffViewProps) {
       group.push(entry)
       groups.set(entry.typeGroup, group)
     }
-    return Array.from(groups.entries())
+    return Array.from(groups.entries()).sort(([ga], [gb]) => typeGroupCompare(ga, gb))
   }, [entries])
 
   const showHoverPreview = (card: DeckCard, rect: DOMRect) => {

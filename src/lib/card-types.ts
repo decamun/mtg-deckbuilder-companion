@@ -54,3 +54,43 @@ export function getCardTypeGroup(typeLine: string | undefined): CardTypeGroup {
   }
   return 'Other'
 }
+
+/** Type lines for each face, split on MDFC / adventure / split delimiter. */
+export function typeLineFaces(typeLine: string | undefined): string[] {
+  if (!typeLine) return []
+  return typeLine.split(/\s*\/\/\s*/).map(s => s.trim()).filter(Boolean)
+}
+
+/**
+ * True if any face's type line contains Land as a card type word.
+ * Used for land counts that include MDFC backs (e.g. creature // land).
+ */
+export function hasLandFaceOnTypeLine(typeLine: string | undefined): boolean {
+  for (const face of typeLineFaces(typeLine)) {
+    if (/\bLand\b/.test(face)) return true
+  }
+  return false
+}
+
+const NONLAND_PERMANENT_TYPES = new Set<string>([
+  'Creature',
+  'Planeswalker',
+  'Battle',
+  'Artifact',
+  'Enchantment',
+])
+
+const NONLAND_NONPERMANENT_TYPES = new Set<string>(['Instant', 'Sorcery'])
+
+/**
+ * Sort key for deck type sections: nonland permanents (A–Z), then nonland
+ * nonpermanents (A–Z), then Other, then Land.
+ */
+export function typeGroupSectionSortMeta(group: CardTypeGroup | string): { tier: number; name: string } {
+  const g = String(group)
+  if (g === 'Land') return { tier: 3, name: g }
+  if (g === 'Other') return { tier: 2, name: g }
+  if (NONLAND_NONPERMANENT_TYPES.has(g)) return { tier: 1, name: g }
+  if (NONLAND_PERMANENT_TYPES.has(g)) return { tier: 0, name: g }
+  return { tier: 2, name: g }
+}

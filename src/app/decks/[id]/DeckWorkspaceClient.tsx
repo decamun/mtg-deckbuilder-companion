@@ -56,7 +56,7 @@ import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner
 import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { formatPrice, pickPrice } from "@/lib/format"
 import { ManaText } from "@/components/mana/ManaText"
-import { getCardTypeGroup } from "@/lib/card-types"
+import { getCardTypeGroup, hasLandFaceOnTypeLine, typeGroupSectionSortMeta } from "@/lib/card-types"
 import { isFormatValidationImplemented, validateDeckForFormat } from "@/lib/deck-format-validation"
 import {
   getPrefetchedDeckCards,
@@ -137,6 +137,36 @@ function compareDeckCardsBySort(a: DeckCard, b: DeckCard, sorting: SortingMode):
   }
   if (cmp !== 0) return cmp
   return a.name.localeCompare(b.name)
+}
+
+/** Internal map key for the untagged bucket when grouping by tag. */
+const TAG_GROUP_UNTAGGED = 'untagged'
+
+function normalizeTagForStorage(raw: string): string {
+  const lower = raw.trim().toLowerCase()
+  if (!lower) return ''
+  return lower.replace(/\b\w/g, (ch) => ch.toUpperCase())
+}
+
+function tagGroupHeading(lowerKey: string): string {
+  if (lowerKey === TAG_GROUP_UNTAGGED) return 'Untagged'
+  return normalizeTagForStorage(lowerKey)
+}
+
+function groupSectionHeading(groupKey: string, grouping: GroupingMode): string {
+  if (grouping === 'tag') return tagGroupHeading(groupKey)
+  if (grouping === 'mana') {
+    const m = /^mana value\s+(.*)$/i.exec(groupKey.trim())
+    if (m) return `Mana Value ${m[1]}`
+  }
+  return groupKey
+}
+
+function compareTypeGroupSectionKeys(a: string, b: string): number {
+  const ma = typeGroupSectionSortMeta(a)
+  const mb = typeGroupSectionSortMeta(b)
+  if (ma.tier !== mb.tier) return ma.tier - mb.tier
+  return ma.name.localeCompare(mb.name)
 }
 
 const defaultPrimerSeed = (deckName: string) =>
@@ -822,12 +852,13 @@ export default function DeckWorkspaceClient({
   }
 
   const addTag = async (cardId: string, tag: string) => {
-    if (!tag.trim()) return
+    const stored = normalizeTagForStorage(tag)
+    if (!stored) return
     const card = cards.find(c => c.id === cardId)
     if (!card) return
     const currentTags = card.tags || []
-    if (currentTags.includes(tag)) return
-    const newTags = [...currentTags, tag]
+    if (currentTags.some(t => t.toLowerCase() === stored.toLowerCase())) return
+    const newTags = [...currentTags, stored]
     const versionSince = new Date().toISOString()
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: newTags } : c))
     const { error } = await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
@@ -835,7 +866,7 @@ export default function DeckWorkspaceClient({
       setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: currentTags } : c))
       toast.error(error.message)
     } else {
-      recordMutationVersion(`Tagged ${card.name} with "${tag}"`, versionSince)
+      recordMutationVersion(`Tagged ${card.name} with "${stored}"`, versionSince)
     }
   }
 
@@ -843,7 +874,7 @@ export default function DeckWorkspaceClient({
     const card = cards.find(c => c.id === cardId)
     if (!card) return
     const currentTags = card.tags || []
-    const newTags = currentTags.filter(t => t !== tag)
+    const newTags = currentTags.filter(t => t.toLowerCase() !== tag.toLowerCase())
     const versionSince = new Date().toISOString()
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, tags: newTags } : c))
     const { error } = await supabase.from('deck_cards').update({ tags: newTags }).eq('id', cardId)
@@ -930,12 +961,26 @@ export default function DeckWorkspaceClient({
   const handleTagDragEnd = (event: DragEndEvent) => {
     const cardId = parseDeckCardDragId(String(event.active.id), grouping)
     const tag = event.over?.id ? String(event.over.id) : null
-    if (tag && grouping === 'tag' && tag !== 'Untagged') {
+    if (tag && grouping === 'tag' && tag !== TAG_GROUP_UNTAGGED) {
       void addTag(cardId, tag)
     }
   }
 
-  const allUniqueTags = Array.from(new Set([...DEFAULT_TAGS, ...cards.flatMap(c => c.tags || [])])).sort()
+  const allUniqueTags = useMemo(() => {
+    const lowerToCanonical = new Map<string, string>()
+    const add = (raw: string) => {
+      const k = raw.trim().toLowerCase()
+      if (!k) return
+      if (!lowerToCanonical.has(k)) lowerToCanonical.set(k, normalizeTagForStorage(raw))
+    }
+    for (const t of DEFAULT_TAGS) add(t)
+    for (const c of cards) {
+      for (const t of c.tags || []) add(t)
+    }
+    return [...lowerToCanonical.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+      .map(([, display]) => display)
+  }, [cards])
 
   const hydrateVersionSnapshot = async (row: DeckVersionRow): Promise<ViewingSnapshotState> => {
     const snap = row.snapshot
@@ -1097,6 +1142,15 @@ export default function DeckWorkspaceClient({
     return { sum, anyMissing }
   }, [displayedCards])
 
+  const deckLandQtyIncludingMdfc = useMemo(
+    () =>
+      displayedCards.reduce(
+        (sum, c) => sum + (hasLandFaceOnTypeLine(c.type_line) ? c.quantity : 0),
+        0
+      ),
+    [displayedCards]
+  )
+
   const formatViolationMap = useMemo(() => {
     const { violationsByCardId } = validateDeckForFormat(displayedFormat, {
       cards: displayedCards,
@@ -1124,13 +1178,17 @@ export default function DeckWorkspaceClient({
     if (grouping === 'tag') {
       sorted.forEach(c => {
         if (!c.tags || c.tags.length === 0) {
-          if (!groups['Untagged']) groups['Untagged'] = []
-          groups['Untagged'].push(c)
+          if (!groups[TAG_GROUP_UNTAGGED]) groups[TAG_GROUP_UNTAGGED] = []
+          groups[TAG_GROUP_UNTAGGED].push(c)
         } else {
-          c.tags.forEach(tag => {
-            if (!groups[tag]) groups[tag] = []
-            groups[tag].push(c)
-          })
+          const seen = new Set<string>()
+          for (const tag of c.tags) {
+            const k = tag.trim().toLowerCase()
+            if (!k || seen.has(k)) continue
+            seen.add(k)
+            if (!groups[k]) groups[k] = []
+            groups[k].push(c)
+          }
         }
       })
       return groups
@@ -1157,8 +1215,11 @@ export default function DeckWorkspaceClient({
     if (grouping === 'type') return getCardTypeGroup(c.type_line)
     if (grouping === 'mana') return `Mana Value ${c.cmc || 0}`
     if (grouping === 'tag') {
-      if (!c.tags?.length) return 'Untagged'
-      return c.tags[0]
+      if (!c.tags?.length) return TAG_GROUP_UNTAGGED
+      const keys = [...new Set((c.tags || []).map(t => t.trim().toLowerCase()).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' })
+      )
+      return keys[0] ?? TAG_GROUP_UNTAGGED
     }
     return 'All Cards'
   }
@@ -1266,10 +1327,14 @@ export default function DeckWorkspaceClient({
             {allUniqueTags.map(tag => (
               <DropdownMenuItem
                 key={tag}
-                className={c.tags?.includes(tag) ? 'text-primary' : ''}
-                onClick={() => (c.tags?.includes(tag) ? removeTag(c.id, tag) : addTag(c.id, tag))}
+                className={c.tags?.some(t => t.toLowerCase() === tag.toLowerCase()) ? 'text-primary' : ''}
+                onClick={() =>
+                  c.tags?.some(t => t.toLowerCase() === tag.toLowerCase())
+                    ? removeTag(c.id, tag)
+                    : addTag(c.id, tag)
+                }
               >
-                {c.tags?.includes(tag) ? 'Remove' : 'Add'} {tag}
+                {c.tags?.some(t => t.toLowerCase() === tag.toLowerCase()) ? 'Remove' : 'Add'} {tag}
               </DropdownMenuItem>
             ))}
             {allUniqueTags.length > 0 && <DropdownMenuSeparator className="bg-border" />}
@@ -1277,10 +1342,10 @@ export default function DeckWorkspaceClient({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator className="bg-border" />
-        {grouping === 'tag' && groupName !== 'Untagged' && (
+        {grouping === 'tag' && groupName !== TAG_GROUP_UNTAGGED && (
           <>
             <DropdownMenuItem className="text-orange-400" onClick={() => removeTag(c.id, groupName)}>
-              Remove from &apos;{groupName}&apos;
+              Remove from &apos;{groupSectionHeading(groupName, grouping)}&apos;
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-border" />
           </>
@@ -1677,12 +1742,21 @@ export default function DeckWorkspaceClient({
                 }
                 return manaSortKey(a) - manaSortKey(b)
               }
-              if (a === 'Untagged') return 1
-              if (b === 'Untagged') return -1
+              if (grouping === 'type') return compareTypeGroupSectionKeys(a, b)
+              if (grouping === 'tag') {
+                if (a === TAG_GROUP_UNTAGGED) return 1
+                if (b === TAG_GROUP_UNTAGGED) return -1
+                return a.localeCompare(b, undefined, { sensitivity: 'base' })
+              }
               return 0
             })
-            .map(([groupName, groupCards]) => (
-            <DroppableTagGroup key={groupName} id={groupName} enabled={!cardDragDisabled && groupName !== 'Untagged'}>
+            .map(([groupName, groupCards]) => {
+            const sectionQty =
+              grouping === 'type' && groupName === 'Land'
+                ? deckLandQtyIncludingMdfc
+                : groupCards.reduce((acc, c) => acc + c.quantity, 0)
+            return (
+            <DroppableTagGroup key={groupName} id={groupName} enabled={!cardDragDisabled && groupName !== TAG_GROUP_UNTAGGED}>
               <button
                 type="button"
                 onClick={() => toggleSection(groupName)}
@@ -1691,9 +1765,9 @@ export default function DeckWorkspaceClient({
               >
                 <ChevronDown className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 ${collapsedSections.has(groupName) ? '-rotate-90' : ''}`} />
                 <h3 className="text-xl font-bold text-foreground">
-                  {groupName}{' '}
+                  {groupSectionHeading(groupName, grouping)}{' '}
                   <span className="text-sm font-normal text-muted-foreground ml-2">
-                    ({groupCards.reduce((a, c) => a + c.quantity, 0)})
+                    ({sectionQty})
                   </span>
                 </h3>
               </button>
@@ -1866,10 +1940,14 @@ export default function DeckWorkspaceClient({
                             {allUniqueTags.map(tag => (
                               <ContextMenuItem
                                 key={tag}
-                                className={c.tags?.includes(tag) ? 'text-primary' : ''}
-                                onClick={() => c.tags?.includes(tag) ? removeTag(c.id, tag) : addTag(c.id, tag)}
+                                className={c.tags?.some(t => t.toLowerCase() === tag.toLowerCase()) ? 'text-primary' : ''}
+                                onClick={() =>
+                                  c.tags?.some(t => t.toLowerCase() === tag.toLowerCase())
+                                    ? removeTag(c.id, tag)
+                                    : addTag(c.id, tag)
+                                }
                               >
-                                {c.tags?.includes(tag) ? 'Remove' : 'Add'} {tag}
+                                {c.tags?.some(t => t.toLowerCase() === tag.toLowerCase()) ? 'Remove' : 'Add'} {tag}
                               </ContextMenuItem>
                             ))}
                             {allUniqueTags.length > 0 && <ContextMenuSeparator className="bg-border" />}
@@ -1877,10 +1955,10 @@ export default function DeckWorkspaceClient({
                           </ContextMenuSubContent>
                         </ContextMenuSub>
                         <ContextMenuSeparator className="bg-border" />
-                        {grouping === 'tag' && groupName !== 'Untagged' && (
+                        {grouping === 'tag' && groupName !== TAG_GROUP_UNTAGGED && (
                           <>
                             <ContextMenuItem className="text-orange-400 hover:text-orange-300 hover:bg-orange-400/10 focus:text-orange-300 focus:bg-orange-400/10" onClick={() => removeTag(c.id, groupName)}>
-                              Remove from &apos;{groupName}&apos;
+                              Remove from &apos;{groupSectionHeading(groupName, grouping)}&apos;
                             </ContextMenuItem>
                             <ContextMenuSeparator className="bg-border" />
                           </>
@@ -2083,7 +2161,8 @@ export default function DeckWorkspaceClient({
               )}
             </>)}
             </DroppableTagGroup>
-          ))}
+            )
+          })}
           </DndContext>
 
           {/* ── Analytics ── */}
