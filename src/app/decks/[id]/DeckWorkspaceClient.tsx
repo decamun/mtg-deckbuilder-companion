@@ -26,6 +26,7 @@ import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type D
 import { pickPrice } from "@/lib/format"
 import { hasLandFaceOnTypeLine } from "@/lib/card-types"
 import { validateDeckForFormat } from "@/lib/deck-format-validation"
+import { useTopNavDeckGuest } from "@/components/TopNavDeckGuestContext"
 import { useDeckWorkspaceFetch } from "./use-deck-workspace-fetch"
 import { hydrateVersionSnapshot } from "./deck-workspace-version-hydrate"
 import {
@@ -266,6 +267,16 @@ export default function DeckWorkspaceClient({
     setCardsLoading,
     setCoverImageUrl,
   })
+
+  const { setGuestDeckNav } = useTopNavDeckGuest()
+  useEffect(() => {
+    if (!deck || deck.id !== deckId || accessDenied) {
+      setGuestDeckNav(false)
+      return
+    }
+    setGuestDeckNav(!isOwner)
+    return () => setGuestDeckNav(false)
+  }, [deck, deckId, accessDenied, isOwner, setGuestDeckNav])
 
   const addToDeck = async (card: ScryfallCard) => {
     const existing = cards.find(c => c.scryfall_id === card.id)
