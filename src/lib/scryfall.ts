@@ -177,25 +177,35 @@ export async function getCardByName(name: string): Promise<ScryfallCard | null> 
 async function fetchCollection(identifiers: object[]): Promise<ScryfallCard[]> {
   const CHUNK_SIZE = 75
   const allCards: ScryfallCard[] = []
+  // Scryfall: POST /cards/collection is limited to ~2 requests/sec (500ms+ between calls).
+  // Bursting chunks at 150ms returns 429; missing cards then fall back to defaults, and CDN
+  // 429s on <img> loads are often surfaced by browsers as generic "CORS" image failures.
+  const BETWEEN_COLLECTION_CHUNKS_MS = 550
   for (let i = 0; i < identifiers.length; i += CHUNK_SIZE) {
     const chunk = identifiers.slice(i, i + CHUNK_SIZE)
     try {
-      const res = await fetch('https://api.scryfall.com/cards/collection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("https://api.scryfall.com/cards/collection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifiers: chunk }),
       })
       if (!res.ok) {
-        console.error("Scryfall collection error:", await res.text())
+        console.error("Scryfall collection error:", res.status, await res.text())
+        if (i + CHUNK_SIZE < identifiers.length) {
+          await new Promise(r => setTimeout(r, BETWEEN_COLLECTION_CHUNKS_MS))
+        }
         continue
       }
-      const json = await res.json()
+      const json: { data?: ScryfallCard[]; not_found?: unknown[] } = await res.json()
+      if (Array.isArray(json.not_found) && json.not_found.length > 0) {
+        console.warn(`Scryfall collection: ${json.not_found.length} identifier(s) not found`, json.not_found)
+      }
       if (json.data) allCards.push(...json.data)
     } catch (error) {
       console.error("Scryfall collection fetch error:", error)
     }
     if (i + CHUNK_SIZE < identifiers.length) {
-      await new Promise(r => setTimeout(r, 150))
+      await new Promise(r => setTimeout(r, BETWEEN_COLLECTION_CHUNKS_MS))
     }
   }
   return allCards
