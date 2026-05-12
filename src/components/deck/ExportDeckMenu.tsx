@@ -185,10 +185,13 @@ export function ExportDeckMenu({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="h-8 inline-flex items-center gap-1.5 rounded-md bg-card border border-border px-2.5 text-sm font-medium text-foreground hover:bg-accent transition-colors">
-        <Share2 className="w-3.5 h-3.5" />
-        Export & Share
-        <ChevronDown className="w-3 h-3 opacity-60" />
+      <DropdownMenuTrigger
+        aria-label="Export and share"
+        className="h-8 inline-flex items-center justify-center gap-1.5 rounded-md bg-card border border-border px-2 text-sm font-medium text-foreground hover:bg-accent transition-colors sm:px-2.5"
+      >
+        <Share2 className="w-3.5 h-3.5 shrink-0" />
+        <span className="hidden sm:inline">Export & Share</span>
+        <ChevronDown className="hidden h-3 w-3 shrink-0 opacity-60 sm:block" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         {isOwner && onImportClick && (
