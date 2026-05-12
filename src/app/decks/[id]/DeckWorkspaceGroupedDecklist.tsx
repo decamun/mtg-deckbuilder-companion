@@ -30,8 +30,12 @@ import {
   DeckWorkspaceThreeDotMenu,
   type DeckWorkspaceOverflowMenusProps,
 } from "./deck-workspace-overflow-menus"
+import { cn } from "@/lib/utils"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
 import { DeckWorkspaceCardRulesPreview, rulesHoverPayloadToFields } from "./DeckWorkspaceCardRulesPreview"
+
+/** Matches commander button (h-24 art + p-2); flow layout uses this, rules panel may overlay taller. */
+const COMMANDER_TILE_MIN_H = "min-h-[7rem]"
 
 export type DeckWorkspaceGroupedDecklistProps = {
   groupedCards: Record<string, DeckCard[]>
@@ -104,24 +108,29 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
 
   const previewFields = rulesHoverPayloadToFields(rulesHover)
   const hasCommanders = commanderCards.length > 0
+  const partnerPair = commanderCards.length > 1
 
   return (
     <>
-      <div className="sticky top-0 z-20 -mx-6 mb-6 border-b border-border bg-background/95 px-6 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/80 [--deck-rules-row-h:min(42vh,15rem)] [--deck-rules-cmd-ch:7.25rem]">
+      <div className="sticky top-0 z-20 -mx-6 mb-6 overflow-visible border-b border-border bg-background/95 px-6 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
         <div
-          className={`flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:min-h-[var(--deck-rules-row-h)] ${
-            hasCommanders
-              ? "min-h-[calc(var(--deck-rules-cmd-ch)+0.75rem+var(--deck-rules-row-h))]"
-              : "min-h-[var(--deck-rules-row-h)]"
-          }`}
+          className={cn(
+            "grid gap-3 overflow-visible",
+            hasCommanders ? "grid-cols-1 lg:grid-cols-[max-content_minmax(0,1fr)]" : "grid-cols-1"
+          )}
         >
           {hasCommanders && (
-            <div className="flex shrink-0 flex-wrap content-center items-center gap-3 lg:min-h-0 lg:self-stretch lg:py-0.5">
+            <div
+              className={cn(
+                "flex max-w-full shrink-0 flex-wrap content-start items-stretch gap-3 lg:min-h-0",
+                partnerPair && "sm:max-w-[calc(2*min(100%,16rem)+0.75rem)]"
+              )}
+            >
               {commanderCards.map((c) => (
                 <button
                   key={c.id}
                   type="button"
-                  className="group flex w-64 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left shadow-lg transition hover:border-yellow-300"
+                  className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left shadow-lg transition hover:border-yellow-300 sm:w-[min(100%,16rem)] sm:max-w-[16rem]"
                   onClick={() => showClickedPreview(c, "Commander")}
                   onMouseEnter={() => onDeckCardRulesPreviewHover(c)}
                   onMouseLeave={() => onDeckCardRulesPreviewHover(null)}
@@ -144,8 +153,16 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
               ))}
             </div>
           )}
-          <div className="flex h-[var(--deck-rules-row-h)] min-h-0 w-full min-w-0 flex-1 flex-col rounded-xl border border-border bg-card/60 p-3 shadow-inner lg:shrink-0">
-            <DeckWorkspaceCardRulesPreview fields={previewFields} className="min-h-0 flex-1" />
+          <div
+            className={cn(
+              "relative isolate min-w-0 overflow-visible",
+              COMMANDER_TILE_MIN_H,
+              hasCommanders && "lg:h-full lg:min-h-0"
+            )}
+          >
+            <div className="absolute left-0 top-0 z-30 flex min-h-full w-full min-w-0 max-w-full flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur-sm supports-[backdrop-filter]:bg-card/90 max-h-[min(90vh,52rem)]">
+              <DeckWorkspaceCardRulesPreview fields={previewFields} />
+            </div>
           </div>
         </div>
       </div>
