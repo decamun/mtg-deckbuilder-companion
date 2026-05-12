@@ -112,7 +112,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
 
   return (
     <>
-      <div className="sticky top-0 z-50 -mx-6 mb-6 overflow-visible border-b border-border bg-background/95 px-6 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+      <div className="sticky top-0 z-50 -mx-6 mb-6 overflow-visible border-0 bg-transparent px-6 py-3">
         <div
           className={cn(
             "grid gap-3 overflow-visible",
@@ -130,7 +130,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                 <button
                   key={c.id}
                   type="button"
-                  className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left shadow-lg transition hover:border-yellow-300 sm:w-[min(100%,16rem)] sm:max-w-[16rem]"
+                  className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left transition hover:border-yellow-300 sm:w-[min(100%,16rem)] sm:max-w-[16rem]"
                   onClick={() => showClickedPreview(c, "Commander")}
                   onMouseEnter={() => onDeckCardRulesPreviewHover(c)}
                   onMouseLeave={() => onDeckCardRulesPreviewHover(null)}
@@ -160,7 +160,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
               hasCommanders && "lg:h-full lg:min-h-0"
             )}
           >
-            <div className="absolute left-0 top-0 z-[60] flex min-h-full w-full min-w-0 max-w-full flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur-sm supports-[backdrop-filter]:bg-card/90 max-h-[min(90vh,52rem)]">
+            <div className="absolute left-0 top-0 z-[60] flex min-h-full w-full min-w-0 max-w-full flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-card/95 p-3 max-h-[min(90vh,52rem)]">
               <DeckWorkspaceCardRulesPreview fields={previewFields} />
             </div>
           </div>
