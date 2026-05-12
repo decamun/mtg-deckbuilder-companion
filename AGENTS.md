@@ -17,6 +17,20 @@ asks for one or you determine a video is necessary to verify functionality.
 Prefer lower-cost evidence such as automated test output, logs, or screenshots
 when they are sufficient.
 
+### Pull requests and follow-up work
+
+- **Same feature, same PR:** If a pull request already exists for a feature the
+  user requested, treat later messages as updates to that same effort unless the
+  user clearly starts a new topic. Iterations, refinements, and scope tweaks for
+  that feature stay on the **existing branch** and update the **existing pull
+  request**. Do not open additional pull requests for follow-on work on the same
+  feature unless the user explicitly asks to split the work.
+- **Unrelated bugs — new branch and PR:** If testing reveals a problem that is
+  **not** part of the same feature (for example, a pre-existing defect or a bug
+  in unrelated code), fix it on a **fresh branch** with its **own pull request**
+  so it can merge independently. Avoid mixing unrelated bug fixes into the
+  feature branch when the fix should stand alone.
+
 1. Install dependencies on the host with `npm ci` if `node_modules` is missing
    or incomplete.
 2. Start the frontend with hosted Supabase settings:
