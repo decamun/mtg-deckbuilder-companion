@@ -22,6 +22,7 @@ import {
   switchBranch,
   type DeckBranchRow,
 } from "@/lib/deck-branches"
+import { ensureDeckBranchDefaults } from "@/lib/ensure-deck-branch-defaults"
 import { VersionTimelineRow } from "./VersionTimelineRow"
 import { UnnamedVersionsGroup } from "./UnnamedVersionsGroup"
 import { AddNamedVersionDialog } from "./AddNamedVersionDialog"
@@ -87,22 +88,36 @@ export function VersionsTab({
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    const [{ data: deckRow }, branchList, tagMap] = await Promise.all([
-      supabase.from("decks").select("current_branch_id").eq("id", deckId).maybeSingle(),
-      listBranches(deckId),
-      getLatestVersionIdPerTagForDeck(deckId),
-    ])
-    setTagTipByTag(Object.fromEntries(tagMap))
-    const bid = (deckRow?.current_branch_id as string | undefined) ?? null
-    setCurrentBranchId(bid)
-    setBranches(branchList)
-    if (bid) {
-      setRows(await getVersionsForBranch(deckId, bid))
-    } else {
-      setRows([])
+    try {
+      const fetchPack = () =>
+        Promise.all([
+          supabase.from("decks").select("current_branch_id").eq("id", deckId).maybeSingle(),
+          listBranches(deckId),
+          getLatestVersionIdPerTagForDeck(deckId),
+        ] as const)
+
+      let [{ data: deckRow }, branchList, tagMap] = await fetchPack()
+
+      if (isOwner && (branchList.length === 0 || !(deckRow?.current_branch_id as string | undefined))) {
+        const ok = await ensureDeckBranchDefaults(deckId)
+        if (ok) {
+          ;[{ data: deckRow }, branchList, tagMap] = await fetchPack()
+        }
+      }
+
+      setTagTipByTag(Object.fromEntries(tagMap))
+      const bid = (deckRow?.current_branch_id as string | undefined) ?? null
+      setCurrentBranchId(bid)
+      setBranches(branchList)
+      if (bid) {
+        setRows(await getVersionsForBranch(deckId, bid))
+      } else {
+        setRows([])
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }, [deckId])
+  }, [deckId, isOwner])
 
   useEffect(() => {
     void Promise.resolve().then(() => refresh())

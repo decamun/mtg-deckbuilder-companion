@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client"
+import { ensureDeckBranchDefaults } from "@/lib/ensure-deck-branch-defaults"
 import type { VersionSnapshot } from "@/lib/versions"
 import { appendDeckVersionSnapshot } from "@/lib/versions"
 
@@ -24,12 +25,22 @@ export async function listBranches(deckId: string): Promise<DeckBranchRow[]> {
 export async function createBranch(deckId: string, name: string): Promise<DeckBranchRow | null> {
   const trimmed = name.trim().replace(/\s+/g, " ")
   if (!trimmed) return null
-  const { data: deck, error: deckErr } = await supabase
+  let { data: deck, error: deckErr } = await supabase
     .from("decks")
     .select("current_branch_id")
     .eq("id", deckId)
     .maybeSingle()
-  if (deckErr || !deck?.current_branch_id) return null
+  if (deckErr) return null
+  if (!deck?.current_branch_id) {
+    const repaired = await ensureDeckBranchDefaults(deckId)
+    if (!repaired) return null
+    ;({ data: deck, error: deckErr } = await supabase
+      .from("decks")
+      .select("current_branch_id")
+      .eq("id", deckId)
+      .maybeSingle())
+    if (deckErr || !deck?.current_branch_id) return null
+  }
 
   const { data: cur } = await supabase
     .from("deck_branches")

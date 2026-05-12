@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client"
+import { ensureDeckBranchDefaults } from "@/lib/ensure-deck-branch-defaults"
 
 /**
  * Deck version snapshots are full JSON deck states per row (simple replay and RLS-friendly).
@@ -74,6 +75,11 @@ async function createSnapshotVersion(
   summary: string,
   explicitParentId?: string | null
 ): Promise<DeckVersionRow | null> {
+  const { data: deckRow } = await supabase.from("decks").select("current_branch_id").eq("id", deckId).maybeSingle()
+  if (!(deckRow?.current_branch_id as string | undefined)) {
+    await ensureDeckBranchDefaults(deckId)
+  }
+
   const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase.rpc("create_deck_version_snapshot", {
     p_deck_id: deckId,
@@ -145,14 +151,35 @@ export async function getVersionsForBranch(deckId: string, branchId: string): Pr
     .maybeSingle()
   const headId = br?.head_version_id as string | undefined
 
-  let q = supabase.from("deck_versions").select("*").eq("deck_id", deckId).order("created_at", { ascending: false })
-  if (headId) {
-    q = q.or(`branch_id.eq.${branchId},id.eq.${headId}`)
-  } else {
-    q = q.eq("branch_id", branchId)
+  const { data: timelineRows, error } = await supabase
+    .from("deck_versions")
+    .select("*")
+    .eq("deck_id", deckId)
+    .eq("branch_id", branchId)
+    .order("created_at", { ascending: false })
+  if (error) return []
+
+  const byId = new Map<string, DeckVersionRow>()
+  for (const row of (timelineRows ?? []) as DeckVersionRow[]) {
+    byId.set(row.id, { ...row, tags: row.tags ?? [] })
   }
-  const { data } = await q
-  return ((data ?? []) as DeckVersionRow[]).map(row => ({ ...row, tags: row.tags ?? [] }))
+
+  if (headId && !byId.has(headId)) {
+    const { data: headRow } = await supabase
+      .from("deck_versions")
+      .select("*")
+      .eq("deck_id", deckId)
+      .eq("id", headId)
+      .maybeSingle()
+    if (headRow) {
+      const r = headRow as DeckVersionRow
+      byId.set(r.id, { ...r, tags: r.tags ?? [] })
+    }
+  }
+
+  return Array.from(byId.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
 }
 
 /** Full version graph for merge-base computation (same deck). */
