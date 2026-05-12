@@ -13,6 +13,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "test:p0-security": "node scripts/test-p0-security.mjs",
     "test:deck-service": "node scripts/test-deck-service-validation.mjs",
     "test:deck-format": "node scripts/test-deck-format-validation.mjs",
@@ -58,6 +59,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
-    "typescript": "^6"
+    "typescript": "^6",
+    "vitest": "^4.1.6"
   }
 }
