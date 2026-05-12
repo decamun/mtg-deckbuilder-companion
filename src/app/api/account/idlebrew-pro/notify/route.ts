@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +26,7 @@ export async function POST() {
     .single()
 
   if (error) {
-    console.error('[idlebrew-pro/notify] upsert failed:', error.message)
+    logger.error('[idlebrew-pro/notify] upsert failed', { userId: user.id, error: error.message })
     return NextResponse.json({ message: 'Failed to save notification preference' }, { status: 500 })
   }
 
