@@ -112,7 +112,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
 
   return (
     <>
-      <div className="sticky top-0 z-20 -mx-6 mb-6 overflow-visible border-b border-border bg-background/95 px-6 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+      <div className="sticky top-0 z-50 -mx-6 mb-6 overflow-visible border-b border-border bg-background/95 px-6 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
         <div
           className={cn(
             "grid gap-3 overflow-visible",
@@ -160,7 +160,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
               hasCommanders && "lg:h-full lg:min-h-0"
             )}
           >
-            <div className="absolute left-0 top-0 z-30 flex min-h-full w-full min-w-0 max-w-full flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur-sm supports-[backdrop-filter]:bg-card/90 max-h-[min(90vh,52rem)]">
+            <div className="absolute left-0 top-0 z-[60] flex min-h-full w-full min-w-0 max-w-full flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur-sm supports-[backdrop-filter]:bg-card/90 max-h-[min(90vh,52rem)]">
               <DeckWorkspaceCardRulesPreview fields={previewFields} />
             </div>
           </div>

@@ -95,8 +95,8 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
 
       <div
         className={cn(
-          "relative z-10 flex flex-col px-4 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:flex-nowrap sm:items-end sm:pt-0",
-          compact ? "gap-1 pb-2 pt-12 sm:gap-2 sm:pb-1.5" : "gap-2 pb-3 pt-10 sm:gap-3 sm:pb-2"
+          "relative z-10 flex flex-col px-4 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:flex-wrap sm:items-end sm:pt-0",
+          compact ? "gap-1 pb-2 pt-12 sm:gap-x-2 sm:gap-y-2 sm:pb-1.5" : "gap-2 pb-3 pt-10 sm:gap-x-3 sm:gap-y-2 sm:pb-2"
         )}
       >
         <div className="flex min-h-9 min-w-0 w-full items-center gap-2 sm:contents">
@@ -104,7 +104,7 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
             &larr; Back
           </Button>
 
-          <div className="flex min-h-9 min-w-0 flex-1 items-center gap-2 sm:max-w-[min(100%,28rem)] sm:flex-none sm:border-r sm:border-border sm:pr-3">
+          <div className="flex min-h-9 min-w-0 flex-1 items-center gap-2 sm:min-w-0 sm:max-w-[min(100%,28rem)] sm:flex-none sm:border-r sm:border-border sm:pr-3">
             {headerProps.deckTitleEditing && headerProps.deck ? (
               <div ref={headerProps.deckTitleFieldRef} className="min-w-0 flex-1 sm:flex-none sm:max-w-[min(100%,28rem)]">
                 <Input
@@ -133,7 +133,7 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
                 )}
                 <h1
                   className={cn(
-                    "relative z-10 min-w-0 truncate font-bold drop-shadow-md sm:whitespace-nowrap",
+                    "relative min-w-0 truncate font-bold drop-shadow-md sm:whitespace-nowrap",
                     compact ? "text-sm sm:text-sm" : "text-base",
                     headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "cursor-text select-none" : ""
                   )}
