@@ -47,9 +47,22 @@ function err(error: string, description: string, status = 400) {
  * `application/json` (some MCP clients send JSON).
  */
 export async function POST(request: Request) {
-  const limit = checkRateLimit(`oauth-token:${ipFromRequest(request)}`, TOKEN_RATE_LIMIT)
+  const limit = await checkRateLimit(`oauth-token:${ipFromRequest(request)}`, TOKEN_RATE_LIMIT)
   if (!limit.ok) {
-    return err('rate_limited', 'Too many token requests from this address', 429)
+    return Response.json(
+      {
+        error: 'rate_limited',
+        error_description: 'Too many token requests from this address',
+      },
+      {
+        status: 429,
+        headers: {
+          'Cache-Control': 'no-store',
+          Pragma: 'no-cache',
+          'Retry-After': String(limit.retryAfter),
+        },
+      }
+    )
   }
 
   const contentType = request.headers.get('content-type') ?? ''

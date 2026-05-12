@@ -34,7 +34,7 @@ function ipFromRequest(req: Request): string {
  * mint a random client_id and return the registration response.
  */
 export async function POST(request: Request) {
-  const limit = checkRateLimit(`oauth-register:${ipFromRequest(request)}`, REGISTRATION_RATE_LIMIT)
+  const limit = await checkRateLimit(`oauth-register:${ipFromRequest(request)}`, REGISTRATION_RATE_LIMIT)
   if (!limit.ok) {
     return Response.json(
       { error: 'rate_limited', error_description: 'Too many registrations from this address' },
