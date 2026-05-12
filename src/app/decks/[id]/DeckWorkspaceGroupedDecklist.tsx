@@ -337,69 +337,75 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                     }
 
                                     return (
-                                      <DraggableDeckCard
-                                        key={card.id}
-                                        id={deckCardDragId(grouping, groupName, card.id)}
-                                        disabled={cardDragDisabled}
-                                        className="absolute w-full cursor-grab active:cursor-grabbing group"
-                                        style={dragStyle}
-                                      >
-                                        <motion.div
-                                          className={`relative rounded-xl${stackViolations?.length ? " ring-2 ring-red-500/55 ring-offset-2 ring-offset-background" : ""}`}
-                                          animate={{
-                                            y: isHovered ? -12 : isBelow ? stackHoverShift : 0,
-                                            scale: isHovered ? 1.05 : 1,
-                                          }}
-                                          transition={{ type: "spring", stiffness: 500, damping: 35, mass: 0.4 }}
-                                        >
-                                          <button
-                                            type="button"
-                                            className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
-                                            aria-label={`Preview ${card.name}`}
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              showClickedPreview(card, groupName)
-                                            }}
-                                          />
-                                          <CardThumbnail card={card} imageClassName="w-full rounded-xl border border-black/60 shadow-xl" />
-                                          {stackViolations && stackViolations.length > 0 && (
-                                            <div
-                                              className={`pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
-                                                isHovered ? "opacity-100" : "opacity-0"
-                                              }`}
+                                      <ContextMenu key={card.id} onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(card) }}>
+                                        <ContextMenuTrigger>
+                                          <DraggableDeckCard
+                                            id={deckCardDragId(grouping, groupName, card.id)}
+                                            disabled={cardDragDisabled}
+                                            className="absolute w-full cursor-grab active:cursor-grabbing group"
+                                            style={dragStyle}
+                                          >
+                                            <motion.div
+                                              className={`relative rounded-xl${stackViolations?.length ? " ring-2 ring-red-500/55 ring-offset-2 ring-offset-background" : ""}`}
+                                              animate={{
+                                                y: isHovered ? -12 : isBelow ? stackHoverShift : 0,
+                                                scale: isHovered ? 1.05 : 1,
+                                              }}
+                                              transition={{ type: "spring", stiffness: 500, damping: 35, mass: 0.4 }}
                                             >
-                                              <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
-                                                <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
-                                                <ul className="space-y-0.5">
-                                                  {stackViolations.map((line) => (
-                                                    <li key={line} className="list-disc pl-3.5 marker:text-red-400/90">
-                                                      {line}
-                                                    </li>
-                                                  ))}
-                                                </ul>
+                                              <button
+                                                type="button"
+                                                className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
+                                                aria-label={`Preview ${card.name}`}
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  showClickedPreview(card, groupName)
+                                                }}
+                                              />
+                                              <CardThumbnail card={card} imageClassName="w-full rounded-xl border border-black/60 shadow-xl" />
+                                              {stackViolations && stackViolations.length > 0 && (
+                                                <div
+                                                  className={`pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
+                                                    isHovered ? "opacity-100" : "opacity-0"
+                                                  }`}
+                                                >
+                                                  <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
+                                                    <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
+                                                    <ul className="space-y-0.5">
+                                                      {stackViolations.map((line) => (
+                                                        <li key={line} className="list-disc pl-3.5 marker:text-red-400/90">
+                                                          {line}
+                                                        </li>
+                                                      ))}
+                                                    </ul>
+                                                  </div>
+                                                </div>
+                                              )}
+                                              {card.quantity > 1 && (
+                                                <div className="absolute top-2 right-2 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
+                                                  {card.quantity}x
+                                                </div>
+                                              )}
+                                              {displayedCommanderIds.includes(card.scryfall_id) && (
+                                                <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-0.5 shadow">
+                                                  <Crown className="w-2.5 h-2.5" /> CMD
+                                                </div>
+                                              )}
+                                              <div className="absolute top-2 right-2 z-20">
+                                                <DeckWorkspaceThreeDotMenu {...overflowMenus} c={card} groupName={groupName} align="end" />
                                               </div>
-                                            </div>
-                                          )}
-                                          {card.quantity > 1 && (
-                                            <div className="absolute top-2 right-2 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
-                                              {card.quantity}x
-                                            </div>
-                                          )}
-                                          {displayedCommanderIds.includes(card.scryfall_id) && (
-                                            <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-0.5 shadow">
-                                              <Crown className="w-2.5 h-2.5" /> CMD
-                                            </div>
-                                          )}
-                                          <div className="absolute top-2 right-2 z-20">
-                                            <DeckWorkspaceThreeDotMenu {...overflowMenus} c={card} groupName={groupName} align="end" />
-                                          </div>
-                                          {itemIdx === colCards.length - 1 && (
-                                            <div className="absolute bottom-2 right-2 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
-                                              {formatPrice(card.price_usd)}
-                                            </div>
-                                          )}
-                                        </motion.div>
-                                      </DraggableDeckCard>
+                                              {itemIdx === colCards.length - 1 && (
+                                                <div className="absolute bottom-2 right-2 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
+                                                  {formatPrice(card.price_usd)}
+                                                </div>
+                                              )}
+                                            </motion.div>
+                                          </DraggableDeckCard>
+                                        </ContextMenuTrigger>
+                                        <ContextMenuContent className="w-56 bg-white border-border text-foreground">
+                                          <DeckWorkspaceCardActionMenuItems variant="context" {...buildDeckWorkspaceMenuItemProps(overflowMenus, card, groupName)} />
+                                        </ContextMenuContent>
+                                      </ContextMenu>
                                     )
                                   })}
                                 </div>
@@ -414,49 +420,55 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                         {groupCards.map((c) => {
                           const listV = formatViolationMap.get(c.id)
                           return (
-                            <DraggableDeckCard
-                              key={c.id}
-                              id={deckCardDragId(grouping, groupName, c.id)}
-                              disabled={cardDragDisabled}
-                              onMouseEnter={listV && listV.length > 0 ? () => setDeckFormatHintHoverId(c.id) : undefined}
-                              onMouseLeave={listV && listV.length > 0 ? () => setDeckFormatHintHoverId((prev) => (prev === c.id ? null : prev)) : undefined}
-                              className={`flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg relative cursor-grab active:cursor-grabbing${listV?.length ? " border-l-4 border-l-red-500" : ""}`}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                showClickedPreview(c, groupName)
-                              }}
-                            >
-                              <div className="relative z-0 flex min-w-0 flex-1 items-center gap-3">
-                                <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
-                                {(c.face_images?.[0] || c.image_url) && (
-                                  <CardThumbnail card={c} className="h-9 shrink-0" imageClassName="h-9 w-auto rounded border border-border/50" overlayClassName="rounded" />
-                                )}
-                                <ManaText text={c.name} className="font-medium cursor-pointer hover:text-primary transition-colors truncate" />
-                                <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
-                              </div>
-                              <div className="flex items-center gap-3 ml-auto shrink-0">
-                                <span className="text-xs font-mono text-muted-foreground tabular-nums w-16 text-right">{formatPrice(c.price_usd)}</span>
-                                <DeckWorkspaceThreeDotMenu {...overflowMenus} c={c} groupName={groupName} align="end" />
-                              </div>
-                              {listV && listV.length > 0 && (
-                                <div
-                                  className={`pointer-events-none absolute inset-x-2 top-1/2 z-30 max-h-[calc(100%-0.5rem)] -translate-y-1/2 overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
-                                    deckFormatHintHoverId === c.id ? "opacity-100" : "opacity-0"
-                                  }`}
+                            <ContextMenu key={c.id} onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(c) }}>
+                              <ContextMenuTrigger>
+                                <DraggableDeckCard
+                                  id={deckCardDragId(grouping, groupName, c.id)}
+                                  disabled={cardDragDisabled}
+                                  onMouseEnter={listV && listV.length > 0 ? () => setDeckFormatHintHoverId(c.id) : undefined}
+                                  onMouseLeave={listV && listV.length > 0 ? () => setDeckFormatHintHoverId((prev) => (prev === c.id ? null : prev)) : undefined}
+                                  className={`flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg relative cursor-grab active:cursor-grabbing${listV?.length ? " border-l-4 border-l-red-500" : ""}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    showClickedPreview(c, groupName)
+                                  }}
                                 >
-                                  <div className="ml-auto w-[min(100%,22rem)] rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-[10px] leading-snug text-red-100">
-                                    <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
-                                    <ul className="space-y-0.5">
-                                      {listV.map((line) => (
-                                        <li key={line} className="list-disc pl-3.5 text-left marker:text-red-400/90">
-                                          {line}
-                                        </li>
-                                      ))}
-                                    </ul>
+                                  <div className="relative z-0 flex min-w-0 flex-1 items-center gap-3">
+                                    <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
+                                    {(c.face_images?.[0] || c.image_url) && (
+                                      <CardThumbnail card={c} className="h-9 shrink-0" imageClassName="h-9 w-auto rounded border border-border/50" overlayClassName="rounded" />
+                                    )}
+                                    <ManaText text={c.name} className="font-medium cursor-pointer hover:text-primary transition-colors truncate" />
+                                    <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
                                   </div>
-                                </div>
-                              )}
-                            </DraggableDeckCard>
+                                  <div className="flex items-center gap-3 ml-auto shrink-0">
+                                    <span className="text-xs font-mono text-muted-foreground tabular-nums w-16 text-right">{formatPrice(c.price_usd)}</span>
+                                    <DeckWorkspaceThreeDotMenu {...overflowMenus} c={c} groupName={groupName} align="end" />
+                                  </div>
+                                  {listV && listV.length > 0 && (
+                                    <div
+                                      className={`pointer-events-none absolute inset-x-2 top-1/2 z-30 max-h-[calc(100%-0.5rem)] -translate-y-1/2 overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
+                                        deckFormatHintHoverId === c.id ? "opacity-100" : "opacity-0"
+                                      }`}
+                                    >
+                                      <div className="ml-auto w-[min(100%,22rem)] rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-[10px] leading-snug text-red-100">
+                                        <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
+                                        <ul className="space-y-0.5">
+                                          {listV.map((line) => (
+                                            <li key={line} className="list-disc pl-3.5 text-left marker:text-red-400/90">
+                                              {line}
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    </div>
+                                  )}
+                                </DraggableDeckCard>
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-56 bg-white border-border text-foreground">
+                                <DeckWorkspaceCardActionMenuItems variant="context" {...buildDeckWorkspaceMenuItemProps(overflowMenus, c, groupName)} />
+                              </ContextMenuContent>
+                            </ContextMenu>
                           )
                         })}
                       </div>
