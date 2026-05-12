@@ -1,6 +1,14 @@
 "use client"
 
-import { useMemo, useState, type ReactNode } from "react"
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
+import { createPortal } from "react-dom"
 import { CircleHelp, Plus, Shuffle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -298,45 +306,113 @@ const OPENING_COLUMN_HELP = [
 function MeasureHelpIcon({
   paragraphs,
   'aria-label': ariaLabel,
-  placement,
 }: {
   paragraphs: readonly string[]
   'aria-label': string
-  placement: 'above' | 'below'
 }) {
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  const closeTimer = useRef<number | null>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 288, maxH: 320 })
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimer.current != null) {
+      window.clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }, [])
+
+  const scheduleClose = useCallback(() => {
+    clearCloseTimer()
+    closeTimer.current = window.setTimeout(() => setOpen(false), 140)
+  }, [clearCloseTimer])
+
+  const positionPanel = useCallback(() => {
+    const btn = btnRef.current
+    if (!btn) return
+    const br = btn.getBoundingClientRect()
+    const margin = 8
+    const width = Math.min(288, window.innerWidth - margin * 2)
+    const left = Math.max(margin, Math.min(br.left, window.innerWidth - width - margin))
+    let top = br.bottom + 6
+    const panel = panelRef.current
+    const ph = panel?.offsetHeight ?? 0
+    if (ph > 0 && top + ph > window.innerHeight - margin) {
+      top = Math.max(margin, br.top - ph - 6)
+    }
+    const maxH = Math.max(120, Math.min(360, window.innerHeight - top - margin))
+    setPos({ top, left, width, maxH })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!open) return
+    positionPanel()
+    const raf = window.requestAnimationFrame(() => positionPanel())
+    const onScroll = () => positionPanel()
+    window.addEventListener("scroll", onScroll, true)
+    window.addEventListener("resize", onScroll)
+    return () => {
+      clearCloseTimer()
+      window.cancelAnimationFrame(raf)
+      window.removeEventListener("scroll", onScroll, true)
+      window.removeEventListener("resize", onScroll)
+    }
+  }, [open, positionPanel, paragraphs, clearCloseTimer])
+
   return (
-    <div className="group relative inline-flex">
+    <>
       <button
+        ref={btnRef}
         type="button"
         className={cn(
-          'rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          "inline-flex shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground",
+          "align-middle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         )}
         aria-label={ariaLabel}
+        onPointerEnter={() => {
+          clearCloseTimer()
+          setOpen(true)
+        }}
+        onPointerLeave={scheduleClose}
       >
         <CircleHelp className="h-3.5 w-3.5" aria-hidden />
       </button>
-      <div
-        className={cn(
-          'pointer-events-none invisible absolute z-50 w-72 max-w-[min(18rem,calc(100vw-3rem))]',
-          'rounded-md border border-border bg-popover p-3 text-left text-[11px] leading-snug text-popover-foreground shadow-lg',
-          'opacity-0 transition-[opacity,visibility] duration-150',
-          'group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100',
-          placement === 'below' ? 'left-0 top-full mt-1' : 'bottom-full left-0 mb-1',
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="tooltip"
+            onPointerEnter={() => {
+              clearCloseTimer()
+              setOpen(true)
+            }}
+            onPointerLeave={scheduleClose}
+            style={{
+              position: "fixed",
+              top: pos.top,
+              left: pos.left,
+              width: pos.width,
+              maxHeight: pos.maxH,
+              zIndex: 80,
+            }}
+            className="overflow-y-auto rounded-md border border-border bg-popover p-3 text-left text-[11px] leading-snug text-popover-foreground shadow-lg"
+          >
+            {paragraphs.map((t, i) => (
+              <p key={i} className={i === 0 ? undefined : "mt-2"}>
+                {t}
+              </p>
+            ))}
+          </div>,
+          document.body,
         )}
-      >
-        {paragraphs.map((text, i) => (
-          <p key={i} className={i === 0 ? undefined : 'mt-2'}>
-            {text}
-          </p>
-        ))}
-      </div>
-    </div>
+    </>
   )
 }
 
 function formatProbCell(valueKind: ProbRowValueKind, p: number): ReactNode {
-  if (valueKind === 'expected_mana') {
+  if (valueKind === "expected_mana") {
     return <span className="font-semibold text-sky-300 tabular-nums">{p.toFixed(2)}</span>
   }
   return <span className={`font-semibold ${probColor(p)}`}>{(p * 100).toFixed(0)}%</span>
@@ -366,34 +442,32 @@ function ProbabilityTable({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card/60 p-4">
-      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+    <div className="min-h-[24rem] overflow-visible rounded-lg border border-border bg-card/60 p-4 sm:min-h-[28rem]">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
         <h3 className="font-heading text-base tracking-wider">Opening Performance</h3>
-        <span className="text-[10px] text-muted-foreground">
-          Going first · {data.deckSize}-card deck · {data.lands} land sources
-        </span>
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
+          <span className="min-w-0 leading-snug">
+            Going first · {data.deckSize}-card deck · {data.lands} land sources
+          </span>
+          <MeasureHelpIcon
+            paragraphs={OPENING_COLUMN_HELP}
+            aria-label="How to read the turn columns"
+          />
+        </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overflow-y-visible pb-1">
         <table className="w-full text-xs tabular-nums">
           <thead>
             <tr className="text-muted-foreground border-b border-border/60">
-              <th className="text-left font-normal py-1.5 pr-3">
-                <div className="inline-flex items-center gap-1">
-                  <span>Turn</span>
-                  <MeasureHelpIcon
-                    paragraphs={OPENING_COLUMN_HELP}
-                    aria-label="How to read the turn columns"
-                    placement="below"
-                  />
-                </div>
+              <th className="py-1.5 pr-3 text-left font-normal align-bottom">
+                <div className="text-foreground/80">Turn</div>
+                <div className="text-[10px] text-muted-foreground/80">Cards seen (Nc)</div>
               </th>
               {PROB_TURNS.map((T, i) => (
-                <th key={T} className="text-center font-normal py-1.5 px-2 min-w-[44px]">
-                  <div className="text-foreground/80 font-semibold">{T}</div>
-                  <div className="text-[10px] text-muted-foreground/80">
-                    {data.cardsSeen[i]}c
-                  </div>
+                <th key={T} className="min-w-[44px] px-2 py-1.5 text-center font-normal">
+                  <div className="font-semibold text-foreground/80">{T}</div>
+                  <div className="text-[10px] text-muted-foreground/80">{data.cardsSeen[i]}c</div>
                 </th>
               ))}
             </tr>
@@ -404,25 +478,20 @@ function ProbabilityTable({
                 key={`${idx}-${row.measureId}-${row.valueKind}-${row.label}`}
                 className="border-b border-border/30 last:border-0"
               >
-                <td className="py-1.5 pr-3">
-                  <div className="flex items-start gap-1.5">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium truncate max-w-[200px]" title={row.label}>
-                        {row.label}
-                      </div>
-                      {row.hint && (
-                        <div className="text-[10px] text-muted-foreground">{row.hint}</div>
-                      )}
-                    </div>
+                <td className="py-1.5 pr-3 align-top">
+                  <div className="font-medium truncate max-w-[220px]" title={row.label}>
+                    {row.label}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] text-muted-foreground">
+                    {row.hint ? <span className="min-w-0 leading-snug">{row.hint}</span> : null}
                     <MeasureHelpIcon
                       paragraphs={OPENING_MEASURE_HELP[row.measureId]}
                       aria-label={`About ${row.label}`}
-                      placement="above"
                     />
                   </div>
                 </td>
                 {row.cells.map((p, i) => (
-                  <td key={i} className="text-center py-1.5 px-2">
+                  <td key={i} className="px-2 py-1.5 text-center">
                     {p === null ? (
                       <span className="text-muted-foreground/40">—</span>
                     ) : (
@@ -436,9 +505,9 @@ function ProbabilityTable({
         </table>
       </div>
 
-      <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
+      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
         Going first on the play with a uniformly shuffled maindeck. Draw and ramp helpers only count spells with a
-        known mana value. Commander tax and colored mana are not modeled—hover the icons for row-by-row detail.
+        known mana value. Commander tax and colored mana are not modeled—hover the (i) icons for row-by-row detail.
       </p>
     </div>
   )
