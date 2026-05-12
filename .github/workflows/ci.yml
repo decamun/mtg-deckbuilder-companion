@@ -32,6 +32,5 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_ci_placeholder
         run: npm run build
 
-      - name: npm audit (informational)
-        run: npm audit --omit=dev
-        continue-on-error: true
+      - name: npm audit (fail on high+)
+        run: npm audit --omit=dev --audit-level=high
