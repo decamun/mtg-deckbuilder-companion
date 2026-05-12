@@ -353,7 +353,9 @@ export function VersionsTab({
             <DropdownMenuContent align="end" className="w-56 bg-popover border-border text-foreground">
               <DropdownMenuLabel className="text-xs text-muted-foreground">Branches</DropdownMenuLabel>
               <DropdownMenuRadioGroup
-                value={currentBranchId && branches.some((b) => b.id === currentBranchId) ? currentBranchId : undefined}
+                value={
+                  currentBranchId && branches.some((b) => b.id === currentBranchId) ? currentBranchId : ""
+                }
                 onValueChange={(v) => {
                   if (v) void handleSelectBranch(v)
                 }}
