@@ -1,0 +1,50 @@
+name: Enforce main branch protection
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  protect-main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure admin token is configured
+        env:
+          ADMIN_GITHUB_TOKEN: ${{ secrets.ADMIN_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$ADMIN_GITHUB_TOKEN" ]; then
+            echo "Error: ADMIN_GITHUB_TOKEN secret is required to manage branch protection."
+            exit 1
+          fi
+
+      - name: Apply protection rules to main
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.ADMIN_GITHUB_TOKEN }}
+          script: |
+            const maintainer = "decamun";
+
+            await github.request("PUT /repos/{owner}/{repo}/branches/{branch}/protection", {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: "main",
+              required_status_checks: null,
+              enforce_admins: true,
+              required_pull_request_reviews: null,
+              restrictions: {
+                users: [maintainer],
+                teams: [],
+                apps: [],
+              },
+              required_linear_history: true,
+              allow_force_pushes: false,
+              allow_deletions: false,
+              block_creations: false,
+              required_conversation_resolution: false,
+              lock_branch: false,
+              allow_fork_syncing: false,
+            });
+
+            core.info(`Applied branch protection on main with push access restricted to ${maintainer}.`);
