@@ -17,7 +17,7 @@ describe('deck stats wrappers', () => {
     mockedCmcOf.mockImplementation(card => card?.cmc ?? 0)
   })
 
-  it('hydrates rows from the effective printing and preserves price selection inputs', async () => {
+  it('hydrates deck cards using printing data and finish-aware prices', async () => {
     mockedGetCardsByIds.mockResolvedValue([
       {
         id: 'cmd-id',

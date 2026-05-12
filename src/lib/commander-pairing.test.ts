@@ -45,7 +45,7 @@ describe('getPartnerKind and buildPartnerScryfallQuery', () => {
       't:background',
     ],
     [
-      'doctor\'s companion',
+      "doctor's companion",
       makeCard({ keywords: ["Doctor's companion"] }),
       { kind: 'doctors-companion' },
       'is:commander t:doctor t:"time lord"',
@@ -133,8 +133,8 @@ describe('canPair', () => {
     ['choose a background pairs with a background', backgroundCommander, background, true],
     ['background pairs back with choose a background', background, backgroundCommander, true],
     ['choose a background does not pair with partner', backgroundCommander, partnerA, false],
-    ['doctor\'s companion pairs with a time lord doctor', doctorsCompanion, doctor, true],
-    ['time lord doctor pairs back with doctor\'s companion', doctor, doctorsCompanion, true],
+    ["doctor's companion pairs with a time lord doctor", doctorsCompanion, doctor, true],
+    ["time lord doctor pairs back with doctor's companion", doctor, doctorsCompanion, true],
     ['ordinary commanders cannot pair', ordinaryCommander, partnerA, false],
   ])('%s', (_, first, second, expected) => {
     expect(canPair(first, second)).toBe(expected)
