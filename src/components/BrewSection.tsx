@@ -89,16 +89,24 @@ function cardToBrewRow(deckId: string, card: ScryfallCard): BrewDeckRow {
 
 type BasicLandPlan = { name: string; count: number }
 
+function basicLandNamesFromColorIdentity(colorIdentity: string[]): string[] {
+  if (colorIdentity.length === 0) return ["Wastes"]
+  return [
+    ...new Set(
+      colorIdentity
+        .map((color) => COLOR_TO_LAND[color])
+        .filter((name): name is string => Boolean(name))
+    ),
+  ]
+}
+
 export function buildBasicLandPlan(
   colorIdentity: string[],
   landCount: number,
   edhrecLandsTaken: number
 ): BasicLandPlan[] {
-  const basicLandNames =
-    colorIdentity.length > 0
-      ? [...new Set(colorIdentity.map((color) => COLOR_TO_LAND[color]).filter(Boolean))]
-      : ["Wastes"]
-  const basicLandCount = Math.max(1, basicLandNames.length)
+  const basicLandNames = basicLandNamesFromColorIdentity(colorIdentity)
+  const basicLandCount = basicLandNames.length
   const minBasicEach = Math.min(4, Math.floor(landCount / basicLandCount))
   const minBasicsTotal = basicLandNames.length * minBasicEach
   const edhrecLandSlots = Math.max(0, landCount - minBasicsTotal)
@@ -114,16 +122,19 @@ export function buildBasicLandPlan(
 
 export function splitEdhrecCardsByType(cards: BrewDeckRow[]): {
   lands: BrewDeckRow[]
+  creatures: BrewDeckRow[]
   spells: BrewDeckRow[]
 } {
   const lands: BrewDeckRow[] = []
+  const creatures: BrewDeckRow[] = []
   const spells: BrewDeckRow[] = []
   for (const row of cards) {
     const typeLine = row._card.type_line?.toLowerCase() ?? ""
     if (typeLine.includes("land")) lands.push(row)
+    else if (typeLine.includes("creature")) creatures.push(row)
     else spells.push(row)
   }
-  return { lands, spells }
+  return { lands, creatures, spells }
 }
 
 export function assembleDeckRows(params: {
@@ -479,11 +490,7 @@ export function BrewSection() {
           ...(card.color_identity ?? []),
           ...(opts.secondCommander?.color_identity ?? []),
         ]
-        const basicLandNames = [
-          ...new Set(
-            buildBasicLandPlan(combinedColors, LAND_COUNT, 0).map((land) => land.name)
-          ),
-        ]
+        const basicLandNames = basicLandNamesFromColorIdentity(combinedColors)
 
         pushStatus("Consulting EDHREC…")
         const edhrecRaw = await fetchEDHRECCards(card.name, opts.secondCommander?.name)
@@ -511,9 +518,15 @@ export function BrewSection() {
           gameChangerLimit: gcLimit,
           isGameChanger,
         }
-        let edhrecLands: BrewDeckRow[] = []
-        let edhrecCreatures: BrewDeckRow[] = []
-        let edhrecSpells: BrewDeckRow[] = []
+        const edhrecSplit: {
+          lands: BrewDeckRow[]
+          creatures: BrewDeckRow[]
+          spells: BrewDeckRow[]
+        } = {
+          lands: [],
+          creatures: [],
+          spells: [],
+        }
         if (edhrecFiltered.length > 0) {
           pushStatus("Looking up cards on Scryfall…")
           const scryfallCards = await getCardsCollection(
@@ -536,14 +549,9 @@ export function BrewSection() {
             matchedRows.push(row)
           }
           const splitRows = splitEdhrecCardsByType(matchedRows)
-          edhrecLands = splitRows.lands
-          edhrecCreatures = splitRows.spells.filter((row) =>
-            (row._card.type_line?.toLowerCase() ?? "").includes("creature")
-          )
-          edhrecSpells = splitRows.spells.filter(
-            (row) =>
-              !(row._card.type_line?.toLowerCase() ?? "").includes("creature")
-          )
+          edhrecSplit.lands = splitRows.lands
+          edhrecSplit.creatures = splitRows.creatures
+          edhrecSplit.spells = splitRows.spells
         }
 
         pushStatus("Filling out creatures and spells…")
@@ -553,8 +561,8 @@ export function BrewSection() {
           backfillInserts,
           missingNonLandSlots,
         } = pickNonLandRows({
-          creatureRows: edhrecCreatures,
-          spellRows: edhrecSpells,
+          creatureRows: edhrecSplit.creatures,
+          spellRows: edhrecSplit.spells,
           creatureSlots: opts.slots.creatures,
           spellSlots: opts.slots.spells,
           solRingInserted,
@@ -654,7 +662,7 @@ export function BrewSection() {
         const minBasicsTotal = basicLandNames.length * minBasicEach
         const edhrecLandSlots = Math.max(0, LAND_COUNT - minBasicsTotal)
         const { taken: edhrecLandInserts } = takeRowsForSlots(
-          edhrecLands,
+          edhrecSplit.lands,
           edhrecLandSlots,
           pickState,
           pickOpts
@@ -665,6 +673,9 @@ export function BrewSection() {
           LAND_COUNT,
           edhrecLandsTaken
         )
+        if (missingNonLandSlots > 0) {
+          pushStatus("Padding unavailable slots with basics…")
+        }
         const {
           commanderRows,
           landRows: allLandInserts,
@@ -687,9 +698,6 @@ export function BrewSection() {
         })
 
         await supabase.from("deck_cards").insert(commanderRows)
-        if (missingNonLandSlots > 0 && allLandInserts.length > 0) {
-          pushStatus("Padding unavailable slots with basics…")
-        }
         if (allLandInserts.length > 0) {
           await supabase.from("deck_cards").insert(allLandInserts)
         }
