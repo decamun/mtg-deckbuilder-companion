@@ -32,8 +32,11 @@ export type DeckWorkspaceOverflowMenusProps = {
   onClosePreview: () => void
 }
 
+/** Overflow menu fields used to build card action rows (excludes ghost-click ref only needed by ⋮ triggers). */
+export type DeckWorkspaceMenuActionSource = Omit<DeckWorkspaceOverflowMenusProps, "formatHintsMenuClosedAtRef">
+
 export function buildDeckWorkspaceMenuItemProps(
-  menus: DeckWorkspaceOverflowMenusProps,
+  menus: DeckWorkspaceMenuActionSource,
   c: DeckCard,
   groupName: string
 ) {
