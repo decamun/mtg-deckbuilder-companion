@@ -103,6 +103,7 @@ export function ImportDecklistDialog({
         collector_number: effSf?.collector_number,
         available_finishes: effSf?.finishes,
         price_usd: pickPrice(effSf?.prices, r.finish),
+        rarity: effSf?.rarity,
         effective_printing_id: effId,
       }
     })

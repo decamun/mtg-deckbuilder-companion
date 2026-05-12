@@ -48,6 +48,8 @@ export interface ScryfallCard {
     usd_etched?: string | null
     eur?: string | null
   }
+  /** Scryfall rarity: common, uncommon, rare, special, mythic, bonus, etc. */
+  rarity?: string
 }
 
 export interface ScryfallPrinting extends ScryfallCard {
