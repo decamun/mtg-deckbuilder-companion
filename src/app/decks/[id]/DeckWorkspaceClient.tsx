@@ -13,6 +13,7 @@ import {
   cmcOf,
   getCardFaceImages,
   getCardImageUrl,
+  rulesTextForDisplay,
   type ScryfallCard,
   type ScryfallPrinting,
 } from "@/lib/scryfall"
@@ -51,6 +52,7 @@ import { DeckWorkspaceDecklistToolbar } from "./DeckWorkspaceDecklistToolbar"
 import { DeckWorkspaceGroupedDecklist } from "./DeckWorkspaceGroupedDecklist"
 import { DeckWorkspaceDialogsSection } from "./DeckWorkspaceDialogsSection"
 import type { DeckWorkspaceOverflowMenusProps } from "./deck-workspace-overflow-menus"
+import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
 
 const DeckAgentSidebar = dynamic(
   () => import("@/components/agent/DeckAgentSidebar").then((m) => ({ default: m.DeckAgentSidebar })),
@@ -141,6 +143,7 @@ export default function DeckWorkspaceClient({
   const [tab, setTabState] = useState<DeckTab>(tabParam ?? "decklist")
   const setTab = (t: DeckTab) => {
     setTabState(t)
+    if (t !== "decklist") setRulesHover(null)
     const url = new URL(window.location.href)
     if (t === "decklist") url.searchParams.delete("tab")
     else url.searchParams.set("tab", t)
@@ -161,6 +164,8 @@ export default function DeckWorkspaceClient({
   const [formatHintsListOpen, setFormatHintsListOpen] = useState(false)
   const [deckFormatHintHoverId, setDeckFormatHintHoverId] = useState<string | null>(null)
   const [previewFormatHintsHovered, setPreviewFormatHintsHovered] = useState(false)
+  const [rulesHover, setRulesHover] = useState<DeckRulesHoverPayload>(null)
+  const [deckChromeCollapsed, setDeckChromeCollapsed] = useState(false)
 
   const [deckTitleEditing, setDeckTitleEditing] = useState(false)
   const [deckTitleDraft, setDeckTitleDraft] = useState("")
@@ -169,6 +174,48 @@ export default function DeckWorkspaceClient({
   const skipDeckTitleBlurCommitRef = useRef(false)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
+
+  const onDeckCardRulesPreviewHover = useCallback((card: DeckCard | null) => {
+    setRulesHover((prev) => {
+      if (card) return { kind: "deck", card }
+      return prev?.kind === "deck" ? null : prev
+    })
+  }, [])
+
+  const onSearchResultRulesHover = useCallback((card: ScryfallCard | null) => {
+    setRulesHover((prev) => {
+      if (card) return { kind: "scryfall", card }
+      return prev?.kind === "scryfall" ? null : prev
+    })
+  }, [])
+
+  const endSearchDropdown = useCallback(() => {
+    setSearchFocused(false)
+    setRulesHover((prev) => (prev?.kind === "scryfall" ? null : prev))
+  }, [])
+
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    let raf = 0
+    const onScroll = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const y = el.scrollTop
+        setDeckChromeCollapsed((prev) => {
+          if (y > 48 && !prev) return true
+          if (y < 10 && prev) return false
+          return prev
+        })
+      })
+    }
+    el.addEventListener("scroll", onScroll, { passive: true })
+    onScroll()
+    return () => {
+      el.removeEventListener("scroll", onScroll)
+      cancelAnimationFrame(raf)
+    }
+  }, [tab, deckId])
 
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -239,12 +286,12 @@ export default function DeckWorkspaceClient({
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
-        setSearchFocused(false)
+        endSearchDropdown()
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [endSearchDropdown])
 
   useEffect(() => {
     if (!clickedPreview) return
@@ -302,7 +349,7 @@ export default function DeckWorkspaceClient({
         colors: card.colors ?? [],
         color_identity: card.color_identity ?? [],
         legalities: card.legalities,
-        oracle_text: card.oracle_text || '',
+        oracle_text: rulesTextForDisplay(card) || card.oracle_text || "",
         set_code: card.set,
         collector_number: card.collector_number,
         available_finishes: card.finishes,
@@ -334,7 +381,7 @@ export default function DeckWorkspaceClient({
     addToDeck(card)
     setQuery('')
     setResults([])
-    setSearchFocused(false)
+    endSearchDropdown()
     setSelectedResultIdx(0)
   }
 
@@ -349,7 +396,7 @@ export default function DeckWorkspaceClient({
     } else if (e.key === 'Enter') {
       if (results[selectedResultIdx]) handleAddCard(results[selectedResultIdx])
     } else if (e.key === 'Escape') {
-      setSearchFocused(false)
+      endSearchDropdown()
       setQuery('')
     }
   }
@@ -830,10 +877,12 @@ export default function DeckWorkspaceClient({
         onSearchFocus={() => setSearchFocused(true)}
         onSearchKeyDown={handleSearchKeyDown}
         onSearchResultHover={setSelectedResultIdx}
+        onSearchResultRulesHover={onSearchResultRulesHover}
         onAddCard={handleAddCard}
         onOpenSettings={() => setSettingsOpen(true)}
         onImportClick={() => setImportOpen(true)}
         onVisibilityChange={(pub) => deck && setDeck({ ...deck, is_public: pub })}
+        collapsedChrome={deckChromeCollapsed}
       />
 
       <DeckTabs
@@ -898,6 +947,8 @@ export default function DeckWorkspaceClient({
               sensors={dndSensors}
               onTagDragEnd={handleTagDragEnd}
               overflowMenus={overflowMenus}
+              rulesHover={rulesHover}
+              onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
             />
           </>
         )}

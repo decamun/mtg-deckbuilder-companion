@@ -66,6 +66,33 @@ export interface CardFaceImage {
   small?: string
 }
 
+/**
+ * Oracle / rules text suitable for UI: uses top-level oracle_text when present,
+ * otherwise joins double-faced card faces (Scryfall often leaves root oracle_text empty).
+ */
+export function rulesTextForDisplay(
+  card: Pick<ScryfallCard, "oracle_text" | "card_faces" | "name"> | null | undefined
+): string {
+  if (!card) return ""
+  const root = (card.oracle_text ?? "").trim()
+  if (root) return card.oracle_text ?? ""
+  const faces = card.card_faces
+  if (!faces?.length) return ""
+  return faces
+    .map((face) => {
+      const faceName = (face.name ?? card.name).trim()
+      const cost = (face.mana_cost ?? "").trim()
+      const tl = (face.type_line ?? "").trim()
+      const txt = (face.oracle_text ?? "").trim()
+      const titleLine = [faceName, cost].filter(Boolean).join(" ")
+      const meta = tl && tl !== faceName ? tl : ""
+      const header = meta ? `${titleLine}\n${meta}` : titleLine
+      return txt ? `${header}\n\n${txt}` : header
+    })
+    .filter(Boolean)
+    .join("\n\n—\n\n")
+}
+
 export function getCardFaceImages(card: Pick<ScryfallCard, "name" | "layout" | "image_uris" | "card_faces"> | null | undefined): CardFaceImage[] {
   if (!card) return []
 
