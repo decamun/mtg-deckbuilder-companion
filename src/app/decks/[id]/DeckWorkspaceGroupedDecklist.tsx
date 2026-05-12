@@ -30,6 +30,12 @@ import {
   DeckWorkspaceThreeDotMenu,
   type DeckWorkspaceOverflowMenusProps,
 } from "./deck-workspace-overflow-menus"
+import { cn } from "@/lib/utils"
+import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
+import { DeckWorkspaceCardRulesPreview, rulesHoverPayloadToFields } from "./DeckWorkspaceCardRulesPreview"
+
+/** Matches commander button (h-24 art + p-2); flow layout uses this, rules panel may overlay taller. */
+const COMMANDER_TILE_MIN_H = "min-h-[7rem]"
 
 export type DeckWorkspaceGroupedDecklistProps = {
   groupedCards: Record<string, DeckCard[]>
@@ -61,6 +67,8 @@ export type DeckWorkspaceGroupedDecklistProps = {
   sensors: SensorDescriptor<SensorOptions>[]
   onTagDragEnd: (e: DragEndEvent) => void
   overflowMenus: DeckWorkspaceOverflowMenusProps
+  rulesHover: DeckRulesHoverPayload
+  onDeckCardRulesPreviewHover: (card: DeckCard | null) => void
 }
 
 export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklistProps) {
@@ -94,37 +102,70 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
     sensors,
     onTagDragEnd,
     overflowMenus,
+    rulesHover,
+    onDeckCardRulesPreviewHover,
   } = props
+
+  const previewFields = rulesHoverPayloadToFields(rulesHover)
+  const hasCommanders = commanderCards.length > 0
+  const partnerPair = commanderCards.length > 1
 
   return (
     <>
-      {commanderCards.length > 0 && (
-        <div className="flex flex-wrap gap-3">
-          {commanderCards.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className="group flex w-64 items-center gap-3 rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left shadow-lg transition hover:border-yellow-300 overflow-hidden"
-              onClick={() => showClickedPreview(c, "Commander")}
-            >
-              {primaryDeckCardImage(c) ? (
-                <CardThumbnail card={c} className="h-24 shrink-0" imageClassName="h-24 w-auto rounded-lg border border-border/60" overlayClassName="rounded-lg" />
-              ) : (
-                <div className="flex h-24 aspect-[5/7] shrink-0 items-center justify-center rounded-lg border border-border/40 bg-muted/40">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
-                </div>
+      <div className="sticky top-0 z-50 -mx-6 mb-6 overflow-visible border-0 bg-transparent px-6 py-3">
+        <div
+          className={cn(
+            "grid gap-3 overflow-visible",
+            hasCommanders ? "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_max-content]" : "grid-cols-1"
+          )}
+        >
+          <div
+            className={cn(
+              "relative isolate min-w-0 overflow-visible",
+              COMMANDER_TILE_MIN_H,
+              hasCommanders && "lg:h-full lg:min-h-0"
+            )}
+          >
+            <div className="absolute left-0 top-0 z-[60] flex min-h-full w-full min-w-0 max-w-full flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-white p-3 text-foreground max-h-[min(90vh,52rem)]">
+              <DeckWorkspaceCardRulesPreview fields={previewFields} />
+            </div>
+          </div>
+          {hasCommanders && (
+            <div
+              className={cn(
+                "flex max-w-full shrink-0 flex-wrap content-start items-stretch gap-3 lg:min-h-0",
+                partnerPair && "sm:max-w-[calc(2*min(100%,16rem)+0.75rem)]"
               )}
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
-                  <Crown className="h-3 w-3" /> Commander
-                </div>
-                <div className="truncate text-sm font-semibold text-foreground">{c.name}</div>
-                <div className="mt-0.5 truncate text-xs text-muted-foreground">{c.type_line}</div>
-              </div>
-            </button>
-          ))}
+            >
+              {commanderCards.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-white p-2 text-left text-foreground transition hover:border-yellow-300 sm:w-[min(100%,16rem)] sm:max-w-[16rem]"
+                  onClick={() => showClickedPreview(c, "Commander")}
+                  onMouseEnter={() => onDeckCardRulesPreviewHover(c)}
+                  onMouseLeave={() => onDeckCardRulesPreviewHover(null)}
+                >
+                  {primaryDeckCardImage(c) ? (
+                    <CardThumbnail card={c} className="h-24 shrink-0" imageClassName="h-24 w-auto rounded-lg border border-border/60" overlayClassName="rounded-lg" />
+                  ) : (
+                    <div className="flex aspect-[5/7] h-24 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-zinc-100">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
+                      <Crown className="h-3 w-3" /> Commander
+                    </div>
+                    <div className="truncate text-sm font-semibold text-foreground">{c.name}</div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">{c.type_line}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
       {cardsLoading && liveCardCount === 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
           {Array.from({ length: 12 }).map((_, i) => (
@@ -191,8 +232,16 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                 <DraggableDeckCard
                                   id={deckCardDragId(grouping, groupName, c.id)}
                                   disabled={cardDragDisabled}
-                                  onMouseEnter={vlist && vlist.length > 0 ? () => setDeckFormatHintHoverId(c.id) : undefined}
-                                  onMouseLeave={vlist && vlist.length > 0 ? () => setDeckFormatHintHoverId((prev) => (prev === c.id ? null : prev)) : undefined}
+                                  onMouseEnter={() => {
+                                    if (vlist && vlist.length > 0) setDeckFormatHintHoverId(c.id)
+                                    onDeckCardRulesPreviewHover(c)
+                                  }}
+                                  onMouseLeave={() => {
+                                    if (vlist && vlist.length > 0) {
+                                      setDeckFormatHintHoverId((prev) => (prev === c.id ? null : prev))
+                                    }
+                                    onDeckCardRulesPreviewHover(null)
+                                  }}
                                   className={`relative rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing shadow-xl aspect-[5/7] transition-all ${visualDeckCardChrome(c, {
                                     commanderIds: displayedCommanderIds,
                                     coverImageId: displayedCoverImageId,
@@ -313,9 +362,11 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                       else break
                                     }
                                     setHoveredStack({ groupName, colIdx, itemIdx: activeIdx })
+                                    onDeckCardRulesPreviewHover(colCards[activeIdx] ?? null)
                                   }}
                                   onMouseLeave={() => {
                                     setHoveredStack(null)
+                                    onDeckCardRulesPreviewHover(null)
                                   }}
                                 >
                                   {colCards.map((card, itemIdx) => {
@@ -425,8 +476,16 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                 <DraggableDeckCard
                                   id={deckCardDragId(grouping, groupName, c.id)}
                                   disabled={cardDragDisabled}
-                                  onMouseEnter={listV && listV.length > 0 ? () => setDeckFormatHintHoverId(c.id) : undefined}
-                                  onMouseLeave={listV && listV.length > 0 ? () => setDeckFormatHintHoverId((prev) => (prev === c.id ? null : prev)) : undefined}
+                                  onMouseEnter={() => {
+                                    if (listV && listV.length > 0) setDeckFormatHintHoverId(c.id)
+                                    onDeckCardRulesPreviewHover(c)
+                                  }}
+                                  onMouseLeave={() => {
+                                    if (listV && listV.length > 0) {
+                                      setDeckFormatHintHoverId((prev) => (prev === c.id ? null : prev))
+                                    }
+                                    onDeckCardRulesPreviewHover(null)
+                                  }}
                                   className={`flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg relative cursor-grab active:cursor-grabbing${listV?.length ? " border-l-4 border-l-red-500" : ""}`}
                                   onClick={(e) => {
                                     e.stopPropagation()

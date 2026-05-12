@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import type { Deck, DeckCard } from "@/lib/types"
 import type { ScryfallCard } from "@/lib/scryfall"
 import { getCardImageUrl } from "@/lib/scryfall"
+import { cn } from "@/lib/utils"
 import { ManaText } from "@/components/mana/ManaText"
 import { formatPrice } from "@/lib/format"
 import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
@@ -46,17 +47,27 @@ export type DeckWorkspaceHeaderProps = {
   onSearchFocus: () => void
   onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void
   onSearchResultHover: (idx: number) => void
+  /** Fired when the pointer enters or leaves a search hit row (for deck rules preview). */
+  onSearchResultRulesHover?: (card: ScryfallCard | null) => void
   onAddCard: (card: ScryfallCard) => void
   onOpenSettings: () => void
   onImportClick: () => void
   onVisibilityChange: (pub: boolean) => void
+  /** When true, the cover banner uses a shorter layout to free vertical space while scrolling. */
+  collapsedChrome?: boolean
 }
 
 export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
   const showSearch = !headerProps.interactionsLocked && headerProps.tab === "decklist"
+  const compact = !!headerProps.collapsedChrome
 
   return (
-    <header className="relative z-40 min-h-28 shrink-0 border-b border-border sm:h-28">
+    <header
+      className={cn(
+        "relative z-40 shrink-0 border-b border-border transition-[min-height] duration-200 ease-out",
+        compact ? "min-h-14 sm:h-14" : "min-h-28 sm:h-28"
+      )}
+    >
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {headerProps.displayedCoverImageUrl ? (
           <>
@@ -64,9 +75,17 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
               src={headerProps.displayedCoverImageUrl}
               alt=""
               aria-hidden
-              className="absolute inset-0 h-full w-full object-cover object-center"
+              className={cn(
+                "absolute inset-0 h-full w-full object-cover object-center transition-transform duration-200",
+                compact && "scale-105 object-[center_20%]"
+              )}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-secondary/95 via-secondary/70 to-secondary/30" />
+            <div
+              className={cn(
+                "absolute inset-0 bg-gradient-to-t from-secondary/95 via-secondary/70 to-secondary/30 transition-opacity duration-200",
+                compact && "via-secondary/80 to-secondary/50"
+              )}
+            />
             <div className="absolute inset-0 backdrop-blur-[2px]" />
           </>
         ) : (
@@ -74,13 +93,18 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
         )}
       </div>
 
-      <div className="relative z-10 flex flex-col gap-2 px-4 pb-3 pt-10 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:flex-nowrap sm:items-end sm:gap-3 sm:pb-2 sm:pt-0">
+      <div
+        className={cn(
+          "relative z-10 flex flex-col px-4 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:flex-wrap sm:items-end sm:pt-0",
+          compact ? "gap-1 pb-2 pt-12 sm:gap-x-2 sm:gap-y-2 sm:pb-1.5" : "gap-2 pb-3 pt-10 sm:gap-x-3 sm:gap-y-2 sm:pb-2"
+        )}
+      >
         <div className="flex min-h-9 min-w-0 w-full items-center gap-2 sm:contents">
           <Button variant="ghost" size="sm" onClick={headerProps.onBack} className="shrink-0 text-muted-foreground hover:text-foreground">
             &larr; Back
           </Button>
 
-          <div className="flex min-h-9 min-w-0 flex-1 items-center gap-2 sm:max-w-[min(100%,28rem)] sm:flex-none sm:border-r sm:border-border sm:pr-3">
+          <div className="flex min-h-9 min-w-0 flex-1 items-center gap-2 sm:min-w-0 sm:max-w-[min(100%,28rem)] sm:flex-none sm:border-r sm:border-border sm:pr-3">
             {headerProps.deckTitleEditing && headerProps.deck ? (
               <div ref={headerProps.deckTitleFieldRef} className="min-w-0 flex-1 sm:flex-none sm:max-w-[min(100%,28rem)]">
                 <Input
@@ -108,7 +132,11 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
                   />
                 )}
                 <h1
-                  className={`relative z-10 min-w-0 truncate text-base font-bold drop-shadow-md sm:whitespace-nowrap ${headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "cursor-text select-none" : ""}`}
+                  className={cn(
+                    "relative min-w-0 truncate font-bold drop-shadow-md sm:whitespace-nowrap",
+                    compact ? "text-sm sm:text-sm" : "text-base",
+                    headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "cursor-text select-none" : ""
+                  )}
                   title={headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "Double-click to rename" : undefined}
                   onDoubleClick={headerProps.onDeckTitleDisplayDoubleClick}
                 >
@@ -137,7 +165,10 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Add a card..."
-                className="h-9 w-full border-border bg-background/60 pl-9 pr-4 text-foreground"
+                className={cn(
+                  "w-full border-border bg-background/60 pl-9 pr-4 text-foreground",
+                  compact ? "h-8 text-sm" : "h-9"
+                )}
                 value={headerProps.query}
                 onChange={(e) => {
                   headerProps.onQueryChange(e.target.value)
@@ -147,7 +178,10 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
                 onKeyDown={headerProps.onSearchKeyDown}
               />
               {headerProps.searchFocused && headerProps.results.length > 0 && (
-                <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+                <div
+                  className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-card shadow-2xl"
+                  onMouseLeave={() => headerProps.onSearchResultRulesHover?.(null)}
+                >
                   <div className="max-h-80 overflow-y-auto">
                     {headerProps.results.slice(0, 10).map((card, idx) => (
                       <div
@@ -155,7 +189,10 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
                         className={`flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors ${
                           idx === headerProps.selectedResultIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"
                         }`}
-                        onMouseEnter={() => headerProps.onSearchResultHover(idx)}
+                        onMouseEnter={() => {
+                          headerProps.onSearchResultHover(idx)
+                          headerProps.onSearchResultRulesHover?.(card)
+                        }}
                         onClick={() => headerProps.onAddCard(card)}
                       >
                         {getCardImageUrl(card, "small") && (
