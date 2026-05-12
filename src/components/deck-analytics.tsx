@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -418,6 +419,364 @@ function formatProbCell(valueKind: ProbRowValueKind, p: number): ReactNode {
   return <span className={`font-semibold ${probColor(p)}`}>{(p * 100).toFixed(0)}%</span>
 }
 
+/** Nice ceiling for chart axis (e.g. 3.2 → 3.5, 4.1 → 5). */
+function niceManaCeil(v: number): number {
+  if (!Number.isFinite(v) || v <= 0) return 1
+  const pad = Math.max(v * 0.08, 0.25)
+  const raw = v + pad
+  const step = raw <= 2 ? 0.5 : raw <= 6 ? 1 : 2
+  return Math.ceil(raw / step) * step
+}
+
+const OPENING_CHART_COLORS = {
+  expectedStroke: "#38bdf8",
+  landSolid: "#34d399",
+  landDraw: "rgba(251, 191, 36, 0.95)",
+  commanderPalette: ["#a78bfa", "#f472b6", "#fb923c", "#2dd4bf"] as const,
+}
+
+type OpeningProbDatum = { turn: number; p: number }
+
+function buildLinePoints(cells: (number | null)[], turns: readonly number[]): OpeningProbDatum[] {
+  const out: OpeningProbDatum[] = []
+  for (let i = 0; i < turns.length; i++) {
+    const v = cells[i]
+    if (v === null || v === undefined) continue
+    out.push({ turn: turns[i], p: v })
+  }
+  return out
+}
+
+function OpeningPerformanceChart({
+  rows,
+  turns,
+}: {
+  rows: ReturnType<typeof buildProbabilityRows>["rows"]
+  turns: readonly number[]
+}) {
+  const gradId = useId().replace(/:/g, "")
+  const expectedRow = rows.find(r => r.measureId === "expected_mana")
+  const landDropRows = rows.filter(r => r.measureId === "land_drop")
+  const commanderRows = rows.filter(r => r.measureId === "cast_commander")
+
+  const manaSeries = expectedRow ? buildLinePoints(expectedRow.cells, turns) : []
+  const manaMax = niceManaCeil(
+    manaSeries.length ? Math.max(...manaSeries.map(d => d.p), 0.01) : 1,
+  )
+
+  const pctSeriesLand = landDropRows[0] ? buildLinePoints(landDropRows[0].cells, turns) : []
+  const pctSeriesLandDraw = landDropRows[1] ? buildLinePoints(landDropRows[1].cells, turns) : []
+  const commanderSeries = commanderRows.map((r, idx) => ({
+    key: `${idx}-${r.label}`,
+    label: r.label.replace(/^Cast\s+/i, ""),
+    color: OPENING_CHART_COLORS.commanderPalette[idx % OPENING_CHART_COLORS.commanderPalette.length],
+    points: buildLinePoints(r.cells, turns),
+  }))
+
+  const hasChart =
+    manaSeries.length > 0 ||
+    pctSeriesLand.length > 0 ||
+    pctSeriesLandDraw.length > 0 ||
+    commanderSeries.some(s => s.points.length > 0)
+
+  if (!hasChart) return null
+
+  const vbW = 560
+  const vbH = 200
+  const m = { l: 46, r: 46, t: 22, b: 34 }
+  const pw = vbW - m.l - m.r
+  const ph = vbH - m.t - m.b
+
+  const xAt = (turn: number) => {
+    const tMin = turns[0]
+    const tMax = turns[turns.length - 1]
+    const span = Math.max(1, tMax - tMin)
+    return m.l + ((turn - tMin) / span) * pw
+  }
+
+  const yMana = (mana: number) => m.t + ph - (mana / manaMax) * ph
+  const yPct = (p: number) => m.t + ph - Math.min(1, Math.max(0, p)) * ph
+
+  const linePath = (pts: OpeningProbDatum[], yFn: (v: number) => number) => {
+    if (pts.length === 0) return ""
+    return pts
+      .map((d, i) => {
+        const x = xAt(d.turn)
+        const y = yFn(d.p)
+        return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`
+      })
+      .join(" ")
+  }
+
+  const areaPath = (pts: OpeningProbDatum[]) => {
+    if (pts.length === 0) return ""
+    const line = linePath(pts, yMana)
+    if (!line) return ""
+    const x0 = xAt(pts[0].turn)
+    const x1 = xAt(pts[pts.length - 1].turn)
+    const yBase = m.t + ph
+    return `${line} L ${x1.toFixed(2)} ${yBase.toFixed(2)} L ${x0.toFixed(2)} ${yBase.toFixed(2)} Z`
+  }
+
+  const gridYs = [0, 0.25, 0.5, 0.75, 1] as const
+  const manaTicks = [0, manaMax / 2, manaMax].map(v => ({
+    v,
+    y: yMana(v),
+    label: Number.isInteger(v) ? String(v) : v.toFixed(1),
+  }))
+  const pctTicks = [0, 50, 100].map(pct => ({
+    y: yPct(pct / 100),
+    label: `${pct}%`,
+  }))
+
+  return (
+    <div className="mb-4 rounded-lg border border-border/70 bg-gradient-to-b from-muted/25 to-transparent p-3 sm:p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          Curve overview
+        </span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+          {manaSeries.length > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-4 rounded-sm bg-sky-400/80" aria-hidden />
+              Expected mana
+            </span>
+          )}
+          {pctSeriesLand.length > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-0.5 w-4 rounded-full bg-emerald-400" aria-hidden />
+              Land drop
+            </span>
+          )}
+          {pctSeriesLandDraw.length > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <svg width={16} height={6} className="shrink-0 overflow-visible" aria-hidden>
+                <line
+                  x1={0}
+                  y1={3}
+                  x2={16}
+                  y2={3}
+                  stroke={OPENING_CHART_COLORS.landDraw}
+                  strokeWidth={1.5}
+                  strokeDasharray="3 2"
+                />
+              </svg>
+              Land + draw
+            </span>
+          )}
+          {commanderSeries.map(s => (
+            <span key={s.key} className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} aria-hidden />
+              {s.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <svg
+        viewBox={`0 0 ${vbW} ${vbH}`}
+        className="h-[180px] w-full min-h-[160px] max-h-[240px] sm:h-[200px]"
+        role="img"
+        aria-label="Opening performance: expected mana versus turn on the left axis, land and cast probabilities on the right axis"
+      >
+        <defs>
+          <linearGradient id={`openingManaFill-${gradId}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        {gridYs.map(ratio => {
+          const y = m.t + ph * (1 - ratio)
+          return (
+            <line
+              key={ratio}
+              x1={m.l}
+              y1={y}
+              x2={vbW - m.r}
+              y2={y}
+              className="stroke-border/50"
+              strokeWidth={1}
+              strokeDasharray={ratio === 0 || ratio === 1 ? "0" : "4 5"}
+            />
+          )
+        })}
+
+        {turns.map(t => {
+          const x = xAt(t)
+          return (
+            <line
+              key={t}
+              x1={x}
+              y1={m.t}
+              x2={x}
+              y2={m.t + ph}
+              className="stroke-border/30"
+              strokeWidth={1}
+            />
+          )
+        })}
+
+        <text
+          x={12}
+          y={m.t + ph / 2}
+          transform={`rotate(-90 12 ${m.t + ph / 2})`}
+          className="fill-muted-foreground text-[9px] uppercase tracking-wide"
+          textAnchor="middle"
+        >
+          Mana
+        </text>
+        {manaTicks.map(({ v, y, label }) => (
+          <g key={`ml-${v}`}>
+            <text
+              x={m.l - 8}
+              y={y}
+              dy="0.35em"
+              textAnchor="end"
+              className="fill-muted-foreground font-mono text-[9px] tabular-nums"
+            >
+              {label}
+            </text>
+          </g>
+        ))}
+
+        <text
+          x={vbW - 10}
+          y={m.t + ph / 2}
+          transform={`rotate(90 ${vbW - 10} ${m.t + ph / 2})`}
+          className="fill-muted-foreground text-[9px] uppercase tracking-wide"
+          textAnchor="middle"
+        >
+          %
+        </text>
+        {pctTicks.map(({ y, label }) => (
+          <text
+            key={label}
+            x={vbW - m.r + 8}
+            y={y}
+            dy="0.35em"
+            textAnchor="start"
+            className="fill-muted-foreground font-mono text-[9px] tabular-nums"
+          >
+            {label}
+          </text>
+        ))}
+
+        {turns.map(t => (
+          <text
+            key={`tx-${t}`}
+            x={xAt(t)}
+            y={vbH - 10}
+            textAnchor="middle"
+            className="fill-muted-foreground text-[10px] font-semibold tabular-nums"
+          >
+            {t}
+          </text>
+        ))}
+        <text
+          x={m.l + pw / 2}
+          y={vbH - 1}
+          textAnchor="middle"
+          className="fill-muted-foreground/80 text-[9px]"
+        >
+          Turn (on the play)
+        </text>
+
+        {manaSeries.length > 0 && (
+          <>
+            <path
+              d={areaPath(manaSeries)}
+              fill={`url(#openingManaFill-${gradId})`}
+              stroke="none"
+            />
+            <path
+              d={linePath(manaSeries, yMana)}
+              fill="none"
+              stroke={OPENING_CHART_COLORS.expectedStroke}
+              strokeWidth={2.25}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {manaSeries.map(d => (
+              <circle
+                key={`m-${d.turn}`}
+                cx={xAt(d.turn)}
+                cy={yMana(d.p)}
+                r={3.5}
+                className="fill-sky-400 stroke-sky-950/30"
+                strokeWidth={1}
+              />
+            ))}
+          </>
+        )}
+
+        {pctSeriesLand.length > 0 && (
+          <>
+            <path
+              d={linePath(pctSeriesLand, yPct)}
+              fill="none"
+              stroke={OPENING_CHART_COLORS.landSolid}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {pctSeriesLand.map(d => (
+              <circle
+                key={`l-${d.turn}`}
+                cx={xAt(d.turn)}
+                cy={yPct(d.p)}
+                r={3}
+                fill={OPENING_CHART_COLORS.landSolid}
+                className="stroke-emerald-950/25"
+                strokeWidth={1}
+              />
+            ))}
+          </>
+        )}
+
+        {pctSeriesLandDraw.length > 0 && (
+          <path
+            d={linePath(pctSeriesLandDraw, yPct)}
+            fill="none"
+            stroke={OPENING_CHART_COLORS.landDraw}
+            strokeWidth={1.75}
+            strokeDasharray="5 4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+
+        {commanderSeries.map(s => (
+          <g key={s.key}>
+            {s.points.length > 0 && (
+              <path
+                d={linePath(s.points, yPct)}
+                fill="none"
+                stroke={s.color}
+                strokeWidth={1.75}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={0.92}
+              />
+            )}
+            {s.points.map(d => (
+              <circle
+                key={`c-${s.key}-${d.turn}`}
+                cx={xAt(d.turn)}
+                cy={yPct(d.p)}
+                r={2.75}
+                fill={s.color}
+                stroke="rgba(0,0,0,0.35)"
+                strokeWidth={0.75}
+              />
+            ))}
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
 function ProbabilityTable({
   cards,
   commanders,
@@ -455,6 +814,8 @@ function ProbabilityTable({
           />
         </div>
       </div>
+
+      <OpeningPerformanceChart rows={data.rows} turns={PROB_TURNS} />
 
       <div className="overflow-x-auto overflow-y-visible pb-1">
         <table className="w-full text-xs tabular-nums">
