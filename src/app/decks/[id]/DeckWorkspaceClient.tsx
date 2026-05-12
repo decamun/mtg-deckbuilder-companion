@@ -116,6 +116,7 @@ export default function DeckWorkspaceClient({
   useLayoutEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- hydrate decklist toolbar prefs from localStorage */
     const p = loadDeckWorkspaceDisplayPrefs()
+    setViewMode(p.viewMode)
     setGrouping(p.grouping)
     setSorting(p.sorting)
     setCardSize(p.cardSize)
@@ -875,17 +876,20 @@ export default function DeckWorkspaceClient({
               formatViolationCount={formatViolationMap.size}
               onCardSizeChange={(n) => {
                 setCardSize(n)
-                saveDeckWorkspaceDisplayPrefs({ grouping, sorting, cardSize: n })
+                saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting, cardSize: n })
               }}
               onGroupingChange={(g) => {
                 setGrouping(g)
-                saveDeckWorkspaceDisplayPrefs({ grouping: g, sorting, cardSize })
+                saveDeckWorkspaceDisplayPrefs({ viewMode, grouping: g, sorting, cardSize })
               }}
               onSortingChange={(s) => {
                 setSorting(s)
-                saveDeckWorkspaceDisplayPrefs({ grouping, sorting: s, cardSize })
+                saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting: s, cardSize })
               }}
-              onViewModeChange={(v) => setViewMode(v)}
+              onViewModeChange={(v) => {
+                setViewMode(v)
+                saveDeckWorkspaceDisplayPrefs({ viewMode: v, grouping, sorting, cardSize })
+              }}
               onOpenFormatHints={() => setFormatHintsListOpen(true)}
             />
             <DeckWorkspaceGroupedDecklist
