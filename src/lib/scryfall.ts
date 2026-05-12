@@ -364,3 +364,10 @@ export async function getPrintingsByOracleId(oracleId: string): Promise<Scryfall
   return promise
 }
 
+/** Clears module-level caches and the search queue for isolated Vitest runs. */
+export function resetScryfallCachesForTests() {
+  cardCache.clear()
+  printingsByOracleCache.clear()
+  inFlightPrintings.clear()
+  scryfallSearchChain = Promise.resolve()
+}

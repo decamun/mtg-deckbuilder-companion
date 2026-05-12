@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button"
 import { User, LogOut, ChevronDown, Settings, Heart } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import { LoginDialog } from "@/components/LoginDialog"
+import { useTopNavDeckGuest } from "@/components/TopNavDeckGuestContext"
 
 const NAV_LINKS = [
   { href: "/brew", label: "Brew", requiresAuth: false },
@@ -28,9 +29,35 @@ const NAV_LINKS = [
 // in-page rather than triggering a full navigation.
 const SHELL_PATHS = new Set(["/brew", "/decks", "/browse", "/blog"])
 
+/** Single-segment /decks/[x] routes: deck workspace UUID paths, not /decks/liked. */
+function isDeckWorkspacePath(path: string) {
+  const seg = path.match(/^\/decks\/([^/]+)$/)?.[1]
+  return seg != null && seg !== "liked"
+}
+
+function navLinkIsActive(
+  href: string,
+  activePath: string,
+  guestDeckNav: boolean,
+): boolean {
+  if (href === "/decks") {
+    if (activePath === "/decks") return true
+    if (activePath.startsWith("/decks/liked")) return true
+    if (isDeckWorkspacePath(activePath) && !guestDeckNav) return true
+    return false
+  }
+  if (href === "/browse") {
+    if (activePath === "/browse" || activePath.startsWith("/browse/")) return true
+    if (isDeckWorkspacePath(activePath) && guestDeckNav) return true
+    return false
+  }
+  return activePath === href || (href !== "/" && activePath.startsWith(href + "/"))
+}
+
 export function TopNav() {
   const pathname = usePathname()
   const router = useRouter()
+  const { guestDeckNav } = useTopNavDeckGuest()
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const currentPath = pathname ?? ""
   const [visiblePath, setVisiblePath] = useState<string | null>(null)
@@ -121,9 +148,7 @@ export function TopNav() {
         <nav className="flex items-center gap-0.5 sm:gap-1">
           {NAV_LINKS.filter((link) => !link.requiresAuth || user).map(
             ({ href, label }) => {
-              const isActive =
-                activePath === href ||
-                (href !== "/" && activePath.startsWith(href + "/"))
+              const isActive = navLinkIsActive(href, activePath, guestDeckNav)
               return (
                 <Link
                   key={href}
