@@ -116,9 +116,20 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
         <div
           className={cn(
             "grid gap-3 overflow-visible",
-            hasCommanders ? "grid-cols-1 lg:grid-cols-[max-content_minmax(0,1fr)]" : "grid-cols-1"
+            hasCommanders ? "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_max-content]" : "grid-cols-1"
           )}
         >
+          <div
+            className={cn(
+              "relative isolate min-w-0 overflow-visible",
+              COMMANDER_TILE_MIN_H,
+              hasCommanders && "lg:h-full lg:min-h-0"
+            )}
+          >
+            <div className="absolute left-0 top-0 z-[60] flex min-h-full w-full min-w-0 max-w-full flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-white p-3 text-foreground max-h-[min(90vh,52rem)]">
+              <DeckWorkspaceCardRulesPreview fields={previewFields} />
+            </div>
+          </div>
           {hasCommanders && (
             <div
               className={cn(
@@ -130,7 +141,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                 <button
                   key={c.id}
                   type="button"
-                  className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-card/80 p-2 text-left transition hover:border-yellow-300 sm:w-[min(100%,16rem)] sm:max-w-[16rem]"
+                  className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-white p-2 text-left text-foreground transition hover:border-yellow-300 sm:w-[min(100%,16rem)] sm:max-w-[16rem]"
                   onClick={() => showClickedPreview(c, "Commander")}
                   onMouseEnter={() => onDeckCardRulesPreviewHover(c)}
                   onMouseLeave={() => onDeckCardRulesPreviewHover(null)}
@@ -138,7 +149,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                   {primaryDeckCardImage(c) ? (
                     <CardThumbnail card={c} className="h-24 shrink-0" imageClassName="h-24 w-auto rounded-lg border border-border/60" overlayClassName="rounded-lg" />
                   ) : (
-                    <div className="flex aspect-[5/7] h-24 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-muted/40">
+                    <div className="flex aspect-[5/7] h-24 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-zinc-100">
                       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
                     </div>
                   )}
@@ -153,17 +164,6 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
               ))}
             </div>
           )}
-          <div
-            className={cn(
-              "relative isolate min-w-0 overflow-visible",
-              COMMANDER_TILE_MIN_H,
-              hasCommanders && "lg:h-full lg:min-h-0"
-            )}
-          >
-            <div className="absolute left-0 top-0 z-[60] flex min-h-full w-full min-w-0 max-w-full flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-card/95 p-3 max-h-[min(90vh,52rem)]">
-              <DeckWorkspaceCardRulesPreview fields={previewFields} />
-            </div>
-          </div>
         </div>
       </div>
       {cardsLoading && liveCardCount === 0 && (
