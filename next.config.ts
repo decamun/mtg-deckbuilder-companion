@@ -8,6 +8,8 @@ const scriptSrc = [
   "'self'",
   "'unsafe-inline'",
   "https://va.vercel-scripts.com",
+  // Vercel Toolbar / Next.js live feedback (injected on preview deployments)
+  "https://vercel.live",
   // Cloudflare Turnstile (feedback form); see https://developers.cloudflare.com/turnstile/reference/content-security-policy/
   "https://challenges.cloudflare.com",
 ];
@@ -16,6 +18,8 @@ const connectSrc = [
   "'self'",
   supabaseOrigin,
   "https://*.supabase.co",
+  // Supabase Realtime uses secure WebSockets on the project host
+  "wss://*.supabase.co",
   "https://api.scryfall.com",
   "https://cards.scryfall.io",
   "https://vitals.vercel-insights.com",
