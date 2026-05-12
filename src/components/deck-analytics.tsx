@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { Shuffle, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ManaText } from "@/components/mana/ManaText"
@@ -12,6 +12,7 @@ import {
   computeStatsLineSummary,
   PROB_TURNS,
   SPIDER_COLOR_KEYS,
+  type ProbRowValueKind,
   type CurveData,
   type DeckStatsCard,
   TYPE_PRIORITY,
@@ -263,6 +264,14 @@ function probColor(p: number): string {
   return 'text-red-400'
 }
 
+
+function formatProbCell(valueKind: ProbRowValueKind, p: number): ReactNode {
+  if (valueKind === 'expected_mana') {
+    return <span className="font-semibold text-sky-300 tabular-nums">{p.toFixed(2)}</span>
+  }
+  return <span className={`font-semibold ${probColor(p)}`}>{(p * 100).toFixed(0)}%</span>
+}
+
 function ProbabilityTable({
   cards,
   commanders,
@@ -291,7 +300,7 @@ function ProbabilityTable({
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
         <h3 className="font-heading text-base tracking-wider">Opening Probabilities</h3>
         <span className="text-[10px] text-muted-foreground">
-          Going first · {data.deckSize}-card deck · {data.lands} lands
+          Going first · {data.deckSize}-card deck · {data.lands} land sources
         </span>
       </div>
 
@@ -312,7 +321,7 @@ function ProbabilityTable({
           </thead>
           <tbody>
             {data.rows.map((row, idx) => (
-              <tr key={idx} className="border-b border-border/30 last:border-0">
+              <tr key={`${idx}-${row.valueKind}`} className="border-b border-border/30 last:border-0">
                 <td className="py-1.5 pr-3">
                   <div className="font-medium truncate max-w-[200px]" title={row.label}>
                     {row.label}
@@ -326,9 +335,7 @@ function ProbabilityTable({
                     {p === null ? (
                       <span className="text-muted-foreground/40">—</span>
                     ) : (
-                      <span className={`font-semibold ${probColor(p)}`}>
-                        {(p * 100).toFixed(0)}%
-                      </span>
+                      formatProbCell(row.valueKind, p)
                     )}
                   </td>
                 ))}
@@ -340,11 +347,12 @@ function ProbabilityTable({
 
       <div className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
         Header shows turn number and cards seen by that turn.
+        Draw and ramp eligibility use only spells with a numeric mana value; unknown-CMC cards are omitted.
+        <span className="text-foreground/80"> Expected mana</span> is
+        E[min(land sources drawn, turn)] + E[min(ramp drawn by prior turn, turn - 1)], one generic unit per
+        land or ramp spell (ignores colors, commander tax, and real ramp strength).
         &ldquo;With draw&rdquo; treats each <span className="text-foreground/80">draw</span>-tagged spell
         castable by then as +1 card seen.
-        &ldquo;With ramp (approx.)&rdquo; lowers the generic land count needed by at most one per prior turn
-        (capped by ramp-tagged spells castable by then); it does not model colored pips, mana to cast ramp,
-        or whether those spells were actually drawn.
       </div>
     </div>
   )
