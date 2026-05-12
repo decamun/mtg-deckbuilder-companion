@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getCard, type ScryfallCard } from './scryfall'
-import { logger } from './logger'
 
 /**
  * Deck mutation service.
@@ -165,7 +164,7 @@ async function recordDeckVersion(
     snapshot,
     created_by: userId,
   })
-  if (error) logger.warn('Failed to record deck version', { deckId, error: error.message })
+  if (error) console.warn('Failed to record deck version:', error.message)
 }
 
 export async function listDecks(

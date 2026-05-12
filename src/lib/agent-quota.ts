@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { logger } from './logger'
 
 /**
  * Model ids use the Vercel AI Gateway naming convention: `provider/model`.
@@ -132,7 +131,7 @@ export async function recordCall(
     .from('agent_call_log')
     .insert({ user_id: userId, model })
   if (error) {
-    logger.warn('[agent-quota] recordCall failed', { userId, error: error.message })
+    console.warn('[agent-quota] recordCall failed:', error.message)
     return { ok: false, error: error.message }
   }
   return { ok: true }

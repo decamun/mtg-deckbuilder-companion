@@ -7,6 +7,13 @@
  * Usage:
  *   import { logger } from '@/lib/logger'
  *   logger.error('db query failed', { requestId, userId, error: err.message })
+ *
+ * IMPORTANT: Do NOT import this module from lib files that are loaded directly
+ * by the Node.js test scripts (agent-quota.ts, scryfall.ts, deck-service.ts).
+ * Node 24 experimental-strip-types cannot resolve extensionless relative
+ * imports (.ts extension is required for direct Node imports), so importing
+ * './logger' from within those modules breaks the test runner.
+ * Use console.error/warn in lib files; use logger in API route handlers.
  */
 
 type Level = 'debug' | 'info' | 'warn' | 'error'

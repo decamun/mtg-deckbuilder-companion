@@ -3,8 +3,6 @@ export interface ScryfallImageUris {
   small?: string
 }
 
-import { logger } from './logger'
-
 export interface ScryfallCardFace {
   name?: string
   mana_cost?: string
@@ -118,7 +116,7 @@ export async function searchCards(
     const json = await res.json()
     return json.data || []
   } catch (error) {
-    logger.error('Scryfall search error', { error: String(error) })
+    console.error("Scryfall search error:", error)
     return []
   }
 }
@@ -134,7 +132,7 @@ export async function autocompleteCardNames(query: string): Promise<string[]> {
     const json = await res.json()
     return Array.isArray(json.data) ? json.data.slice(0, 8) : []
   } catch (error) {
-    logger.error('Scryfall autocomplete error', { error: String(error) })
+    console.error("Scryfall autocomplete error:", error)
     return []
   }
 }
@@ -162,7 +160,7 @@ export async function getCard(id: string): Promise<ScryfallCard | null> {
     cardCache.set(card.id, card)
     return card
   } catch (error) {
-    logger.error('Scryfall getCard error', { id, error: String(error) })
+    console.error("Scryfall getCard error:", error)
     return null
   }
 }
@@ -173,7 +171,7 @@ export async function getCardByName(name: string): Promise<ScryfallCard | null> 
     if (!res.ok) return null
     return res.json()
   } catch (error) {
-    logger.error('Scryfall getCardByName error', { name, error: String(error) })
+    console.error("Scryfall getCardByName error:", error)
     return null
   }
 }
@@ -190,13 +188,13 @@ async function fetchCollection(identifiers: object[]): Promise<ScryfallCard[]> {
         body: JSON.stringify({ identifiers: chunk }),
       })
       if (!res.ok) {
-        logger.error('Scryfall collection error', { status: res.status, body: await res.text() })
+        console.error("Scryfall collection error:", await res.text())
         continue
       }
       const json = await res.json()
       if (json.data) allCards.push(...json.data)
     } catch (error) {
-      logger.error('Scryfall collection fetch error', { error: String(error) })
+      console.error("Scryfall collection fetch error:", error)
     }
     if (i + CHUNK_SIZE < identifiers.length) {
       await new Promise(r => setTimeout(r, 150))
@@ -278,7 +276,7 @@ export async function getCardBySetAndCN(set: string, collectorNumber: string): P
     if (!res.ok) return null
     return res.json()
   } catch (error) {
-    logger.error('Scryfall getCardBySetAndCN error', { set, collectorNumber, error: String(error) })
+    console.error("Scryfall getCardBySetAndCN error:", error)
     return null
   }
 }
@@ -324,7 +322,7 @@ export async function getPrintingsByOracleId(oracleId: string): Promise<Scryfall
         if (url) await new Promise(r => setTimeout(r, 100))
       }
     } catch (error) {
-      logger.error('Scryfall getPrintingsByOracleId error', { oracleId, error: String(error) })
+      console.error("Scryfall getPrintingsByOracleId error:", error)
     }
     return all
   }).then(all => {
