@@ -52,10 +52,12 @@ export interface DeckCard {
   collector_number?: string
   available_finishes?: string[]
   price_usd?: number | null
+  /** Scryfall printing rarity (e.g. common, mythic). */
+  rarity?: string
   effective_printing_id?: string
 }
 
 export type ViewMode = 'visual' | 'stack' | 'list'
 export type GroupingMode = 'none' | 'type' | 'mana' | 'tag'
-export type SortingMode = 'name' | 'mana'
+export type SortingMode = 'mana' | 'name' | 'price' | 'rarity'
 

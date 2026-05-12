@@ -102,6 +102,43 @@ const CARD_INTERACTION_SETTLE_MS = 250
 
 const DEFAULT_TAGS = ['card advantage', 'interaction', 'wincon', 'combo piece']
 
+/** Ascending: common → mythic; Scryfall `special` / `bonus` after mythic; unknown last. */
+const RARITY_SORT_RANK: Record<string, number> = {
+  common: 0,
+  uncommon: 1,
+  rare: 2,
+  mythic: 3,
+  special: 4,
+  bonus: 5,
+}
+
+function raritySortKey(rarity: string | undefined): number {
+  if (!rarity) return 1_000
+  const rank = RARITY_SORT_RANK[rarity.toLowerCase()]
+  return rank !== undefined ? rank : 100
+}
+
+function compareDeckCardsBySort(a: DeckCard, b: DeckCard, sorting: SortingMode): number {
+  let cmp = 0
+  if (sorting === 'name') {
+    cmp = a.name.localeCompare(b.name)
+  } else if (sorting === 'mana') {
+    cmp = (a.cmc || 0) - (b.cmc || 0)
+    if (cmp === 0) cmp = (a.mana_cost ?? '').localeCompare(b.mana_cost ?? '')
+  } else if (sorting === 'price') {
+    const pa = a.price_usd
+    const pb = b.price_usd
+    if (pa == null && pb == null) cmp = 0
+    else if (pa == null) cmp = 1
+    else if (pb == null) cmp = -1
+    else cmp = pa - pb
+  } else if (sorting === 'rarity') {
+    cmp = raritySortKey(a.rarity) - raritySortKey(b.rarity)
+  }
+  if (cmp !== 0) return cmp
+  return a.name.localeCompare(b.name)
+}
+
 const defaultPrimerSeed = (deckName: string) =>
 `# ${deckName}
 
@@ -220,6 +257,7 @@ function mergeDeckCardRow(current: DeckCard, row: DeckCardRow): DeckCard {
     collector_number: current.collector_number,
     available_finishes: current.available_finishes,
     price_usd: current.price_usd,
+    rarity: current.rarity,
     effective_printing_id: current.effective_printing_id,
   }
 }
@@ -343,7 +381,7 @@ export default function DeckWorkspaceClient({
 
   const [viewMode, setViewMode] = useState<ViewMode>('visual')
   const [grouping, setGrouping] = useState<GroupingMode>('type')
-  const [sorting] = useState<SortingMode>('name')
+  const [sorting, setSorting] = useState<SortingMode>('mana')
   const debouncedQuery = useDebounce(query, 300)
 
   const [commanderIds, setCommanderIds] = useState<string[]>([])
@@ -577,6 +615,7 @@ export default function DeckWorkspaceClient({
           collector_number: effSf?.collector_number,
           available_finishes: effSf?.finishes,
           price_usd: pickPrice(effSf?.prices, finish),
+          rarity: effSf?.rarity,
           effective_printing_id: effectiveId,
         }
       })
@@ -654,6 +693,7 @@ export default function DeckWorkspaceClient({
         collector_number: card.collector_number,
         available_finishes: card.finishes,
         price_usd: pickPrice(card.prices, 'nonfoil'),
+        rarity: card.rarity,
         effective_printing_id: card.id,
       }
       setCards(prev => [...prev, optimisticCard])
@@ -830,6 +870,7 @@ export default function DeckWorkspaceClient({
       collector_number: nextPrinting.collector_number,
       available_finishes: nextPrinting.finishes,
       price_usd: pickPrice(nextPrinting.prices, card.finish),
+      rarity: nextPrinting.rarity,
       effective_printing_id: nextPrinting.id,
     } : defaultPrinting ? {
       ...card,
@@ -840,6 +881,7 @@ export default function DeckWorkspaceClient({
       collector_number: defaultPrinting.collector_number,
       available_finishes: defaultPrinting.finishes,
       price_usd: pickPrice(defaultPrinting.prices, card.finish),
+      rarity: defaultPrinting.rarity,
       effective_printing_id: card.scryfall_id,
     } : {
       ...card,
@@ -935,6 +977,7 @@ export default function DeckWorkspaceClient({
         collector_number: effSf?.collector_number,
         available_finishes: effSf?.finishes,
         price_usd: pickPrice(effSf?.prices, c.finish),
+        rarity: effSf?.rarity,
         effective_printing_id: effectiveId,
       }
     })
@@ -1072,11 +1115,7 @@ export default function DeckWorkspaceClient({
   )
 
   const getGroupedCards = () => {
-    const sorted = [...displayedCards].sort((a, b) => {
-      if (sorting === 'name') return a.name.localeCompare(b.name)
-      if (sorting === 'mana') return (a.cmc || 0) - (b.cmc || 0)
-      return 0
-    })
+    const sorted = [...displayedCards].sort((a, b) => compareDeckCardsBySort(a, b, sorting))
 
     if (grouping === 'none') return { 'All Cards': sorted }
 
@@ -1144,7 +1183,7 @@ export default function DeckWorkspaceClient({
       cancelAnimationFrame(paintFrame)
       if (settleTimer) clearTimeout(settleTimer)
     }
-  }, [cardsLoading, cardInteractionKey, grouping, viewMode])
+  }, [cardsLoading, cardInteractionKey, grouping, sorting, viewMode])
 
   const showClickedPreview = (card: DeckCard, groupName: string) => {
     setPreviewFaceIndex(0)
@@ -1557,6 +1596,17 @@ export default function DeckWorkspaceClient({
                 <SelectItem value="type">By Type</SelectItem>
                 <SelectItem value="mana">By Mana Cost</SelectItem>
                 <SelectItem value="tag">By Tags</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sorting} onValueChange={(v) => setSorting(v as SortingMode)}>
+              <SelectTrigger className="w-40 bg-card border-border h-8 text-foreground">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border text-foreground">
+                <SelectItem value="mana">Mana cost</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="price">Price</SelectItem>
+                <SelectItem value="rarity">Rarity</SelectItem>
               </SelectContent>
             </Select>
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
