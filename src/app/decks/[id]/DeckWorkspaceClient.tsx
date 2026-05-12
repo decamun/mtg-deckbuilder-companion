@@ -39,6 +39,7 @@ import {
   STACK_PEEK_RATIO,
   TAG_GROUP_UNTAGGED,
 } from "./deck-workspace-constants"
+import { loadDeckWorkspaceDisplayPrefs, saveDeckWorkspaceDisplayPrefs } from "./deck-workspace-display-prefs"
 import {
   defaultPrimerSeed,
   groupDeckCards,
@@ -111,6 +112,17 @@ export default function DeckWorkspaceClient({
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
   const [cardSize, setCardSize] = useState(DEFAULT_CARD_SIZE)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+
+  // One-shot sync from localStorage (guest + signed-in); cannot read during SSR render.
+  useLayoutEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- hydrate decklist toolbar prefs from localStorage */
+    const p = loadDeckWorkspaceDisplayPrefs()
+    setViewMode(p.viewMode)
+    setGrouping(p.grouping)
+    setSorting(p.sorting)
+    setCardSize(p.cardSize)
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [])
   const toggleSection = (name: string) => setCollapsedSections(prev => {
     const next = new Set(prev)
     if (next.has(name)) next.delete(name); else next.add(name)
@@ -873,10 +885,22 @@ export default function DeckWorkspaceClient({
               viewMode={viewMode}
               displayedFormat={displayedFormat}
               formatViolationCount={formatViolationMap.size}
-              onCardSizeChange={setCardSize}
-              onGroupingChange={(g) => setGrouping(g)}
-              onSortingChange={(s) => setSorting(s)}
-              onViewModeChange={(v) => setViewMode(v)}
+              onCardSizeChange={(n) => {
+                setCardSize(n)
+                saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting, cardSize: n })
+              }}
+              onGroupingChange={(g) => {
+                setGrouping(g)
+                saveDeckWorkspaceDisplayPrefs({ viewMode, grouping: g, sorting, cardSize })
+              }}
+              onSortingChange={(s) => {
+                setSorting(s)
+                saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting: s, cardSize })
+              }}
+              onViewModeChange={(v) => {
+                setViewMode(v)
+                saveDeckWorkspaceDisplayPrefs({ viewMode: v, grouping, sorting, cardSize })
+              }}
               onOpenFormatHints={() => setFormatHintsListOpen(true)}
             />
             <DeckWorkspaceGroupedDecklist
