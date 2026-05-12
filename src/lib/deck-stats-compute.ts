@@ -483,7 +483,6 @@ export function buildProbabilityRows(
       valueKind: 'probability',
       hint: `CMC ${cmc} · capped land+ramp`,
       cells: PROB_TURNS.map((T, i) => {
-        if (T < cmc) return null
         const nT = cardsSeen[i]
         const nPrev = T >= 2 ? cardsSeen[T - 2] : 0
         const kRamp = rampQtyCastableBy(T - 1)
