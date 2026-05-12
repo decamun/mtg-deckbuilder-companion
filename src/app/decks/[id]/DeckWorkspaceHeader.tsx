@@ -74,67 +74,66 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
         )}
       </div>
 
-      <div className="relative z-10 flex flex-wrap items-center gap-x-2 gap-y-2 px-4 pb-3 pt-10 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-nowrap sm:gap-3 sm:pb-2 sm:pt-0">
-        <Button variant="ghost" size="sm" onClick={headerProps.onBack} className="order-1 shrink-0 text-muted-foreground hover:text-foreground">
-          &larr; Back
-        </Button>
+      <div className="relative z-10 flex flex-col gap-2 px-4 pb-3 pt-10 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:flex-nowrap sm:items-end sm:gap-3 sm:pb-2 sm:pt-0">
+        <div className="flex min-h-9 min-w-0 w-full items-center gap-2 sm:contents">
+          <Button variant="ghost" size="sm" onClick={headerProps.onBack} className="shrink-0 text-muted-foreground hover:text-foreground">
+            &larr; Back
+          </Button>
 
-        <div className="order-2 flex min-h-9 min-w-0 flex-1 items-center gap-2 border-r border-border pr-3 sm:max-w-[min(100%,28rem)] sm:flex-none">
-          {headerProps.deckTitleEditing && headerProps.deck ? (
-            <div ref={headerProps.deckTitleFieldRef} className="min-w-0 flex-1 sm:flex-none sm:max-w-[min(100%,28rem)]">
-              <Input
-                value={headerProps.deckTitleDraft}
-                onChange={(e) => headerProps.onDeckTitleDraftChange(e.target.value)}
-                disabled={headerProps.deckTitleSaving}
-                onBlur={headerProps.onDeckTitleInputBlur}
-                onKeyDown={headerProps.onDeckTitleInputKeyDown}
-                className="h-9 w-full border-border bg-background/70 text-base font-bold text-foreground drop-shadow-md md:text-base"
-                aria-label="Deck name"
-              />
-            </div>
-          ) : (
-            <div
-              className={
-                headerProps.isOwner && !headerProps.viewing && headerProps.deck
-                  ? "group relative -mx-1 min-w-0 flex-1 max-w-full rounded-md px-2 py-0.5 sm:flex-none"
-                  : "relative min-w-0 flex-1 max-w-full sm:flex-none"
-              }
-            >
-              {headerProps.isOwner && !headerProps.viewing && headerProps.deck && (
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 rounded-md border border-border/80 bg-background/55 opacity-0 shadow-sm transition-opacity duration-300 ease-out group-hover:opacity-100"
+          <div className="flex min-h-9 min-w-0 flex-1 items-center gap-2 sm:max-w-[min(100%,28rem)] sm:flex-none sm:border-r sm:border-border sm:pr-3">
+            {headerProps.deckTitleEditing && headerProps.deck ? (
+              <div ref={headerProps.deckTitleFieldRef} className="min-w-0 flex-1 sm:flex-none sm:max-w-[min(100%,28rem)]">
+                <Input
+                  value={headerProps.deckTitleDraft}
+                  onChange={(e) => headerProps.onDeckTitleDraftChange(e.target.value)}
+                  disabled={headerProps.deckTitleSaving}
+                  onBlur={headerProps.onDeckTitleInputBlur}
+                  onKeyDown={headerProps.onDeckTitleInputKeyDown}
+                  className="h-9 w-full border-border bg-background/70 text-base font-bold text-foreground drop-shadow-md md:text-base"
+                  aria-label="Deck name"
                 />
-              )}
-              <h1
-                className={`relative z-10 min-w-0 truncate text-base font-bold drop-shadow-md sm:whitespace-nowrap ${headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "cursor-text select-none" : ""}`}
-                title={headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "Double-click to rename" : undefined}
-                onDoubleClick={headerProps.onDeckTitleDisplayDoubleClick}
+              </div>
+            ) : (
+              <div
+                className={
+                  headerProps.isOwner && !headerProps.viewing && headerProps.deck
+                    ? "group relative -mx-1 min-w-0 flex-1 max-w-full rounded-md px-2 py-0.5 sm:flex-none"
+                    : "relative min-w-0 flex-1 max-w-full sm:flex-none"
+                }
               >
-                {headerProps.displayedDeckName}
-              </h1>
-            </div>
-          )}
-          <Badge variant="outline" className="shrink-0 border-border bg-background/40 text-muted-foreground backdrop-blur-sm">
-            {headerProps.displayedCards.reduce((a, c) => a + c.quantity, 0)}
-          </Badge>
-          <Badge
-            variant="outline"
-            className="shrink-0 border-border bg-background/40 font-mono text-muted-foreground backdrop-blur-sm"
-            title={headerProps.totalUsd.anyMissing ? "Some cards have no price data" : undefined}
-          >
-            {formatPrice(headerProps.totalUsd.sum)}
-            {headerProps.totalUsd.anyMissing ? "+" : ""}
-          </Badge>
-          {headerProps.deck && !headerProps.deck.is_public && <Badge className="shrink-0 border-border bg-muted text-muted-foreground">Private</Badge>}
+                {headerProps.isOwner && !headerProps.viewing && headerProps.deck && (
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-md border border-border/80 bg-background/55 opacity-0 shadow-sm transition-opacity duration-300 ease-out group-hover:opacity-100"
+                  />
+                )}
+                <h1
+                  className={`relative z-10 min-w-0 truncate text-base font-bold drop-shadow-md sm:whitespace-nowrap ${headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "cursor-text select-none" : ""}`}
+                  title={headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "Double-click to rename" : undefined}
+                  onDoubleClick={headerProps.onDeckTitleDisplayDoubleClick}
+                >
+                  {headerProps.displayedDeckName}
+                </h1>
+              </div>
+            )}
+            <Badge variant="outline" className="shrink-0 border-border bg-background/40 text-muted-foreground backdrop-blur-sm">
+              {headerProps.displayedCards.reduce((a, c) => a + c.quantity, 0)}
+            </Badge>
+            <Badge
+              variant="outline"
+              className="shrink-0 border-border bg-background/40 font-mono text-muted-foreground backdrop-blur-sm"
+              title={headerProps.totalUsd.anyMissing ? "Some cards have no price data" : undefined}
+            >
+              {formatPrice(headerProps.totalUsd.sum)}
+              {headerProps.totalUsd.anyMissing ? "+" : ""}
+            </Badge>
+            {headerProps.deck && !headerProps.deck.is_public && <Badge className="shrink-0 border-border bg-muted text-muted-foreground">Private</Badge>}
+          </div>
         </div>
 
-        {showSearch ? (
-          <div
-            ref={headerProps.searchContainerRef}
-            className="order-5 min-w-0 basis-full pt-0 sm:order-4 sm:basis-0 sm:flex-1 sm:pt-0"
-          >
-            <div className="relative min-h-9">
+        <div className="flex min-h-9 w-full min-w-0 items-center gap-2 sm:contents">
+          {showSearch ? (
+            <div ref={headerProps.searchContainerRef} className="relative min-h-9 min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Add a card..."
@@ -173,23 +172,20 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
                 </div>
               )}
             </div>
-          </div>
-        ) : (
-          <div className="order-5 hidden min-h-9 sm:order-4 sm:block sm:flex-1 sm:min-w-0" aria-hidden />
-        )}
-
-        <div className="order-4 flex shrink-0 items-center gap-2 sm:order-5">
+          ) : (
+            <div className="hidden min-h-9 sm:block sm:min-h-0 sm:flex-1 sm:min-w-0" aria-hidden />
+          )}
+          {headerProps.deck ? <DeckLikeButton deckId={headerProps.deckId} /> : null}
           {headerProps.isOwner && !headerProps.viewing && (
             <button
               type="button"
               onClick={() => headerProps.onOpenSettings()}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent"
               title="Deck settings"
             >
               <Settings className="h-4 w-4" />
             </button>
           )}
-          {headerProps.deck ? <DeckLikeButton deckId={headerProps.deckId} /> : null}
           {headerProps.deck && (
             <ExportDeckMenu
               deckId={headerProps.deckId}
