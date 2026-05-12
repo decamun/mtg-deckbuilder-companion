@@ -15,13 +15,13 @@ All remaining items below are tracked as GitHub issues. The tech-debt/archive/ d
 
 ### 1. Right-click context menu parity for stack and list views
 
-**Issue:** #133 — Tech debt: deck editor context menu parity + unified card actions
+**Issue:** #133 — completed in PR #145.
 
-**File:** `src/app/decks/[id]/DeckWorkspaceClient.tsx` (confirm location before editing; menu logic may have moved)
+**File:** `src/app/decks/[id]/DeckWorkspaceGroupedDecklist.tsx`
 
 ### 2. Deduplicate card action menu content
 
-**Issue:** #133 (same as above)
+**Issue:** #133 — completed in PR #145.
 
 ### 3. Extract pure builders from `createDeck`
 
