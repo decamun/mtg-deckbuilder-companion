@@ -129,12 +129,6 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
           {headerProps.deck && !headerProps.deck.is_public && <Badge className="shrink-0 border-border bg-muted text-muted-foreground">Private</Badge>}
         </div>
 
-        {headerProps.deck ? (
-          <div className="order-3 shrink-0">
-            <DeckLikeButton deckId={headerProps.deckId} />
-          </div>
-        ) : null}
-
         {showSearch ? (
           <div
             ref={headerProps.searchContainerRef}
@@ -195,6 +189,7 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
               <Settings className="h-4 w-4" />
             </button>
           )}
+          {headerProps.deck ? <DeckLikeButton deckId={headerProps.deckId} /> : null}
           {headerProps.deck && (
             <ExportDeckMenu
               deckId={headerProps.deckId}
