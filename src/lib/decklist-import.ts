@@ -39,12 +39,12 @@ const MB_PREFIX = /^MB:\s*/i
  * Detect if a comment line is a zone section marker.
  * Returns the zone id if it is, or null if it's just a regular comment.
  */
-function detectSectionZone(comment: string): string | null {
-  const body = comment.replace(/^\/\/\s*/, "").trim().toLowerCase()
-  if (body === "deck" || body === "main" || body === "mainboard") return "mainboard"
-  if (body === "sideboard" || body === "side board" || body === "side") return "sideboard"
-  if (body === "maybeboard" || body === "maybe board" || body === "maybe" || body === "considering") return "maybeboard"
-  if (body === "commander") return "mainboard"
+function parseSectionMarkerZone(comment: string): string | null {
+  const markerText = comment.replace(/^\/\/\s*/, "").trim().toLowerCase()
+  if (markerText === "deck" || markerText === "main" || markerText === "mainboard") return "mainboard"
+  if (markerText === "sideboard" || markerText === "side board" || markerText === "side") return "sideboard"
+  if (markerText === "maybeboard" || markerText === "maybe board" || markerText === "maybe" || markerText === "considering") return "maybeboard"
+  if (markerText === "commander") return "mainboard"
   return null
 }
 
@@ -105,7 +105,7 @@ export function parseDecklist(text: string): ParsedDecklistLine[] {
     const trimmed = line.trim()
     // Check for section markers in comment lines.
     if (trimmed.startsWith("//")) {
-      const detected = detectSectionZone(trimmed)
+      const detected = parseSectionMarkerZone(trimmed)
       if (detected !== null) currentZone = detected
       continue
     }

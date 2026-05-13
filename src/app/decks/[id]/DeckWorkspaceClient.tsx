@@ -631,6 +631,27 @@ export default function DeckWorkspaceClient({
     }
   }
 
+  /** Batch-move all cards in `fromZone` to `toZone` in a single DB update. */
+  const moveAllCardsInZone = async (fromZone: string, toZone: string) => {
+    const zoneCards = cards.filter(c => (c.zone ?? 'mainboard') === fromZone)
+    if (zoneCards.length === 0) return
+    const versionSince = new Date().toISOString()
+    const cardIds = zoneCards.map(c => c.id)
+    // Optimistic update
+    setCards(prev => prev.map(c => cardIds.includes(c.id) ? { ...c, zone: toZone } : c))
+    const { error } = await supabase
+      .from('deck_cards')
+      .update({ zone: toZone })
+      .in('id', cardIds)
+    if (error) {
+      // Revert
+      setCards(prev => prev.map(c => cardIds.includes(c.id) ? { ...c, zone: fromZone } : c))
+      toast.error(error.message)
+    } else {
+      recordMutationVersion(`Moved all cards from ${fromZone} to ${toZone}`, versionSince)
+    }
+  }
+
   const handleCustomTagSubmit = () => {
     if (activeCardIdForTag && customTagInput) addTag(activeCardIdForTag, customTagInput)
     setTagDialogOpen(false)
@@ -1056,14 +1077,9 @@ export default function DeckWorkspaceClient({
               toast.info(`Board "${zoneId}" will appear once you move a card to it.`)
             }}
             onRemoveBoard={(zoneId) => {
-              // Move all cards in this zone back to mainboard
-              const zoneCards = displayedCards.filter(c => (c.zone ?? 'mainboard') === zoneId)
-              if (zoneCards.length > 0) {
-                for (const card of zoneCards) {
-                  void moveCardToZone(card.id, 'mainboard')
-                }
-                toast.success(`Moved all cards from ${zoneId} to mainboard.`)
-              }
+              void moveAllCardsInZone(zoneId, 'mainboard').then(() => {
+                toast.success(`Moved all cards from board to mainboard.`)
+              })
             }}
           />
         )}

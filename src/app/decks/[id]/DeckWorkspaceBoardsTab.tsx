@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Plus, Lock, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import type { DeckCard } from "@/lib/types"
@@ -51,9 +52,14 @@ export function DeckWorkspaceBoardsTab({
     cardsByZone(zoneId).reduce((sum, c) => sum + c.quantity, 0)
 
   const handleAddBoard = () => {
-    const id = newBoardName.trim().toLowerCase().replace(/\s+/g, "-")
-    if (!id) return
-    onAddCustomBoard(id)
+    const boardZoneId = newBoardName.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
+    if (!boardZoneId) return
+    const reservedIds = new Set(["mainboard", "sideboard", "maybeboard"])
+    if (reservedIds.has(boardZoneId)) {
+      toast.error(`"${boardZoneId}" is a reserved board name. Please choose a different name.`)
+      return
+    }
+    onAddCustomBoard(boardZoneId)
     setNewBoardName("")
     setAddingBoard(false)
   }
