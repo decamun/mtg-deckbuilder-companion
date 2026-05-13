@@ -21,6 +21,8 @@ interface DeckWorkspaceBoardsTabProps {
   onRemoveBoard: (zoneId: string) => void
   activeZone: string
   onZoneChange: (zone: string) => void
+  /** Double-click a board tile: jump to deck list with that board selected. */
+  onZoneOpenInDecklist: (zone: string) => void
 }
 
 export function DeckWorkspaceBoardsTab({
@@ -32,6 +34,7 @@ export function DeckWorkspaceBoardsTab({
   onRemoveBoard,
   activeZone,
   onZoneChange,
+  onZoneOpenInDecklist,
 }: DeckWorkspaceBoardsTabProps) {
   // Find all distinct zone ids across all cards (to show custom boards in use)
   const allZoneIds = Array.from(new Set(cards.map((c) => normalizeCardZone(c.zone))))
@@ -60,6 +63,7 @@ export function DeckWorkspaceBoardsTab({
             isActive={activeZone === zone.id}
             interactionsLocked={interactionsLocked}
             onSelect={() => onZoneChange(zone.id)}
+            onOpenInDecklist={() => onZoneOpenInDecklist(zone.id)}
             onRemove={
               !isZoneLockedForFormat(zone.id, format) && !zone.locked && !interactionsLocked
                 ? () => onRemoveBoard(zone.id)
@@ -115,6 +119,7 @@ function BoardCard({
   isActive,
   interactionsLocked,
   onSelect,
+  onOpenInDecklist,
   onRemove,
 }: {
   zone: ZoneDefinition
@@ -124,18 +129,24 @@ function BoardCard({
   isActive: boolean
   interactionsLocked: boolean
   onSelect: () => void
+  onOpenInDecklist: () => void
   onRemove?: () => void
 }) {
   const locked = isZoneLockedForFormat(zone.id, format)
 
   return (
     <div
+      title="Double-click to open in deck list"
       className={`relative flex flex-col gap-1 rounded-lg border px-4 py-3 transition-colors cursor-pointer min-w-[140px] ${
         isActive
           ? "border-primary/60 bg-primary/10 text-foreground"
           : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-card/80"
       }`}
       onClick={onSelect}
+      onDoubleClick={(e) => {
+        e.preventDefault()
+        onOpenInDecklist()
+      }}
     >
       <div className="flex items-center gap-1.5">
         <span className="text-sm font-medium">{zone.label}</span>

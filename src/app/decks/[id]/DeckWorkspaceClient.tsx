@@ -1275,7 +1275,8 @@ export default function DeckWorkspaceClient({
             isOwner={isOwner}
             viewing={!!viewing}
             activeZone={activeZone}
-            onZoneChange={(zone) => {
+            onZoneChange={setActiveZone}
+            onZoneOpenInDecklist={(zone) => {
               setActiveZone(zone)
               setTab("decklist")
             }}
