@@ -1028,18 +1028,8 @@ function ColorSpider({ cards }: { cards: DeckStatsCard[] }) {
 
   return (
     <div className="rounded-lg border border-border bg-card/60 p-4">
-      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+      <div className="mb-3">
         <h3 className="font-heading text-base tracking-wider">Color Balance</h3>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: '#3d9a5a' }} />
-            <span>Production</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: '#d44545' }} />
-            <span>Pips on spells</span>
-          </div>
-        </div>
       </div>
 
       {!hasAny ? (
@@ -1047,8 +1037,9 @@ function ColorSpider({ cards }: { cards: DeckStatsCard[] }) {
           Add cards with mana costs and lands to see the balance.
         </div>
       ) : (
-        <div className="flex flex-col md:flex-row items-center gap-4">
-          {showSpider ? (
+        <div className="flex flex-col gap-3 w-full">
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            {showSpider ? (
             <svg
               viewBox="0 0 220 220"
               className="w-full max-w-[260px] h-auto shrink-0"
@@ -1142,11 +1133,11 @@ function ColorSpider({ cards }: { cards: DeckStatsCard[] }) {
                 />
               ))}
             </svg>
-          ) : (
-            <ColorBalanceBars colors={barColors} totals={totals} />
-          )}
+            ) : (
+              <ColorBalanceBars colors={barColors} totals={totals} />
+            )}
 
-          <div className="flex-1 min-w-0 w-full">
+            <div className="flex-1 min-w-0 w-full">
             <table className="w-full text-xs tabular-nums">
               <thead>
                 <tr className="text-muted-foreground border-b border-border/60">
@@ -1210,6 +1201,18 @@ function ColorSpider({ cards }: { cards: DeckStatsCard[] }) {
                   Hybrid pips are split evenly. Ratio &lt; 1 means more demand than sources for that color.
                 </span>
               )}
+            </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-muted-foreground self-start">
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: '#3d9a5a' }} />
+              <span>Production</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: '#d44545' }} />
+              <span>Pips on spells</span>
             </div>
           </div>
         </div>
