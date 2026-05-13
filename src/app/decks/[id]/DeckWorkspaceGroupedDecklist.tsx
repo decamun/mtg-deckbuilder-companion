@@ -109,17 +109,16 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
 
   return (
     <>
-      {/* `fixed` is scoped to the deck scroll column via translate3d on that ancestor. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] hidden justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 md:flex">
         <div
           className={cn(
-            "pointer-events-auto flex w-full max-w-7xl gap-3 rounded-xl border border-border bg-white/95 p-3 text-foreground shadow-2xl backdrop-blur-md dark:bg-zinc-950/95",
+            "pointer-events-auto flex w-full max-w-7xl gap-3 rounded-xl border border-border bg-white p-3 text-foreground shadow-2xl",
             hasCommanders ? "flex-col sm:flex-row sm:items-stretch" : "flex-col"
           )}
         >
           <div
             className={cn(
-              "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-border/60 bg-white/90 p-3 dark:bg-zinc-900/80",
+              "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-border/60 bg-white p-3",
               "max-h-[min(38vh,22rem)]",
               hasCommanders && "sm:max-h-[min(42vh,26rem)]"
             )}
@@ -137,7 +136,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                 <button
                   key={c.id}
                   type="button"
-                  className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-white p-2 text-left text-foreground transition hover:border-yellow-300 sm:w-[min(100%,16rem)] sm:max-w-[16rem] dark:bg-zinc-950"
+                  className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-white p-2 text-left text-foreground transition hover:border-yellow-300 sm:w-[min(100%,16rem)] sm:max-w-[16rem]"
                   onClick={() => showClickedPreview(c, "Commander")}
                   onMouseEnter={() => onDeckCardRulesPreviewHover(c)}
                   onMouseLeave={() => onDeckCardRulesPreviewHover(null)}
@@ -163,7 +162,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
         </div>
       </div>
 
-      <div className="pb-[min(32vh,16rem)]">
+      <div className="pb-10 md:pb-[clamp(22rem,52vh,36rem)]">
         {cardsLoading && liveCardCount === 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
             {Array.from({ length: 12 }).map((_, i) => (
