@@ -56,6 +56,12 @@ export type DeckWorkspaceDialogsSectionProps = {
   setCardQtyDialogInput: React.Dispatch<React.SetStateAction<string>>
   handleCardQtyDialogSubmit: () => void
   maxCopiesPerLine: number
+  boardDialogOpen: boolean
+  setBoardDialogOpen: (v: boolean) => void
+  customBoardInput: string
+  setCustomBoardInput: (v: string) => void
+  customBoardError: string | null
+  handleCustomBoardSubmit: () => void
 }
 
 export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionProps) {
@@ -308,6 +314,38 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
               </>
             )
           })()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={props.boardDialogOpen} onOpenChange={props.setBoardDialogOpen}>
+        <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Move to Custom Board</DialogTitle>
+            <DialogDescription>Enter a name for the new board. The card will be moved to it immediately.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Input
+              value={props.customBoardInput}
+              onChange={(e) => props.setCustomBoardInput(e.target.value)}
+              placeholder="e.g. Wishboard"
+              className="bg-background border-border text-foreground placeholder:text-muted-foreground"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") props.handleCustomBoardSubmit()
+              }}
+              autoFocus
+            />
+            {props.customBoardError && (
+              <p className="text-xs text-destructive">{props.customBoardError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => props.setBoardDialogOpen(false)} className="hover:bg-accent hover:text-accent-foreground">
+              Cancel
+            </Button>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={props.handleCustomBoardSubmit} disabled={!props.customBoardInput.trim()}>
+              Move Card
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

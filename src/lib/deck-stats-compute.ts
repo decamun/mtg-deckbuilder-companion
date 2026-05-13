@@ -6,7 +6,7 @@
 import { primaryTypeLine } from '@/lib/card-types'
 import type { DeckRow } from '@/lib/deck-service'
 import {
-  isFormatValidationImplemented,
+  type DeckFormatValidationStatus,
   normalizeFormatForValidation,
   validateDeckForFormat,
   type FormatValidationCard,
@@ -618,7 +618,9 @@ export interface DeckStatsReport {
     rows_missing_price: number
   }
   format_validation: {
+    validation_status: DeckFormatValidationStatus
     validation_implemented: boolean
+    deck_violations: readonly string[]
     violation_card_count: number
     violations: Array<{
       deck_card_id: string
@@ -650,13 +652,13 @@ export function computeDeckStatsReport(deck: DeckRow, allCards: DeckStatsCard[])
 
   const totalQty = allCards.reduce((s, c) => s + c.quantity, 0)
 
-  const { violationsByCardId } = validateDeckForFormat(deck.format, {
+  const formatValidation = validateDeckForFormat(deck.format, {
     cards: asValidationCards(allCards),
     commanderScryfallIds: commanderIds,
     bracket: deck.bracket ?? null,
   })
 
-  const violations = [...violationsByCardId.entries()]
+  const violations = [...formatValidation.violationsByCardId.entries()]
     .filter(([, reasons]) => reasons.length > 0)
     .map(([id, reasons]) => {
       const row = allCards.find(x => x.id === id)
@@ -689,7 +691,9 @@ export function computeDeckStatsReport(deck: DeckRow, allCards: DeckStatsCard[])
       rows_missing_price: rowsMissingPrice,
     },
     format_validation: {
-      validation_implemented: isFormatValidationImplemented(deck.format),
+      validation_status: formatValidation.status,
+      validation_implemented: formatValidation.status === 'implemented',
+      deck_violations: formatValidation.deckViolations,
       violation_card_count: violations.length,
       violations,
     },

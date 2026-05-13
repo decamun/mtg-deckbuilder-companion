@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   colorIdentityScryfallClause,
+  getFormatValidationStatus,
+  isFormatValidationImplemented,
   normalizeFormatForValidation,
   validateDeckForFormat,
 } from '@/lib/deck-format-validation'
@@ -16,7 +18,24 @@ describe('deck format validation helpers', () => {
 describe('validateDeckForFormat', () => {
   it('returns no violations for unsupported formats', () => {
     const result = validateDeckForFormat('standard', { cards: [], commanderScryfallIds: [] })
+    expect(result.status).toBe('not_yet_implemented')
     expect(result.violationsByCardId.size).toBe(0)
+    expect(result.deckViolations).toEqual(['Standard validation is not yet implemented.'])
+  })
+
+  it('maps selectable formats to explicit validation statuses', () => {
+    expect(getFormatValidationStatus('edh')).toBe('implemented')
+    expect(getFormatValidationStatus('commander')).toBe('implemented')
+    expect(getFormatValidationStatus('standard')).toBe('not_yet_implemented')
+    expect(getFormatValidationStatus('modern')).toBe('not_yet_implemented')
+    expect(getFormatValidationStatus('pioneer')).toBe('not_yet_implemented')
+    expect(getFormatValidationStatus('legacy')).toBe('not_yet_implemented')
+    expect(getFormatValidationStatus('vintage')).toBe('not_yet_implemented')
+    expect(getFormatValidationStatus('pauper')).toBe('not_yet_implemented')
+    expect(getFormatValidationStatus('other')).toBe('neutral')
+    expect(getFormatValidationStatus(null)).toBe('neutral')
+    expect(isFormatValidationImplemented('edh')).toBe(true)
+    expect(isFormatValidationImplemented('standard')).toBe(false)
   })
 
   it('flags commander singleton, color identity, banned, and bracket game-changer violations', () => {
@@ -89,6 +108,8 @@ describe('validateDeckForFormat', () => {
       bracket: 1,
     })
 
+    expect(result.status).toBe('implemented')
+    expect(result.deckViolations).toEqual([])
     expect(result.violationsByCardId.get('off-color')).toContain('Color identity outside commanders')
     expect(result.violationsByCardId.get('banned')).toContain('Banned in Commander')
     expect(result.violationsByCardId.get('singleton-1')).toContain(
