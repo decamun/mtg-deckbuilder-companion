@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BRACKET_GC_LIMIT,
+  GAME_CHANGER_DATA_VERSION,
   bracketHelperText,
   isGameChanger,
 } from '@/lib/game-changers'
@@ -13,6 +14,7 @@ describe('game changers', () => {
   })
 
   it('exposes the published bracket caps and helper text', () => {
+    expect(GAME_CHANGER_DATA_VERSION).toBeTruthy()
     expect(BRACKET_GC_LIMIT[1]).toBe(0)
     expect(BRACKET_GC_LIMIT[3]).toBe(3)
     expect(BRACKET_GC_LIMIT[4]).toBe(Infinity)

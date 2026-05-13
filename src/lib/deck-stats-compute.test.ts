@@ -144,6 +144,7 @@ describe('computeDeckStatsReport', () => {
     expect(report.format_validation).toMatchObject({
       validation_status: 'implemented',
       validation_implemented: true,
+      data_version: expect.stringContaining('game-changers:'),
       deck_violations: [],
       violation_card_count: 0,
       violations: [],

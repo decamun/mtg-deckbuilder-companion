@@ -26,7 +26,10 @@ import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner
 import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { pickPrice } from "@/lib/format"
 import { hasLandFaceOnTypeLine } from "@/lib/card-types"
-import { validateDeckForFormat } from "@/lib/deck-format-validation"
+import {
+  getFormatValidationDataVersion,
+  validateDeckForFormat,
+} from "@/lib/deck-format-validation"
 import { useTopNavDeckGuest } from "@/components/TopNavDeckGuestContext"
 import { useDeckWorkspaceFetch } from "./use-deck-workspace-fetch"
 import { hydrateVersionSnapshot } from "./deck-workspace-version-hydrate"
@@ -872,6 +875,7 @@ export default function DeckWorkspaceClient({
         cards: displayedCards,
         commanderScryfallIds: displayedCommanderIds,
         bracket: displayedBracket,
+        dataVersion: getFormatValidationDataVersion(displayedFormat),
       }),
     [displayedCards, displayedCommanderIds, displayedFormat, displayedBracket]
   )
