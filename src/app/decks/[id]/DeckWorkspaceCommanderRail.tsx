@@ -22,36 +22,29 @@ export function DeckWorkspaceCommanderRail({
   if (commanderCards.length === 0) return null
 
   return (
-    <div className={cn("pointer-events-auto hidden min-[1180px]:flex flex-col items-end gap-2", className)}>
+    <div className={cn("pointer-events-auto hidden min-[1180px]:flex flex-col items-end gap-3", className)}>
       {commanderCards.map((c) => (
         <button
           key={c.id}
           type="button"
-          className="group flex w-[min(100%,15rem)] flex-col overflow-hidden rounded-xl border border-yellow-400/50 bg-white text-left text-foreground shadow-md transition hover:border-yellow-300 sm:max-w-[15rem]"
+          className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-white p-2 text-left text-foreground transition hover:border-yellow-300 sm:w-[min(100%,16rem)] sm:max-w-[16rem]"
           onClick={() => showClickedPreview(c, "Commander")}
           onMouseEnter={() => onDeckCardRulesPreviewHover(c)}
           onMouseLeave={() => onDeckCardRulesPreviewHover(null)}
         >
-          <div className="relative w-full shrink-0 border-b border-yellow-400/20 bg-zinc-50/80">
-            {primaryDeckCardImage(c) ? (
-              <CardThumbnail
-                card={c}
-                className="w-full"
-                imageClassName="h-32 w-full object-cover object-center sm:h-36"
-                overlayClassName="rounded-none"
-              />
-            ) : (
-              <div className="flex h-32 items-center justify-center sm:h-36">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/50" />
-              </div>
-            )}
-          </div>
-          <div className="min-w-0 space-y-1 p-2.5 pt-2">
-            <div className="inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
+          {primaryDeckCardImage(c) ? (
+            <CardThumbnail card={c} className="h-24 shrink-0" imageClassName="h-24 w-auto rounded-lg border border-border/60" overlayClassName="rounded-lg" />
+          ) : (
+            <div className="flex aspect-[5/7] h-24 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-zinc-100">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
               <Crown className="h-3 w-3" /> Commander
             </div>
-            <div className="truncate text-sm font-semibold leading-tight text-foreground">{c.name}</div>
-            {c.type_line ? <div className="line-clamp-2 text-xs text-muted-foreground">{c.type_line}</div> : null}
+            <div className="truncate text-sm font-semibold text-foreground">{c.name}</div>
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">{c.type_line}</div>
           </div>
         </button>
       ))}

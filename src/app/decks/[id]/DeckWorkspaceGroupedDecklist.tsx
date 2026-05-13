@@ -110,7 +110,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
   return (
     <>
       <div
-        className="pointer-events-none fixed bottom-0 left-0 z-[60] hidden justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 md:flex"
+        className="pointer-events-none fixed bottom-0 left-0 z-[60] hidden justify-center p-4 md:flex"
         style={{ right: dockRightInsetPx }}
       >
         <div className="pointer-events-none flex w-full max-w-7xl flex-col rounded-xl border border-border bg-white p-3 text-foreground shadow-2xl">
