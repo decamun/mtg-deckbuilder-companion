@@ -46,7 +46,7 @@ export function DeckWorkspaceDockCardArtPreview({ imageUrl, label }: { imageUrl:
     <div
       ref={wrapRef}
       className={cn(
-        "pointer-events-none relative shrink-0 overflow-hidden rounded-lg border border-border/60 bg-zinc-100",
+        "pointer-events-none relative shrink-0 overflow-hidden rounded-lg border border-border/60 bg-background/80 backdrop-blur-xl",
         "h-[7rem] w-[10.5rem]"
       )}
     >
