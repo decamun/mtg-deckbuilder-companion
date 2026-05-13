@@ -32,7 +32,36 @@ import {
 } from "./deck-workspace-overflow-menus"
 import { cn } from "@/lib/utils"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
-import { DeckWorkspaceCardRulesPreview, rulesHoverPayloadToFields } from "./DeckWorkspaceCardRulesPreview"
+import { DeckWorkspaceCardRulesPreview, rulesHoverPayloadToArtImageUrl, rulesHoverPayloadToFields } from "./DeckWorkspaceCardRulesPreview"
+
+function DeckWorkspaceDockCardArtPreview({ imageUrl, label }: { imageUrl: string | null; label: string }) {
+  return (
+    <div
+      className={cn(
+        "pointer-events-none relative shrink-0 overflow-hidden rounded-lg border border-border/60 bg-zinc-100",
+        "aspect-[5/7] w-full max-w-[12.5rem] sm:w-44 sm:max-w-none",
+        "max-h-[min(36vh,19rem)] sm:max-h-[min(42vh,26rem)]"
+      )}
+    >
+      {imageUrl ? (
+        <>
+          <img
+            src={imageUrl}
+            alt={label ? `${label} art` : ""}
+            className="h-full w-full object-cover object-center scale-[1.18]"
+            draggable={false}
+          />
+          <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-black/[0.08]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_22%,rgba(0,0,0,0.52)_92%)]" />
+        </>
+      ) : (
+        <div className="flex h-full min-h-[9rem] flex-col items-center justify-center px-2 text-center text-xs italic text-muted-foreground">
+          Hover a card for art
+        </div>
+      )}
+    </div>
+  )
+}
 
 export type DeckWorkspaceGroupedDecklistProps = {
   groupedCards: Record<string, DeckCard[]>
@@ -104,61 +133,52 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
   } = props
 
   const previewFields = rulesHoverPayloadToFields(rulesHover)
+  const artImageUrl = rulesHoverPayloadToArtImageUrl(rulesHover)
   const hasCommanders = commanderCards.length > 0
-  const partnerPair = commanderCards.length > 1
 
   return (
     <>
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] hidden justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 md:flex">
-        <div
-          className={cn(
-            "pointer-events-auto flex w-full max-w-7xl gap-3 rounded-xl border border-border bg-white p-3 text-foreground shadow-2xl",
-            hasCommanders ? "flex-col sm:flex-row sm:items-stretch" : "flex-col"
-          )}
-        >
-          <div
-            className={cn(
-              "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-border/60 bg-white p-3",
-              "max-h-[min(38vh,22rem)]",
-              hasCommanders && "sm:max-h-[min(42vh,26rem)]"
-            )}
-          >
-            <DeckWorkspaceCardRulesPreview fields={previewFields} />
-          </div>
-          {hasCommanders && (
-            <div
-              className={cn(
-                "flex max-w-full shrink-0 flex-wrap content-start items-stretch justify-end gap-3 sm:min-h-0 sm:max-w-none",
-                partnerPair && "sm:max-w-[calc(2*min(100%,16rem)+0.75rem)]"
-              )}
-            >
+        <div className="pointer-events-none flex w-full max-w-7xl flex-col gap-2 rounded-xl border border-border bg-white p-3 text-foreground shadow-2xl">
+          {hasCommanders ? (
+            <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2 border-b border-border/60 pb-2">
               {commanderCards.map((c) => (
                 <button
                   key={c.id}
                   type="button"
-                  className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-yellow-400/50 bg-white p-2 text-left text-foreground transition hover:border-yellow-300 sm:w-[min(100%,16rem)] sm:max-w-[16rem]"
+                  className="group flex max-w-full items-center gap-2 overflow-hidden rounded-lg border border-yellow-400/50 bg-white px-2 py-1.5 text-left text-foreground transition hover:border-yellow-300 sm:max-w-[14rem]"
                   onClick={() => showClickedPreview(c, "Commander")}
                   onMouseEnter={() => onDeckCardRulesPreviewHover(c)}
                   onMouseLeave={() => onDeckCardRulesPreviewHover(null)}
                 >
                   {primaryDeckCardImage(c) ? (
-                    <CardThumbnail card={c} className="h-24 shrink-0" imageClassName="h-24 w-auto rounded-lg border border-border/60" overlayClassName="rounded-lg" />
+                    <CardThumbnail card={c} className="h-11 shrink-0" imageClassName="h-11 w-auto rounded-md border border-border/60" overlayClassName="rounded-md" />
                   ) : (
-                    <div className="flex aspect-[5/7] h-24 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-zinc-100">
-                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
+                    <div className="flex aspect-[5/7] h-11 shrink-0 items-center justify-center rounded-md border border-border/40 bg-zinc-100">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/50" />
                     </div>
                   )}
                   <div className="min-w-0 flex-1 overflow-hidden">
-                    <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold uppercase text-yellow-950">
-                      <Crown className="h-3 w-3" /> Commander
+                    <div className="mb-0.5 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-1.5 py-0.5 text-[9px] font-bold uppercase text-yellow-950">
+                      <Crown className="h-2.5 w-2.5" /> CMD
                     </div>
-                    <div className="truncate text-sm font-semibold text-foreground">{c.name}</div>
-                    <div className="mt-0.5 truncate text-xs text-muted-foreground">{c.type_line}</div>
+                    <div className="truncate text-xs font-semibold text-foreground">{c.name}</div>
                   </div>
                 </button>
               ))}
             </div>
-          )}
+          ) : null}
+          <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row sm:items-stretch">
+            <div
+              className={cn(
+                "pointer-events-none min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-border/60 bg-white p-3",
+                "max-h-[min(38vh,22rem)] sm:max-h-[min(42vh,26rem)]"
+              )}
+            >
+              <DeckWorkspaceCardRulesPreview fields={previewFields} />
+            </div>
+            <DeckWorkspaceDockCardArtPreview imageUrl={artImageUrl} label={previewFields?.name ?? ""} />
+          </div>
         </div>
       </div>
 
