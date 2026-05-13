@@ -274,7 +274,7 @@ function getDeckZoneViolations(
   cards: FormatValidationCard[]
 ): string[] {
   const violations: string[] = []
-  const minMainboardSize = (format ? MIN_MAINBOARD_SIZE_BY_FORMAT[format] : undefined) ?? null
+  const minMainboardSize = format ? MIN_MAINBOARD_SIZE_BY_FORMAT[format] : undefined
   if (minMainboardSize != null) {
     const mainDeckQuantity = cards
       .filter((card) => zoneCountsTowardMainDeck(card.zone))

@@ -303,6 +303,24 @@ describe('validateDeckForFormat', () => {
     const result = validateDeckForFormat('pauper', { cards, commanderScryfallIds: [] })
     expect(result.deckViolations).toContain('Mainboard must contain at least 60 cards (has 59).')
   })
+
+  it('does not apply pauper mainboard minimum to other formats', () => {
+    const cards = [
+      {
+        id: 'short-mainboard-standard',
+        scryfall_id: 'short-mainboard-standard-id',
+        oracle_id: 'short-mainboard-standard-oracle',
+        name: 'Short Mainboard Standard',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { standard: 'legal' },
+      },
+    ]
+
+    const result = validateDeckForFormat('standard', { cards, commanderScryfallIds: [] })
+    expect(result.deckViolations).not.toContain('Mainboard must contain at least 60 cards (has 1).')
+  })
 })
 
 describe('getConstructedCopyLimitViolations', () => {
