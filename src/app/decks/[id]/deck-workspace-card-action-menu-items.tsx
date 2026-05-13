@@ -237,8 +237,13 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
       )}
 
       {/* Add copies */}
-      <Item onClick={() => onAddOneToCard(c.id)}>Add 1</Item>
-      <Item onClick={() => onOpenAddQuantityDialog(c.id)}>Add n…</Item>
+      <Sub>
+        <SubTrigger>Add</SubTrigger>
+        <SubContent className={subContentClass}>
+          <Item onClick={() => onAddOneToCard(c.id)}>Add 1</Item>
+          <Item onClick={() => onOpenAddQuantityDialog(c.id)}>Add n…</Item>
+        </SubContent>
+      </Sub>
       {(c.quantity >= 2 || c.quantity >= 4 || (grouping === "tag" && groupName !== TAG_GROUP_UNTAGGED)) && (
         <>
           <Sep className="bg-border" />
