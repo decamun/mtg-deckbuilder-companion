@@ -259,12 +259,13 @@ export function validateDeckForFormat(
     }
   }
 
-  const deckViolations = [
-    ...deckZoneViolations,
+  const deckViolations =
     status === 'not_yet_implemented'
-      ? [`${definition?.label ?? normalized ?? 'This format'} validation is not yet implemented.`]
-      : [],
-  ].flat()
+      ? [
+          ...deckZoneViolations,
+          `${definition?.label ?? normalized ?? 'This format'} validation is not yet implemented.`,
+        ]
+      : deckZoneViolations
 
   return {
     status,
