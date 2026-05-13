@@ -164,7 +164,7 @@ export default function DeckWorkspaceClient({
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
   const [previewFaceIndex, setPreviewFaceIndex] = useState(0)
   const [readyCardInteractionKey, setReadyCardInteractionKey] = useState<string | null>(null)
-  /** After closing a ⋮ menu in the format-hints dialog, ignore row clicks for a short window (ghost click-through). */
+  /** After interacting with a card ⋮ menu (or format-hints dialog rows), ignore stray row/preview clicks briefly (portaled menu click-through). */
   const formatHintsMenuClosedAtRef = useRef(0)
 
   // New: ownership, tabs, settings, primer, version-viewing

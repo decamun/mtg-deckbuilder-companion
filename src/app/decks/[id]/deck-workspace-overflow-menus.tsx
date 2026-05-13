@@ -11,6 +11,10 @@ import type { ScryfallPrinting } from "@/lib/scryfall"
 import type { MutableRefObject } from "react"
 import { DeckWorkspaceCardActionMenuItems } from "./deck-workspace-card-action-menu-items"
 
+function stampPortaledMenuCloseGuard(ref: MutableRefObject<number>) {
+  ref.current = performance.now()
+}
+
 export type DeckWorkspaceOverflowMenusProps = {
   isOwner: boolean
   viewing: boolean
@@ -87,9 +91,9 @@ export function DeckWorkspaceThreeDotMenu(
       onOpenChange={(open) => {
         if (open) void menus.ensurePrintingsLoaded(c)
         else {
-          queueMicrotask(() => {
-            formatHintsMenuClosedAtRef.current = performance.now()
-          })
+          // Synchronous stamp so a portaled-menu "click-through" on the same frame
+          // still sees a fresh window (queueMicrotask ran too late for list rows).
+          stampPortaledMenuCloseGuard(formatHintsMenuClosedAtRef)
         }
       }}
     >
@@ -102,7 +106,14 @@ export function DeckWorkspaceThreeDotMenu(
       >
         <MoreVertical className="h-4 w-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align={align} className="w-56 bg-white border-border text-foreground">
+      <DropdownMenuContent
+        align={align}
+        finalFocus={false}
+        className="w-56 bg-white border-border text-foreground"
+        onPointerDownCapture={() => {
+          stampPortaledMenuCloseGuard(formatHintsMenuClosedAtRef)
+        }}
+      >
         <DeckWorkspaceCardActionMenuItems variant="dropdown" {...buildDeckWorkspaceMenuItemProps(menus, c, groupName)} />
       </DropdownMenuContent>
     </DropdownMenu>
