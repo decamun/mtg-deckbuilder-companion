@@ -25,6 +25,8 @@ export type DeckWorkspaceDialogsSectionProps = {
   formatHintsListOpen: boolean
   setFormatHintsListOpen: (v: boolean) => void
   formatHintCardList: DeckCard[]
+  /** Deck-wide messages (e.g. 60-card main, points cap) from the same pass as {@link formatViolationMap}. */
+  formatDeckViolations: readonly string[]
   formatViolationMap: ReadonlyMap<string, readonly string[]>
   formatHintsMenuClosedAtRef: MutableRefObject<number>
   showClickedPreview: (c: DeckCard, groupName: string) => void
@@ -74,13 +76,32 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
           <DialogHeader>
             <DialogTitle>Format hints</DialogTitle>
             <DialogDescription>
-              {props.formatHintCardList.length} card{props.formatHintCardList.length === 1 ? "" : "s"} that do not match{" "}
-              {props.displayedFormat === "edh" ? "EDH" : "the selected"} construction hints.
+              {props.formatHintCardList.length > 0 ? (
+                <>
+                  {props.formatHintCardList.length} card{props.formatHintCardList.length === 1 ? "" : "s"} that do not
+                  match {props.displayedFormat === "edh" ? "EDH" : "the selected"} construction hints.
+                </>
+              ) : props.formatDeckViolations.length > 0 ? (
+                <>Deck-level construction messages for {props.displayedFormat === "edh" ? "EDH" : "the selected format"}.</>
+              ) : (
+                <>No format hints to show.</>
+              )}
             </DialogDescription>
           </DialogHeader>
+          {props.formatDeckViolations.length > 0 && (
+            <div className="mb-3 rounded-md border border-red-500/35 bg-red-950/25 px-3 py-2 text-xs leading-snug text-red-200/95">
+              {props.formatDeckViolations.map((msg, i) => (
+                <p key={i}>{msg}</p>
+              ))}
+            </div>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-card/50">
             {props.formatHintCardList.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">No cards to show.</p>
+              <p className="p-4 text-sm text-muted-foreground">
+                {props.formatDeckViolations.length > 0
+                  ? "No individual cards flagged; see deck messages above."
+                  : "No cards to show."}
+              </p>
             ) : (
               props.formatHintCardList.map((c) => {
                 const hintLines = props.formatViolationMap.get(c.id) ?? []
