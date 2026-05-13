@@ -6,6 +6,7 @@
 import { primaryTypeLine } from '@/lib/card-types'
 import type { DeckRow } from '@/lib/deck-service'
 import {
+  getFormatValidationDataVersion,
   type DeckFormatValidationStatus,
   normalizeFormatForValidation,
   validateDeckForFormat,
@@ -620,6 +621,7 @@ export interface DeckStatsReport {
   format_validation: {
     validation_status: DeckFormatValidationStatus
     validation_implemented: boolean
+    data_version: string | null
     deck_violations: readonly string[]
     violation_card_count: number
     violations: Array<{
@@ -656,6 +658,7 @@ export function computeDeckStatsReport(deck: DeckRow, allCards: DeckStatsCard[])
     cards: asValidationCards(allCards),
     commanderScryfallIds: commanderIds,
     bracket: deck.bracket ?? null,
+    dataVersion: getFormatValidationDataVersion(deck.format),
   })
 
   const violations = [...formatValidation.violationsByCardId.entries()]
@@ -693,6 +696,7 @@ export function computeDeckStatsReport(deck: DeckRow, allCards: DeckStatsCard[])
     format_validation: {
       validation_status: formatValidation.status,
       validation_implemented: formatValidation.status === 'implemented',
+      data_version: formatValidation.dataVersion,
       deck_violations: formatValidation.deckViolations,
       violation_card_count: violations.length,
       violations,

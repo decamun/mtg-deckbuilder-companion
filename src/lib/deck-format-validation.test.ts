@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   colorIdentityScryfallClause,
+  getFormatValidationDataVersion,
   getFormatValidationStatus,
   isFormatValidationImplemented,
   normalizeFormatForValidation,
@@ -36,6 +37,8 @@ describe('validateDeckForFormat', () => {
     expect(getFormatValidationStatus(null)).toBe('neutral')
     expect(isFormatValidationImplemented('edh')).toBe(true)
     expect(isFormatValidationImplemented('standard')).toBe(false)
+    expect(getFormatValidationDataVersion('edh')).toContain('game-changers:')
+    expect(getFormatValidationDataVersion('standard')).toBeNull()
   })
 
   it('flags commander singleton, color identity, banned, and bracket game-changer violations', () => {
@@ -110,6 +113,8 @@ describe('validateDeckForFormat', () => {
 
     expect(result.status).toBe('implemented')
     expect(result.deckViolations).toEqual([])
+    expect(result.dataVersion).toContain('edh-live-legalities+scryfall')
+    expect(result.violationsByCardId.get('commander')).toBeUndefined()
     expect(result.violationsByCardId.get('off-color')).toContain('Color identity outside commanders')
     expect(result.violationsByCardId.get('banned')).toContain('Banned in Commander')
     expect(result.violationsByCardId.get('singleton-1')).toContain(
@@ -120,6 +125,27 @@ describe('validateDeckForFormat', () => {
     )
     expect(result.violationsByCardId.get('game-changer')).toContain(
       'Bracket 1: max 0 game changers (deck has 1)',
+    )
+  })
+
+  it('fails loudly when commander legality payload is missing', () => {
+    const result = validateDeckForFormat('edh', {
+      cards: [
+        {
+          id: 'missing-legalities',
+          scryfall_id: 'missing-id',
+          oracle_id: 'missing-oracle',
+          name: 'Unknown Legality',
+          quantity: 1,
+          zone: 'mainboard',
+          color_identity: ['G'],
+        },
+      ],
+      commanderScryfallIds: [],
+    })
+
+    expect(result.violationsByCardId.get('missing-legalities')).toContain(
+      'Cannot validate Commander legality: missing data from Scryfall',
     )
   })
 })

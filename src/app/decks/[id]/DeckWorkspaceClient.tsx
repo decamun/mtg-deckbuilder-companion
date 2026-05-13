@@ -26,7 +26,10 @@ import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner
 import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { pickPrice } from "@/lib/format"
 import { hasLandFaceOnTypeLine } from "@/lib/card-types"
-import { validateDeckForFormat } from "@/lib/deck-format-validation"
+import {
+  getFormatValidationDataVersion,
+  validateDeckForFormat,
+} from "@/lib/deck-format-validation"
 import { useTopNavDeckGuest } from "@/components/TopNavDeckGuestContext"
 import { useDeckWorkspaceFetch } from "./use-deck-workspace-fetch"
 import { hydrateVersionSnapshot } from "./deck-workspace-version-hydrate"
@@ -52,6 +55,7 @@ import type { CardInteractionPhase, DeckCardRow, DiffTargetState, ViewingSnapsho
 import { DeckWorkspaceHeader } from "./DeckWorkspaceHeader"
 import { DeckWorkspaceDecklistToolbar } from "./DeckWorkspaceDecklistToolbar"
 import { DeckWorkspaceGroupedDecklist } from "./DeckWorkspaceGroupedDecklist"
+import { DeckWorkspaceCommanderRail } from "./DeckWorkspaceCommanderRail"
 import { DeckWorkspaceDialogsSection } from "./DeckWorkspaceDialogsSection"
 import type { DeckWorkspaceOverflowMenusProps } from "./deck-workspace-overflow-menus"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
@@ -206,6 +210,9 @@ export default function DeckWorkspaceClient({
   const skipDeckTitleBlurCommitRef = useRef(false)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
+
+  const [agentRailInsetPx, setAgentRailInsetPx] = useState(0)
+  const dockRightInsetPx = isOwner && !viewing ? agentRailInsetPx : 0
 
   const onDeckCardRulesPreviewHover = useCallback((card: DeckCard | null) => {
     setRulesHover((prev) => {
@@ -970,6 +977,7 @@ export default function DeckWorkspaceClient({
         cards: displayedCards,
         commanderScryfallIds: displayedCommanderIds,
         bracket: displayedBracket,
+        dataVersion: getFormatValidationDataVersion(displayedFormat),
       }),
     [displayedCards, displayedCommanderIds, displayedFormat, displayedBracket]
   )
@@ -1182,36 +1190,47 @@ export default function DeckWorkspaceClient({
           <div className="p-6 max-w-7xl mx-auto space-y-8">
         {tab === "decklist" && (
           <>
-            <DeckWorkspaceDecklistToolbar
-              cardSize={cardSize}
-              grouping={grouping}
-              sorting={sorting}
-              viewMode={viewMode}
-              displayedFormat={displayedFormat}
-              formatValidationStatus={formatValidation.status}
-              formatDeckViolations={formatValidation.deckViolations}
-              formatViolationCount={formatViolationMap.size}
-              activeZone={activeZone}
-              customZoneIds={customZoneIds}
-              onCardSizeChange={(n) => {
-                setCardSize(n)
-                saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting, cardSize: n })
-              }}
-              onGroupingChange={(g) => {
-                setGrouping(g)
-                saveDeckWorkspaceDisplayPrefs({ viewMode, grouping: g, sorting, cardSize })
-              }}
-              onSortingChange={(s) => {
-                setSorting(s)
-                saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting: s, cardSize })
-              }}
-              onViewModeChange={(v) => {
-                setViewMode(v)
-                saveDeckWorkspaceDisplayPrefs({ viewMode: v, grouping, sorting, cardSize })
-              }}
-              onOpenFormatHints={() => setFormatHintsListOpen(true)}
-              onZoneChange={setActiveZone}
-            />
+            <div className="relative z-20 overflow-visible">
+              <div className="flex flex-col gap-4 min-[1180px]:flex-row min-[1180px]:items-start min-[1180px]:justify-between min-[1180px]:gap-6 min-[1180px]:-mb-12 min-[1180px]:pb-3">
+                <div className="min-w-0 min-[1180px]:flex-1">
+                  <DeckWorkspaceDecklistToolbar
+                    cardSize={cardSize}
+                    grouping={grouping}
+                    sorting={sorting}
+                    viewMode={viewMode}
+                    displayedFormat={displayedFormat}
+                    formatValidationStatus={formatValidation.status}
+                    formatDeckViolations={formatValidation.deckViolations}
+                    formatViolationCount={formatViolationMap.size}
+                    activeZone={activeZone}
+                    customZoneIds={customZoneIds}
+                    onCardSizeChange={(n) => {
+                      setCardSize(n)
+                      saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting, cardSize: n })
+                    }}
+                    onGroupingChange={(g) => {
+                      setGrouping(g)
+                      saveDeckWorkspaceDisplayPrefs({ viewMode, grouping: g, sorting, cardSize })
+                    }}
+                    onSortingChange={(s) => {
+                      setSorting(s)
+                      saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting: s, cardSize })
+                    }}
+                    onViewModeChange={(v) => {
+                      setViewMode(v)
+                      saveDeckWorkspaceDisplayPrefs({ viewMode: v, grouping, sorting, cardSize })
+                    }}
+                    onOpenFormatHints={() => setFormatHintsListOpen(true)}
+                    onZoneChange={setActiveZone}
+                  />
+                </div>
+                <DeckWorkspaceCommanderRail
+                  commanderCards={commanderCards}
+                  showClickedPreview={showClickedPreview}
+                  onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
+                />
+              </div>
+            </div>
             <DeckWorkspaceGroupedDecklist
               groupedCards={groupedCards}
               grouping={grouping}
@@ -1222,7 +1241,6 @@ export default function DeckWorkspaceClient({
               toggleAllSections={toggleAllSections}
               cardDragDisabled={cardDragDisabled}
               deckLandQtyIncludingMdfc={deckLandQtyIncludingMdfc}
-              commanderCards={commanderCards}
               displayedCards={zoneFilteredCards}
               displayedCommanderIds={displayedCommanderIds}
               displayedCoverImageId={displayedCoverImageId}
@@ -1244,6 +1262,7 @@ export default function DeckWorkspaceClient({
               overflowMenus={overflowMenus}
               rulesHover={rulesHover}
               onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
+              dockRightInsetPx={dockRightInsetPx}
             />
           </>
         )}
@@ -1309,6 +1328,7 @@ export default function DeckWorkspaceClient({
           onClose={() => setAgentOpen(false)}
           onOpen={() => setAgentOpen(true)}
           onAssistantResponseFinished={fetchDeck}
+          onRailInsetChange={setAgentRailInsetPx}
         />
       )}
       </div>
