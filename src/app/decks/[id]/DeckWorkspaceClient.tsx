@@ -191,6 +191,7 @@ export default function DeckWorkspaceClient({
   const [deckFormatHintHoverId, setDeckFormatHintHoverId] = useState<string | null>(null)
   const [previewFormatHintsHovered, setPreviewFormatHintsHovered] = useState(false)
   const [rulesHover, setRulesHover] = useState<DeckRulesHoverPayload>(null)
+  /** Deck workspace header chrome only — toggled by scrolling the decklist area. */
   const [deckChromeCollapsed, setDeckChromeCollapsed] = useState(false)
 
   // Active board/zone selector (for decklist view filtering)
@@ -223,7 +224,11 @@ export default function DeckWorkspaceClient({
     setRulesHover((prev) => (prev?.kind === "scryfall" ? null : prev))
   }, [])
 
+  const { setGuestDeckNav, deckEditorScrollCompact, setDeckEditorScrollCompact } =
+    useTopNavDeckGuest()
+
   useEffect(() => {
+    if (accessDenied) return
     const el = scrollContainerRef.current
     if (!el) return
     let raf = 0
@@ -244,7 +249,36 @@ export default function DeckWorkspaceClient({
       el.removeEventListener("scroll", onScroll)
       cancelAnimationFrame(raf)
     }
-  }, [tab, deckId])
+  }, [tab, deckId, accessDenied])
+
+  /** Site top nav: stay expanded until the deck is ready, then animate to the default compact bar. */
+  useEffect(() => {
+    if (accessDenied || !deck || deck.id !== deckId) {
+      setDeckEditorScrollCompact(false)
+      return () => {
+        setDeckEditorScrollCompact(false)
+      }
+    }
+    if (cardsLoading) {
+      setDeckEditorScrollCompact(false)
+      return () => {
+        setDeckEditorScrollCompact(false)
+      }
+    }
+    let cancelled = false
+    let innerRaf = 0
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        if (!cancelled) setDeckEditorScrollCompact(true)
+      })
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(outerRaf)
+      cancelAnimationFrame(innerRaf)
+      setDeckEditorScrollCompact(false)
+    }
+  }, [accessDenied, deck, deckId, cardsLoading, setDeckEditorScrollCompact])
 
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -343,7 +377,6 @@ export default function DeckWorkspaceClient({
     setCoverImageUrl,
   })
 
-  const { setGuestDeckNav } = useTopNavDeckGuest()
   useEffect(() => {
     if (!deck || deck.id !== deckId || accessDenied) {
       setGuestDeckNav(false)
@@ -947,7 +980,11 @@ export default function DeckWorkspaceClient({
     : null
 
   return (
-    <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
+    <div
+      className={`fixed inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground transition-[top] duration-200 ease-out ${
+        deckEditorScrollCompact ? "top-7" : "top-14"
+      }`}
+    >
 
       <DeckWorkspaceHeader
         deckId={deckId}
