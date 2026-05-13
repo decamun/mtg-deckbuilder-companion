@@ -459,12 +459,14 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                     onDeckCardRulesPreviewHover(null)
                                   }}
                                   className={`flex items-center justify-between p-2 hover:bg-accent/50 border-b border-border last:border-0 first:rounded-t-lg last:rounded-b-lg relative cursor-grab active:cursor-grabbing${listV?.length ? " border-l-4 border-l-red-500" : ""}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    showClickedPreview(c, groupName)
-                                  }}
                                 >
-                                  <div className="relative z-0 flex min-w-0 flex-1 items-center gap-3">
+                                  <div
+                                    className="relative z-0 flex min-w-0 flex-1 cursor-pointer items-center gap-3"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      showClickedPreview(c, groupName)
+                                    }}
+                                  >
                                     <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
                                     {(c.face_images?.[0] || c.image_url) && (
                                       <CardThumbnail card={c} className="h-9 shrink-0" imageClassName="h-9 w-auto rounded border border-border/50" overlayClassName="rounded" />
@@ -472,7 +474,11 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                     <ManaText text={c.name} className="font-medium cursor-pointer hover:text-primary transition-colors truncate" />
                                     <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
                                   </div>
-                                  <div className="flex items-center gap-3 ml-auto shrink-0">
+                                  <div
+                                    className="flex items-center gap-3 ml-auto shrink-0"
+                                    onClick={(e) => e.stopPropagation()}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                  >
                                     <span className="text-xs font-mono text-muted-foreground tabular-nums w-16 text-right">{formatPrice(c.price_usd)}</span>
                                     <DeckWorkspaceThreeDotMenu {...overflowMenus} c={c} groupName={groupName} align="end" />
                                   </div>

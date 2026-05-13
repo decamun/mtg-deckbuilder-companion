@@ -107,7 +107,7 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <span className="w-16 text-right font-mono text-xs text-muted-foreground tabular-nums">{formatPrice(c.price_usd)}</span>
-                      <DeckWorkspaceThreeDotMenu {...props.overflowMenus} c={c} groupName={gn} align="end" fromFormatHintsDialog />
+                      <DeckWorkspaceThreeDotMenu {...props.overflowMenus} c={c} groupName={gn} align="end" />
                     </div>
                   </div>
                 )
