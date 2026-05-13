@@ -34,9 +34,6 @@ import { cn } from "@/lib/utils"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
 import { DeckWorkspaceCardRulesPreview, rulesHoverPayloadToFields } from "./DeckWorkspaceCardRulesPreview"
 
-/** Matches commander button (h-24 art + p-2); flow layout uses this, rules panel may overlay taller. */
-const COMMANDER_TILE_MIN_H = "min-h-[7rem]"
-
 export type DeckWorkspaceGroupedDecklistProps = {
   groupedCards: Record<string, DeckCard[]>
   grouping: GroupingMode
@@ -112,28 +109,26 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
 
   return (
     <>
-      <div className="sticky top-0 z-50 -mx-6 mb-6 overflow-visible border-0 bg-transparent px-6 py-3">
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] hidden justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 md:flex">
         <div
           className={cn(
-            "grid gap-3 overflow-visible",
-            hasCommanders ? "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_max-content]" : "grid-cols-1"
+            "pointer-events-auto flex w-full max-w-7xl gap-3 rounded-xl border border-border bg-white p-3 text-foreground shadow-2xl",
+            hasCommanders ? "flex-col sm:flex-row sm:items-stretch" : "flex-col"
           )}
         >
           <div
             className={cn(
-              "relative isolate min-w-0 overflow-visible",
-              COMMANDER_TILE_MIN_H,
-              hasCommanders && "lg:h-full lg:min-h-0"
+              "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-border/60 bg-white p-3",
+              "max-h-[min(38vh,22rem)]",
+              hasCommanders && "sm:max-h-[min(42vh,26rem)]"
             )}
           >
-            <div className="absolute left-0 top-0 z-[60] flex min-h-full w-full min-w-0 max-w-full flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-white p-3 text-foreground max-h-[min(90vh,52rem)]">
-              <DeckWorkspaceCardRulesPreview fields={previewFields} />
-            </div>
+            <DeckWorkspaceCardRulesPreview fields={previewFields} />
           </div>
           {hasCommanders && (
             <div
               className={cn(
-                "flex max-w-full shrink-0 flex-wrap content-start items-stretch gap-3 lg:min-h-0",
+                "flex max-w-full shrink-0 flex-wrap content-start items-stretch justify-end gap-3 sm:min-h-0 sm:max-w-none",
                 partnerPair && "sm:max-w-[calc(2*min(100%,16rem)+0.75rem)]"
               )}
             >
@@ -166,16 +161,18 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
           )}
         </div>
       </div>
-      {cardsLoading && liveCardCount === 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="aspect-[5/7] rounded-xl border border-border/30 bg-card/30 flex items-center justify-center">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/30" />
-            </div>
-          ))}
-        </div>
-      )}
-      <DndContext sensors={sensors} onDragEnd={onTagDragEnd}>
+
+      <div className="pb-10 md:pb-[clamp(22rem,52vh,36rem)]">
+        {cardsLoading && liveCardCount === 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="aspect-[5/7] rounded-xl border border-border/30 bg-card/30 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/30" />
+              </div>
+            ))}
+          </div>
+        )}
+        <DndContext sensors={sensors} onDragEnd={onTagDragEnd}>
         {Object.entries(groupedCards)
           .sort(([a], [b]) => {
             if (grouping === "mana") {
@@ -544,6 +541,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
           cards={displayedCards.filter((c) => !displayedCommanderIds.includes(c.scryfall_id))}
           commanders={displayedCards.filter((c) => displayedCommanderIds.includes(c.scryfall_id))}
         />
+      </div>
       </div>
     </>
   )
