@@ -241,7 +241,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                   )}
                                   {c.quantity > 1 && (
                                     <div
-                                      className={`absolute top-2 right-8 bg-background/80 text-foreground px-1.5 py-0.5 rounded text-xs font-bold border border-border transition-opacity ${
+                                      className={`pointer-events-none absolute top-2 right-11 z-[12] bg-background/90 text-foreground px-1.5 py-0.5 text-[11px] font-bold tabular-nums leading-none rounded-full border border-border/60 shadow-sm transition-opacity ${
                                         vlist && vlist.length > 0 && deckFormatHintHoverId === c.id ? "opacity-0" : "opacity-100"
                                       }`}
                                     >
@@ -400,8 +400,8 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                                 </div>
                                               )}
                                               {card.quantity > 1 && (
-                                                <div className="absolute top-2 right-2 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
-                                                  {card.quantity}x
+                                                <div className="pointer-events-none absolute top-2 right-11 z-[15] bg-background/90 text-foreground text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
+                                                  x{card.quantity}
                                                 </div>
                                               )}
                                               {displayedCommanderIds.includes(card.scryfall_id) && (
