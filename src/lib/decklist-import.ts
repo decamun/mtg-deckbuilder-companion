@@ -38,6 +38,10 @@ const MB_PREFIX = /^MB:\s*/i
 /**
  * Detect if a comment line is a zone section marker.
  * Returns the zone id if it is, or null if it's just a regular comment.
+ *
+ * The zone ids returned here correspond to canonical ids in src/lib/zones.ts
+ * (ZONE_REGISTRY). If new canonical zones are added there, add matching
+ * marker aliases below to keep the two in sync.
  */
 function parseSectionMarkerZone(comment: string): string | null {
   const markerText = comment.replace(/^\/\/\s*/, "").trim().toLowerCase()

@@ -55,6 +55,7 @@ import { DeckWorkspaceGroupedDecklist } from "./DeckWorkspaceGroupedDecklist"
 import { DeckWorkspaceDialogsSection } from "./DeckWorkspaceDialogsSection"
 import type { DeckWorkspaceOverflowMenusProps } from "./deck-workspace-overflow-menus"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
+import { REGISTRY_ZONE_IDS } from "@/lib/zones"
 
 const DeckWorkspaceBoardsTab = dynamic(
   () => import("./DeckWorkspaceBoardsTab").then((m) => ({ default: m.DeckWorkspaceBoardsTab })),
@@ -760,10 +761,7 @@ export default function DeckWorkspaceClient({
 
   // Custom zone ids: any zone value not in the registry (user-created boards)
   const customZoneIds = useMemo(
-    () => {
-      const knownIds = new Set(['mainboard', 'sideboard', 'maybeboard'])
-      return Array.from(new Set(displayedCards.map(c => c.zone ?? 'mainboard').filter(z => !knownIds.has(z))))
-    },
+    () => Array.from(new Set(displayedCards.map(c => c.zone ?? 'mainboard').filter(z => !REGISTRY_ZONE_IDS.has(z)))),
     [displayedCards]
   )
 

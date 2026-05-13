@@ -79,6 +79,11 @@ export const ZONE_REGISTRY: ZoneDefinition[] = [
     isFormatValidated: true,
     sortOrder: 1,
     formatIds: SIDEBOARD_FORMATS,
+    /**
+     * `locked: false` means the sideboard is user-removable in formats that do NOT
+     * use a sideboard (e.g. EDH/Commander). For formats listed in `formatIds`,
+     * `isZoneLockedForFormat()` returns true, effectively locking the board.
+     */
     locked: false,
     isDefault: false,
     maxCards: 15,
@@ -161,4 +166,28 @@ export function isZoneLockedForFormat(
   if (!def.formatIds) return false
   const normalizedFormat = format?.trim().toLowerCase() ?? null
   return !!normalizedFormat && def.formatIds.includes(normalizedFormat)
+}
+
+/** Set of all zone ids defined in the registry. Used to distinguish custom zones from canonical ones. */
+export const REGISTRY_ZONE_IDS: ReadonlySet<string> = new Set(ZONE_REGISTRY.map((z) => z.id))
+
+/**
+ * Sanitize a user-provided board name into a valid zone id.
+ * Returns `null` if the resulting id is empty or conflicts with a reserved zone id.
+ *
+ * Rules:
+ *   - Lowercase, trim
+ *   - Replace non-alphanumeric characters (except hyphens) with hyphens
+ *   - Collapse consecutive hyphens; strip leading/trailing hyphens
+ */
+export function sanitizeCustomZoneId(raw: string): string | null {
+  const id = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+  if (!id) return null
+  if (REGISTRY_ZONE_IDS.has(id)) return null
+  return id
 }
