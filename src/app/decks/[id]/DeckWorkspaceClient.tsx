@@ -180,6 +180,8 @@ export default function DeckWorkspaceClient({
   const [deckFormatHintHoverId, setDeckFormatHintHoverId] = useState<string | null>(null)
   const [previewFormatHintsHovered, setPreviewFormatHintsHovered] = useState(false)
   const [rulesHover, setRulesHover] = useState<DeckRulesHoverPayload>(null)
+  /** Deck workspace header chrome only — toggled by scrolling the decklist area. */
+  const [deckChromeCollapsed, setDeckChromeCollapsed] = useState(false)
 
   const [deckTitleEditing, setDeckTitleEditing] = useState(false)
   const [deckTitleDraft, setDeckTitleDraft] = useState("")
@@ -212,10 +214,7 @@ export default function DeckWorkspaceClient({
     useTopNavDeckGuest()
 
   useEffect(() => {
-    if (accessDenied) {
-      setDeckEditorScrollCompact(false)
-      return
-    }
+    if (accessDenied) return
     const el = scrollContainerRef.current
     if (!el) return
     let raf = 0
@@ -223,7 +222,7 @@ export default function DeckWorkspaceClient({
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
         const y = el.scrollTop
-        setDeckEditorScrollCompact((prev) => {
+        setDeckChromeCollapsed((prev) => {
           if (y > 48 && !prev) return true
           if (y < 10 && prev) return false
           return prev
@@ -236,13 +235,36 @@ export default function DeckWorkspaceClient({
       el.removeEventListener("scroll", onScroll)
       cancelAnimationFrame(raf)
     }
-  }, [tab, deckId, accessDenied, setDeckEditorScrollCompact])
+  }, [tab, deckId, accessDenied])
 
+  /** Site top nav: stay expanded until the deck is ready, then animate to the default compact bar. */
   useEffect(() => {
+    if (accessDenied || !deck || deck.id !== deckId) {
+      setDeckEditorScrollCompact(false)
+      return () => {
+        setDeckEditorScrollCompact(false)
+      }
+    }
+    if (cardsLoading) {
+      setDeckEditorScrollCompact(false)
+      return () => {
+        setDeckEditorScrollCompact(false)
+      }
+    }
+    let cancelled = false
+    let innerRaf = 0
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        if (!cancelled) setDeckEditorScrollCompact(true)
+      })
+    })
     return () => {
+      cancelled = true
+      cancelAnimationFrame(outerRaf)
+      cancelAnimationFrame(innerRaf)
       setDeckEditorScrollCompact(false)
     }
-  }, [setDeckEditorScrollCompact])
+  }, [accessDenied, deck, deckId, cardsLoading, setDeckEditorScrollCompact])
 
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -921,7 +943,7 @@ export default function DeckWorkspaceClient({
         onOpenSettings={() => setSettingsOpen(true)}
         onImportClick={() => setImportOpen(true)}
         onVisibilityChange={(pub) => deck && setDeck({ ...deck, is_public: pub })}
-        collapsedChrome={deckEditorScrollCompact}
+        collapsedChrome={deckChromeCollapsed}
       />
 
       <DeckTabs

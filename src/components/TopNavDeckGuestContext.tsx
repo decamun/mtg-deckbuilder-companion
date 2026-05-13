@@ -16,8 +16,8 @@ type TopNavDeckGuestContextValue = {
   guestDeckNav: boolean
   setGuestDeckNav: (value: boolean) => void
   /**
-   * True when the deck editor’s main scroll area is scrolled down — shrinks the site top nav
-   * to half height (h-7) and matches the deck workspace `fixed` inset.
+   * True after the deck editor finishes loading — site top nav uses half height (h-7) and the
+   * workspace `fixed` inset matches. Starts false so the expand→compact transition can animate.
    */
   deckEditorScrollCompact: boolean
   setDeckEditorScrollCompact: Dispatch<SetStateAction<boolean>>
