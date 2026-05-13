@@ -1,8 +1,9 @@
 /**
  * Deck construction hints for the deck editor.
  *
- * Validates against the deck's chosen format; only EDH / Commander is
- * implemented today — add new branches in `validateDeckForFormat`.
+ * Extension pattern: add a normalized format key to `FORMAT_VALIDATOR_REGISTRY`
+ * with a status and optional validator. `validateDeckForFormat` is the single
+ * entry point consumed by both editor UI and stats/analytics code.
  */
 
 import { BRACKET_GC_LIMIT, type Bracket, isGameChanger } from '@/lib/game-changers'
@@ -30,8 +31,10 @@ export function normalizeFormatForValidation(format: string | null | undefined):
   return f || null
 }
 
+export type DeckFormatValidationStatus = 'implemented' | 'not_yet_implemented' | 'neutral'
+
 export function isFormatValidationImplemented(format: string | null | undefined): boolean {
-  return normalizeFormatForValidation(format) === 'edh'
+  return getFormatValidationStatus(format) === 'implemented'
 }
 
 /**
@@ -154,7 +157,48 @@ function validateEdh(ctx: {
 }
 
 export type DeckFormatValidationResult = {
+  status: DeckFormatValidationStatus
   violationsByCardId: ReadonlyMap<string, readonly string[]>
+  deckViolations: readonly string[]
+}
+
+type DeckFormatValidationContext = {
+  cards: FormatValidationCard[]
+  commanderScryfallIds: readonly string[]
+  bracket: number | null
+}
+
+type DeckFormatValidatorDefinition = {
+  status: DeckFormatValidationStatus
+  validate?: (ctx: DeckFormatValidationContext) => Map<string, string[]>
+}
+
+const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> = {
+  edh: { status: 'implemented', validate: validateEdh },
+  standard: { status: 'not_yet_implemented' },
+  modern: { status: 'not_yet_implemented' },
+  pioneer: { status: 'not_yet_implemented' },
+  legacy: { status: 'not_yet_implemented' },
+  vintage: { status: 'not_yet_implemented' },
+  pauper: { status: 'not_yet_implemented' },
+  other: { status: 'neutral' },
+}
+
+const FORMAT_VALIDATION_LABELS: Record<string, string> = {
+  edh: 'EDH / Commander',
+  standard: 'Standard',
+  modern: 'Modern',
+  pioneer: 'Pioneer',
+  legacy: 'Legacy',
+  vintage: 'Vintage',
+  pauper: 'Pauper',
+  other: 'Other',
+}
+
+export function getFormatValidationStatus(format: string | null | undefined): DeckFormatValidationStatus {
+  const normalized = normalizeFormatForValidation(format)
+  if (!normalized) return 'neutral'
+  return FORMAT_VALIDATOR_REGISTRY[normalized]?.status ?? 'neutral'
 }
 
 export function validateDeckForFormat(
@@ -166,13 +210,29 @@ export function validateDeckForFormat(
   }
 ): DeckFormatValidationResult {
   const normalized = normalizeFormatForValidation(format)
-  if (normalized === 'edh') {
-    const m = validateEdh({
-      cards: ctx.cards,
-      commanderScryfallIds: ctx.commanderScryfallIds,
-      bracket: ctx.bracket ?? null,
-    })
-    return { violationsByCardId: m }
+  const definition = normalized ? FORMAT_VALIDATOR_REGISTRY[normalized] : undefined
+  const status = definition?.status ?? 'neutral'
+
+  if (status === 'implemented' && definition?.validate) {
+    return {
+      status,
+      violationsByCardId: definition.validate({
+        cards: ctx.cards,
+        commanderScryfallIds: ctx.commanderScryfallIds,
+        bracket: ctx.bracket ?? null,
+      }),
+      deckViolations: [],
+    }
   }
-  return { violationsByCardId: new Map() }
+
+  const deckViolations =
+    status === 'not_yet_implemented' && normalized
+      ? [`${FORMAT_VALIDATION_LABELS[normalized] ?? normalized} validation is not yet implemented.`]
+      : []
+
+  return {
+    status,
+    violationsByCardId: new Map(),
+    deckViolations,
+  }
 }

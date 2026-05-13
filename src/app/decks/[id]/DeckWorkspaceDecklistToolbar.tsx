@@ -4,7 +4,7 @@ import { LayoutGrid, List, Layers as StackIcon } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { GroupingMode, SortingMode, ViewMode } from "@/lib/types"
-import { isFormatValidationImplemented } from "@/lib/deck-format-validation"
+import type { DeckFormatValidationStatus } from "@/lib/deck-format-validation"
 import { MIN_CARD_SIZE, MAX_CARD_SIZE } from "./deck-workspace-constants"
 
 export type DeckWorkspaceDecklistToolbarProps = {
@@ -13,6 +13,8 @@ export type DeckWorkspaceDecklistToolbarProps = {
   sorting: SortingMode
   viewMode: ViewMode
   displayedFormat: string | null
+  formatValidationStatus: DeckFormatValidationStatus
+  formatDeckViolations: readonly string[]
   formatViolationCount: number
   onCardSizeChange: (n: number) => void
   onGroupingChange: (g: GroupingMode) => void
@@ -72,7 +74,10 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
           </TabsTrigger>
         </TabsList>
       </Tabs>
-      {props.formatViolationCount > 0 && isFormatValidationImplemented(props.displayedFormat) && (
+      {props.formatValidationStatus === 'not_yet_implemented' && props.formatDeckViolations.length > 0 && (
+        <p className="max-w-[18rem] text-xs leading-snug text-muted-foreground">{props.formatDeckViolations[0]}</p>
+      )}
+      {props.formatViolationCount > 0 && props.formatValidationStatus === 'implemented' && (
         <button
           type="button"
           onClick={() => props.onOpenFormatHints()}

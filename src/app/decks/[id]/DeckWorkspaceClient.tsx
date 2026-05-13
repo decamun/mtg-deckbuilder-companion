@@ -741,14 +741,16 @@ export default function DeckWorkspaceClient({
     [displayedCards]
   )
 
-  const formatViolationMap = useMemo(() => {
-    const { violationsByCardId } = validateDeckForFormat(displayedFormat, {
-      cards: displayedCards,
-      commanderScryfallIds: displayedCommanderIds,
-      bracket: displayedBracket,
-    })
-    return violationsByCardId
-  }, [displayedCards, displayedCommanderIds, displayedFormat, displayedBracket])
+  const formatValidation = useMemo(
+    () =>
+      validateDeckForFormat(displayedFormat, {
+        cards: displayedCards,
+        commanderScryfallIds: displayedCommanderIds,
+        bracket: displayedBracket,
+      }),
+    [displayedCards, displayedCommanderIds, displayedFormat, displayedBracket]
+  )
+  const formatViolationMap = formatValidation.violationsByCardId
 
   const formatHintCardList = useMemo(
     () =>
@@ -934,6 +936,8 @@ export default function DeckWorkspaceClient({
               sorting={sorting}
               viewMode={viewMode}
               displayedFormat={displayedFormat}
+              formatValidationStatus={formatValidation.status}
+              formatDeckViolations={formatValidation.deckViolations}
               formatViolationCount={formatViolationMap.size}
               onCardSizeChange={(n) => {
                 setCardSize(n)
