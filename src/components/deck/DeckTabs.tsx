@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react"
 
-export type DeckTab = "decklist" | "primer" | "versions"
+export type DeckTab = "decklist" | "boards" | "primer" | "versions"
 
 interface Props {
   tab: DeckTab
@@ -12,6 +12,7 @@ interface Props {
 
 const TABS: { key: DeckTab; label: string }[] = [
   { key: "decklist", label: "Decklist" },
+  { key: "boards", label: "Boards" },
   { key: "primer", label: "Primer" },
   { key: "versions", label: "Versions" },
 ]

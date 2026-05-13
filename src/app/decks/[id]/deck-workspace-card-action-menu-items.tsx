@@ -1,6 +1,6 @@
 "use client"
 
-import { Crown, Image as ImageIcon } from "lucide-react"
+import { Crown, Image as ImageIcon, ArrowRightLeft } from "lucide-react"
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -19,6 +19,7 @@ import type { DeckCard, GroupingMode } from "@/lib/types"
 import type { ScryfallPrinting } from "@/lib/scryfall"
 import { TAG_GROUP_UNTAGGED } from "./deck-workspace-constants"
 import { groupSectionHeading } from "./deck-workspace-pure"
+import { getZonesForFormat } from "@/lib/zones"
 
 export type DeckWorkspaceCardActionMenuVariant = "dropdown" | "context"
 
@@ -31,6 +32,8 @@ export type DeckWorkspaceCardActionMenuItemsProps = {
   coverImageId: string | null
   allUniqueTags: string[]
   printings: ScryfallPrinting[]
+  displayedFormat: string | null
+  customZoneIds: string[]
   onEnsurePrintingsLoaded: (card: DeckCard) => void
   onSetCommander: (scryfallId: string) => void
   onSetCoverImage: (scryfallId: string) => void
@@ -39,6 +42,8 @@ export type DeckWorkspaceCardActionMenuItemsProps = {
   onAddTag: (cardId: string, tag: string) => void
   onRemoveTag: (cardId: string, tag: string) => void
   onOpenCustomTagDialog: (cardId: string) => void
+  onMoveToZone: (cardId: string, zone: string) => void
+  onOpenCustomBoardDialog: (cardId: string) => void
   onDeleteCard: (cardId: string) => void
 }
 
@@ -52,6 +57,8 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
     coverImageId,
     allUniqueTags,
     printings,
+    displayedFormat,
+    customZoneIds,
     onEnsurePrintingsLoaded,
     onSetCommander,
     onSetCoverImage,
@@ -60,6 +67,8 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
     onAddTag,
     onRemoveTag,
     onOpenCustomTagDialog,
+    onMoveToZone,
+    onOpenCustomBoardDialog,
     onDeleteCard,
   } = props
 
@@ -105,6 +114,10 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
 
   const foilSubClass = isCtx ? "bg-white border-border text-foreground" : "bg-white border-border text-foreground"
 
+  const currentZone = c.zone ?? "mainboard"
+  const allZones = getZonesForFormat(displayedFormat, customZoneIds)
+  const otherZones = allZones.filter((z) => z.id !== currentZone)
+
   return (
     <>
       <Item onClick={() => onSetCommander(c.scryfall_id)} className={cmdItemClass}>
@@ -116,6 +129,40 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
         {coverActive ? "Remove Cover Image" : "Set as Cover Image"}
       </Item>
       <Sep className="bg-border" />
+      {otherZones.length > 0 && (
+        <>
+          <Sub>
+            <SubTrigger>
+              <ArrowRightLeft className="w-3.5 h-3.5 mr-2" />
+              Move to Board
+            </SubTrigger>
+            <SubContent className={subContentClass}>
+              {otherZones.map((z) => (
+                <Item
+                  key={z.id}
+                  onClick={() => onMoveToZone(c.id, z.id)}
+                >
+                  {z.label}
+                </Item>
+              ))}
+              <Sep className="bg-border" />
+              <Item onClick={() => onOpenCustomBoardDialog(c.id)}>
+                New custom board…
+              </Item>
+            </SubContent>
+          </Sub>
+          <Sep className="bg-border" />
+        </>
+      )}
+      {otherZones.length === 0 && (
+        <>
+          <Item onClick={() => onOpenCustomBoardDialog(c.id)}>
+            <ArrowRightLeft className="w-3.5 h-3.5 mr-2" />
+            Move to Custom Board…
+          </Item>
+          <Sep className="bg-border" />
+        </>
+      )}
       <Sub>
         <SubTrigger onMouseEnter={() => void onEnsurePrintingsLoaded(c)}>Printing</SubTrigger>
         <SubContent className={subContentClass}>

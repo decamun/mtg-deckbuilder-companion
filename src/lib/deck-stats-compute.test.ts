@@ -142,7 +142,9 @@ describe('computeDeckStatsReport', () => {
       rows_missing_price: 1,
     })
     expect(report.format_validation).toMatchObject({
+      validation_status: 'implemented',
       validation_implemented: true,
+      deck_violations: [],
       violation_card_count: 0,
       violations: [],
     })
