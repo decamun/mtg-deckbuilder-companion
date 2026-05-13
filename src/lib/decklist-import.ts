@@ -230,7 +230,7 @@ export async function resolveDecklist(
       oracle_id: scryfallCard.oracle_id ?? null,
       printing_scryfall_id: printingId,
       finish,
-      zone: parsed.zone ?? "mainboard",
+      zone: parsed.zone,
     })
   }
 

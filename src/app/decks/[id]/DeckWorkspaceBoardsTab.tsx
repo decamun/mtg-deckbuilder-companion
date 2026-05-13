@@ -11,6 +11,7 @@ import {
   getZonesForFormat,
   isZoneLockedForFormat,
   sanitizeCustomZoneId,
+  validateCustomZoneName,
   type ZoneDefinition,
 } from "@/lib/zones"
 
@@ -53,13 +54,14 @@ export function DeckWorkspaceBoardsTab({
     cardsByZone(zoneId).reduce((sum, c) => sum + c.quantity, 0)
 
   const handleAddBoard = () => {
-    const boardZoneId = sanitizeCustomZoneId(newBoardName)
-    if (!boardZoneId) {
-      if (newBoardName.trim()) {
-        toast.error(`"${newBoardName.trim()}" is a reserved board name or contains only invalid characters. Please choose a different name.`)
-      }
+    const error = validateCustomZoneName(newBoardName)
+    if (error === "empty") return
+    if (error === "reserved") {
+      toast.error(`"${newBoardName.trim()}" is a reserved board name. Please choose a different name.`)
       return
     }
+    const boardZoneId = sanitizeCustomZoneId(newBoardName)
+    if (!boardZoneId) return
     onAddCustomBoard(boardZoneId)
     setNewBoardName("")
     setAddingBoard(false)

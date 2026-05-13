@@ -191,3 +191,22 @@ export function sanitizeCustomZoneId(raw: string): string | null {
   if (REGISTRY_ZONE_IDS.has(id)) return null
   return id
 }
+
+/** Reason a custom zone id is invalid, for user-facing error messages. */
+export type CustomZoneIdError = "empty" | "reserved"
+
+/**
+ * Validate a user-provided board name without sanitizing.
+ * Returns `null` if valid, or a {@link CustomZoneIdError} describing why it's invalid.
+ */
+export function validateCustomZoneName(raw: string): CustomZoneIdError | null {
+  const id = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+  if (!id) return "empty"
+  if (REGISTRY_ZONE_IDS.has(id)) return "reserved"
+  return null
+}

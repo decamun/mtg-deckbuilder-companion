@@ -141,7 +141,6 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
                   onClick={() => onMoveToZone(c.id, z.id)}
                 >
                   {z.label}
-                  {z.id === currentZone && <span className="ml-auto text-xs text-primary">current</span>}
                 </Item>
               ))}
             </SubContent>
