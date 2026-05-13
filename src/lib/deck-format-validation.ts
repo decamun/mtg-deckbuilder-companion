@@ -171,7 +171,7 @@ type DeckFormatValidationContext = {
 type DeckFormatValidatorDefinition = {
   label: string
   status: DeckFormatValidationStatus
-  validate?: (ctx: DeckFormatValidationContext) => Map<string, string[]>
+  validate?: (ctx: DeckFormatValidationContext) => ReadonlyMap<string, readonly string[]>
 }
 
 const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> = {
