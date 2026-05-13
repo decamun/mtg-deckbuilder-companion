@@ -4,6 +4,12 @@
  * the list. Names are stored lowercased for case-insensitive lookup.
  */
 
+/**
+ * Update when the fallback WotC bracket list is refreshed.
+ * This is consumed by format-validation cache keys.
+ */
+export const GAME_CHANGER_DATA_VERSION = 'wotc-edh-brackets-fallback-v1'
+
 const NAMES = [
   "Ad Nauseam",
   "Ancient Tomb",
@@ -57,6 +63,10 @@ const NAMES = [
 export const GAME_CHANGERS: ReadonlySet<string> = new Set(
   NAMES.map((n) => n.toLowerCase())
 )
+
+if (GAME_CHANGERS.size === 0) {
+  throw new Error('Commander game-changer list is empty; refusing to start with invalid legality data.')
+}
 
 export type Bracket = 1 | 2 | 3 | 4 | 5
 

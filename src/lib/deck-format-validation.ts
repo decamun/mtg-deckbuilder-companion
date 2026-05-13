@@ -6,7 +6,12 @@
  * entry point consumed by both editor UI and stats/analytics code.
  */
 
-import { BRACKET_GC_LIMIT, type Bracket, isGameChanger } from '@/lib/game-changers'
+import {
+  BRACKET_GC_LIMIT,
+  GAME_CHANGER_DATA_VERSION,
+  type Bracket,
+  isGameChanger,
+} from '@/lib/game-changers'
 
 const MANA = new Set(['W', 'U', 'B', 'R', 'G'])
 
@@ -109,7 +114,9 @@ function validateEdh(ctx: {
 
   for (const c of mainboard) {
     const status = commanderLegalityStatus(c.legalities)
-    if (status === 'banned') {
+    if (!status) {
+      add(c.id, 'Commander legality data unavailable')
+    } else if (status === 'banned') {
       add(c.id, 'Banned in Commander')
     } else if (status === 'not_legal') {
       add(c.id, 'Not legal in Commander')
@@ -160,6 +167,7 @@ export type DeckFormatValidationResult = {
   status: DeckFormatValidationStatus
   violationsByCardId: ReadonlyMap<string, readonly string[]>
   deckViolations: readonly string[]
+  dataVersion: string | null
 }
 
 type DeckFormatValidationContext = {
@@ -192,17 +200,27 @@ export function getFormatValidationStatus(format: string | null | undefined): De
   return FORMAT_VALIDATOR_REGISTRY[normalized]?.status ?? 'neutral'
 }
 
+export function getFormatValidationDataVersion(format: string | null | undefined): string | null {
+  const normalized = normalizeFormatForValidation(format)
+  if (normalized === 'edh') {
+    return `edh-live-legalities+scryfall|game-changers:${GAME_CHANGER_DATA_VERSION}`
+  }
+  return null
+}
+
 export function validateDeckForFormat(
   format: string | null | undefined,
   ctx: {
     cards: FormatValidationCard[]
     commanderScryfallIds: readonly string[]
     bracket?: number | null
+    dataVersion?: string | null
   }
 ): DeckFormatValidationResult {
   const normalized = normalizeFormatForValidation(format)
   const definition = normalized ? FORMAT_VALIDATOR_REGISTRY[normalized] : undefined
   const status = definition?.status ?? 'neutral'
+  const dataVersion = ctx.dataVersion ?? getFormatValidationDataVersion(normalized)
 
   if (status === 'implemented' && definition?.validate) {
     return {
@@ -213,6 +231,7 @@ export function validateDeckForFormat(
         bracket: ctx.bracket ?? null,
       }),
       deckViolations: [],
+      dataVersion,
     }
   }
 
@@ -225,5 +244,6 @@ export function validateDeckForFormat(
     status,
     violationsByCardId: new Map(),
     deckViolations,
+    dataVersion,
   }
 }
