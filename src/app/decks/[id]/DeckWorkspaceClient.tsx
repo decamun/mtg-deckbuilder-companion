@@ -114,6 +114,7 @@ export default function DeckWorkspaceClient({
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
   const [cardSize, setCardSize] = useState(DEFAULT_CARD_SIZE)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const [agentOpen, setAgentOpen] = useState(false)
 
   // One-shot sync from localStorage (guest + signed-in); cannot read during SSR render.
   useLayoutEffect(() => {
@@ -123,6 +124,8 @@ export default function DeckWorkspaceClient({
     setGrouping(p.grouping)
     setSorting(p.sorting)
     setCardSize(p.cardSize)
+    // Match Tailwind `md`: assistant expanded on desktop, collapsed on narrow viewports (before first paint).
+    setAgentOpen(window.matchMedia("(min-width: 768px)").matches)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [])
   const toggleSection = (name: string) => setCollapsedSections(prev => {
@@ -163,7 +166,6 @@ export default function DeckWorkspaceClient({
     router.replace(`${url.pathname}${url.search}`)
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [agentOpen, setAgentOpen] = useState(true)
   const [primerEditing, setPrimerEditing] = useState(false)
   const [primerMarkdown, setPrimerMarkdown] = useState("")
   const [cardsLoading, setCardsLoading] = useState(true)
