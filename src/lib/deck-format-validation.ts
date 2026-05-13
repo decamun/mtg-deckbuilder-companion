@@ -229,28 +229,102 @@ type DeckFormatValidatorDefinition = {
   validate?: (ctx: DeckFormatValidationContext) => ReadonlyMap<string, readonly string[]>
 }
 
+const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern'])
+
+function mergeViolationsInto(
+  bucket: Map<string, Set<string>>,
+  violations: ReadonlyMap<string, readonly string[]>
+): void {
+  for (const [cardId, reasons] of violations) {
+    let existing = bucket.get(cardId)
+    if (!existing) {
+      existing = new Set()
+      bucket.set(cardId, existing)
+    }
+    for (const reason of reasons) existing.add(reason)
+  }
+}
+
+function validateSixtyCardConstructed(
+  format: 'standard' | 'pioneer' | 'modern',
+  label: string,
+  cards: FormatValidationCard[]
+): ReadonlyMap<string, readonly string[]> {
+  const bucket = new Map<string, Set<string>>()
+  const validatingZones = new Set(
+    getZonesForFormat(format).filter((zone) => zone.isFormatValidated).map((zone) => zone.id)
+  )
+
+  for (const card of cards) {
+    if (!validatingZones.has(normalizeCardZone(card.zone))) continue
+    const legalityStatus = card.legalities?.[format]
+    if (legalityStatus === undefined) {
+      let reasons = bucket.get(card.id)
+      if (!reasons) {
+        reasons = new Set()
+        bucket.set(card.id, reasons)
+      }
+      reasons.add(`Cannot validate ${label} legality: missing data from Scryfall`)
+      continue
+    }
+    if (legalityStatus === 'banned' || legalityStatus === 'not_legal') {
+      let reasons = bucket.get(card.id)
+      if (!reasons) {
+        reasons = new Set()
+        bucket.set(card.id, reasons)
+      }
+      reasons.add(legalityStatus === 'banned' ? `Banned in ${label}` : `Not legal in ${label}`)
+    }
+  }
+
+  mergeViolationsInto(bucket, getConstructedCopyLimitViolations(format, cards))
+  return new Map(Array.from(bucket, ([id, set]) => [id, [...set]]))
+}
+
 function getDeckZoneViolations(
   format: string | null | undefined,
   cards: FormatValidationCard[]
 ): string[] {
+  const violations: string[] = []
+  if (format && SIXTY_CARD_CONSTRUCTED_FORMATS.has(format)) {
+    const mainboardQuantity = cards
+      .filter((card) => zoneCountsTowardMainDeck(card.zone))
+      .reduce((sum, card) => sum + card.quantity, 0)
+    if (mainboardQuantity !== 60) {
+      violations.push(`Mainboard must contain exactly 60 cards (has ${mainboardQuantity}).`)
+    }
+  }
+
   const sideboardZone = getZonesForFormat(format).find(
     (zone) => zone.id === SIDEBOARD_ZONE_ID && zone.isFormatValidated
   )
-  if (!sideboardZone || sideboardZone.maxCards == null) return []
+  if (!sideboardZone || sideboardZone.maxCards == null) return violations
 
   const sideboardQuantity = cards
     .filter((card) => normalizeCardZone(card.zone) === SIDEBOARD_ZONE_ID)
     .reduce((sum, card) => sum + card.quantity, 0)
 
-  if (sideboardQuantity <= sideboardZone.maxCards) return []
-  return [`Sideboard exceeds max ${sideboardZone.maxCards} cards (has ${sideboardQuantity}).`]
+  if (sideboardQuantity <= sideboardZone.maxCards) return violations
+  return [...violations, `Sideboard exceeds max ${sideboardZone.maxCards} cards (has ${sideboardQuantity}).`]
 }
 
 const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> = {
   edh: { label: 'EDH / Commander', status: 'implemented', validate: validateEdh },
-  standard: { label: 'Standard', status: 'not_yet_implemented' },
-  modern: { label: 'Modern', status: 'not_yet_implemented' },
-  pioneer: { label: 'Pioneer', status: 'not_yet_implemented' },
+  standard: {
+    label: 'Standard',
+    status: 'implemented',
+    validate: ({ cards }) => validateSixtyCardConstructed('standard', 'Standard', cards),
+  },
+  modern: {
+    label: 'Modern',
+    status: 'implemented',
+    validate: ({ cards }) => validateSixtyCardConstructed('modern', 'Modern', cards),
+  },
+  pioneer: {
+    label: 'Pioneer',
+    status: 'implemented',
+    validate: ({ cards }) => validateSixtyCardConstructed('pioneer', 'Pioneer', cards),
+  },
   legacy: { label: 'Legacy', status: 'not_yet_implemented' },
   vintage: { label: 'Vintage', status: 'not_yet_implemented' },
   pauper: { label: 'Pauper', status: 'not_yet_implemented' },
@@ -268,6 +342,9 @@ export function getFormatValidationDataVersion(format: string | null | undefined
   const normalized = normalizeFormatForValidation(format)
   if (normalized === 'edh') {
     return `edh-live-legalities+scryfall|game-changers:${GAME_CHANGER_DATA_VERSION}`
+  }
+  if (normalized && SIXTY_CARD_CONSTRUCTED_FORMATS.has(normalized)) {
+    return `${normalized}-live-legalities+scryfall`
   }
   return null
 }
