@@ -180,7 +180,6 @@ export default function DeckWorkspaceClient({
   const [deckFormatHintHoverId, setDeckFormatHintHoverId] = useState<string | null>(null)
   const [previewFormatHintsHovered, setPreviewFormatHintsHovered] = useState(false)
   const [rulesHover, setRulesHover] = useState<DeckRulesHoverPayload>(null)
-  const [deckChromeCollapsed, setDeckChromeCollapsed] = useState(false)
 
   const [deckTitleEditing, setDeckTitleEditing] = useState(false)
   const [deckTitleDraft, setDeckTitleDraft] = useState("")
@@ -209,7 +208,14 @@ export default function DeckWorkspaceClient({
     setRulesHover((prev) => (prev?.kind === "scryfall" ? null : prev))
   }, [])
 
+  const { setGuestDeckNav, deckEditorScrollCompact, setDeckEditorScrollCompact } =
+    useTopNavDeckGuest()
+
   useEffect(() => {
+    if (accessDenied) {
+      setDeckEditorScrollCompact(false)
+      return
+    }
     const el = scrollContainerRef.current
     if (!el) return
     let raf = 0
@@ -217,7 +223,7 @@ export default function DeckWorkspaceClient({
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
         const y = el.scrollTop
-        setDeckChromeCollapsed((prev) => {
+        setDeckEditorScrollCompact((prev) => {
           if (y > 48 && !prev) return true
           if (y < 10 && prev) return false
           return prev
@@ -230,7 +236,13 @@ export default function DeckWorkspaceClient({
       el.removeEventListener("scroll", onScroll)
       cancelAnimationFrame(raf)
     }
-  }, [tab, deckId])
+  }, [tab, deckId, accessDenied, setDeckEditorScrollCompact])
+
+  useEffect(() => {
+    return () => {
+      setDeckEditorScrollCompact(false)
+    }
+  }, [setDeckEditorScrollCompact])
 
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -329,7 +341,6 @@ export default function DeckWorkspaceClient({
     setCoverImageUrl,
   })
 
-  const { setGuestDeckNav } = useTopNavDeckGuest()
   useEffect(() => {
     if (!deck || deck.id !== deckId || accessDenied) {
       setGuestDeckNav(false)
@@ -846,7 +857,11 @@ export default function DeckWorkspaceClient({
     : null
 
   return (
-    <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
+    <div
+      className={`fixed inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground transition-[top] duration-200 ease-out ${
+        deckEditorScrollCompact ? "top-7" : "top-14"
+      }`}
+    >
 
       <DeckWorkspaceHeader
         deckId={deckId}
@@ -906,7 +921,7 @@ export default function DeckWorkspaceClient({
         onOpenSettings={() => setSettingsOpen(true)}
         onImportClick={() => setImportOpen(true)}
         onVisibilityChange={(pub) => deck && setDeck({ ...deck, is_public: pub })}
-        collapsedChrome={deckChromeCollapsed}
+        collapsedChrome={deckEditorScrollCompact}
       />
 
       <DeckTabs

@@ -17,6 +17,7 @@ import { User, LogOut, ChevronDown, Settings, Heart } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import { LoginDialog } from "@/components/LoginDialog"
 import { useTopNavDeckGuest } from "@/components/TopNavDeckGuestContext"
+import { cn } from "@/lib/utils"
 
 const NAV_LINKS = [
   { href: "/brew", label: "Brew", requiresAuth: false },
@@ -57,9 +58,11 @@ function navLinkIsActive(
 export function TopNav() {
   const pathname = usePathname()
   const router = useRouter()
-  const { guestDeckNav } = useTopNavDeckGuest()
+  const { guestDeckNav, deckEditorScrollCompact } = useTopNavDeckGuest()
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const currentPath = pathname ?? ""
+  const navBarCompact =
+    isDeckWorkspacePath(currentPath) && deckEditorScrollCompact
   const [visiblePath, setVisiblePath] = useState<string | null>(null)
   const isScrollShellPage = SHELL_PATHS.has(currentPath)
   const activePath = isScrollShellPage ? visiblePath ?? currentPath : currentPath
@@ -131,15 +134,35 @@ export function TopNav() {
   return (
     <>
     <header className="sticky top-0 z-50 shrink-0 border-b border-border bg-background/80 backdrop-blur-xl">
-      <div className="container mx-auto flex h-14 items-center gap-2 sm:gap-6 px-4">
+      <div
+        className={cn(
+          "container mx-auto flex items-center gap-2 px-4 transition-[height,min-height] duration-200 ease-out sm:gap-6",
+          navBarCompact ? "h-7 min-h-7" : "h-14 min-h-14",
+        )}
+      >
         {/* Logo & name — always anchored left */}
         <Link
           href="/brew"
           onClick={handleLogoClick}
-          className="flex shrink-0 items-center gap-2.5"
+          className={cn(
+            "flex shrink-0 items-center",
+            navBarCompact ? "gap-1.5" : "gap-2.5",
+          )}
         >
-          <IdlebrewLogo className="h-7 w-auto text-foreground" />
-          <span className="hidden sm:inline font-heading text-lg font-bold tracking-tight text-foreground">
+          <IdlebrewLogo
+            className={cn(
+              "w-auto text-foreground transition-[height] duration-200 ease-out",
+              navBarCompact ? "h-4" : "h-7",
+            )}
+          />
+          <span
+            className={cn(
+              "font-heading font-bold tracking-tight text-foreground",
+              navBarCompact
+                ? "hidden"
+                : "hidden text-lg sm:inline",
+            )}
+          >
             idlebrew
           </span>
         </Link>
@@ -154,11 +177,15 @@ export function TopNav() {
                   key={href}
                   href={href}
                   onClick={(e) => handleNavClick(e, href)}
-                  className={`rounded-md px-2 sm:px-4 py-1.5 text-sm font-medium transition-colors ${
+                  className={cn(
+                    "rounded-md font-medium transition-colors",
+                    navBarCompact
+                      ? "px-1.5 py-0.5 text-[11px] sm:px-2 sm:text-xs"
+                      : "px-2 py-1.5 text-sm sm:px-4",
                     isActive
                       ? "border border-primary/20 bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
                 >
                   {label}
                 </Link>
@@ -177,12 +204,22 @@ export function TopNav() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+                className={cn(
+                  "flex items-center text-muted-foreground hover:text-foreground",
+                  navBarCompact
+                    ? "h-7 gap-0.5 px-1.5 py-0"
+                    : "gap-1.5",
+                )}
               />
             }
           >
-            <User className="h-4 w-4" />
-            <ChevronDown className="h-3 w-3 opacity-60" />
+            <User className={navBarCompact ? "h-3.5 w-3.5" : "h-4 w-4"} />
+            <ChevronDown
+              className={cn(
+                "opacity-60",
+                navBarCompact ? "h-2.5 w-2.5" : "h-3 w-3",
+              )}
+            />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             {user ? (
