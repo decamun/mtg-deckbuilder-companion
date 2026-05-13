@@ -2,6 +2,7 @@ import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { z } from 'zod'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,7 +89,7 @@ export async function POST(req: Request) {
   })
 
   if (error) {
-    console.error('[feedback] Resend error:', error)
+    logger.error('[feedback] Resend error', { error: String(error) })
     return NextResponse.json({ message: 'Could not send feedback. Please try again later.' }, { status: 502 })
   }
 

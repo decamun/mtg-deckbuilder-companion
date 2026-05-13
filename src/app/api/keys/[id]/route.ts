@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getRequestId } from '@/lib/request-id'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,7 @@ export async function DELETE(
     .select('id')
 
   if (error) {
-    console.error('[api-keys] delete failed', {
+    logger.error('[api-keys] delete failed', {
       userId: user.id,
       keyId: id,
       requestId,

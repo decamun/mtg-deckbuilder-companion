@@ -110,8 +110,11 @@ and `--create` when provisioning test accounts.
 - The `npm run dev` script passes `--webpack` (Turbopack is not used).
 - The app uses Next.js 16 `proxy` convention; a deprecation warning about
   `middleware` appears on startup but can be ignored.
-- Deck page `/decks/[id]` redirects (307) when no auth cookie is set — this is
-  expected; browser-based testing requires login via the UI.
+- **Auth redirect scope:** `src/proxy.ts` redirects unauthenticated requests to
+  `/login` for the `/decks` **list** page only (`path === '/decks'`). The deck
+  detail page `/decks/[id]` does **not** produce a server-side 307; it uses a
+  client-side fetch protected by RLS and shows a "private deck" message when the
+  viewer lacks permission.
 
 ## Supabase migration rules
 
@@ -137,6 +140,13 @@ and `schema_migrations` in lock-step.
 
 After running `supabase migration new`, rename the file to fit the convention
 before committing.
+
+**No-op test migration** (`supabase/migrations/20260510000001_noop_test_migration.sql`):
+This file is intentionally empty (`SELECT 1;`). It exists to verify that the
+Supabase GitHub integration correctly creates a preview branch on PR open and
+applies migrations on merge. Do not remove it — it keeps the
+`schema_migrations` table in sync with the repo history and acts as a
+smoke-test for the deploy pipeline.
 
 ## Supabase branch-aware testing
 
