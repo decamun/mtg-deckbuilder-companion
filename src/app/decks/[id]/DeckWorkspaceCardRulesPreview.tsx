@@ -5,6 +5,7 @@ import type { ScryfallCard } from "@/lib/scryfall"
 import { rulesTextForDisplay } from "@/lib/scryfall"
 import { ManaText } from "@/components/mana/ManaText"
 import { cn } from "@/lib/utils"
+import { primaryDeckCardImage } from "./deck-workspace-pure"
 
 export type DeckRulesHoverPayload =
   | { kind: "deck"; card: DeckCard }
@@ -36,6 +37,23 @@ export function rulesHoverPayloadToFields(hover: DeckRulesHoverPayload): CardRul
     type_line: c.type_line,
     oracle_text: rulesTextForDisplay(c),
   }
+}
+
+/** Art URL for the dock preview (same source as deck thumbnails / Scryfall search hits). */
+export function rulesHoverPayloadToArtImageUrl(hover: DeckRulesHoverPayload): string | null {
+  if (!hover) return null
+  if (hover.kind === "deck") {
+    const u = primaryDeckCardImage(hover.card)
+    return u ?? null
+  }
+  const c = hover.card
+  return (
+    c.image_uris?.normal ??
+    c.image_uris?.small ??
+    c.card_faces?.[0]?.image_uris?.normal ??
+    c.card_faces?.[0]?.image_uris?.small ??
+    null
+  )
 }
 
 export function DeckWorkspaceCardRulesPreview({
