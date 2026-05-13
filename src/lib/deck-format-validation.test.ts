@@ -114,6 +114,7 @@ describe('validateDeckForFormat', () => {
     expect(result.status).toBe('implemented')
     expect(result.deckViolations).toEqual([])
     expect(result.dataVersion).toContain('edh-live-legalities+scryfall')
+    expect(result.violationsByCardId.get('commander')).toBeUndefined()
     expect(result.violationsByCardId.get('off-color')).toContain('Color identity outside commanders')
     expect(result.violationsByCardId.get('banned')).toContain('Banned in Commander')
     expect(result.violationsByCardId.get('singleton-1')).toContain(

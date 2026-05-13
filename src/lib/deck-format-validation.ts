@@ -114,7 +114,7 @@ function validateEdh(ctx: {
 
   for (const c of mainboard) {
     const status = commanderLegalityStatus(c.legalities)
-    if (status == null) {
+    if (status === undefined) {
       add(c.id, 'Commander legality data unavailable')
     } else if (status === 'banned') {
       add(c.id, 'Banned in Commander')
