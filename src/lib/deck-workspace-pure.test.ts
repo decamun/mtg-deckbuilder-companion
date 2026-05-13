@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DeckCard, SortingMode } from '@/lib/types'
+import { DEFAULT_CARD_ZONE_ID } from '@/lib/zones'
 import { TAG_GROUP_UNTAGGED } from '@/app/decks/[id]/deck-workspace-constants'
 import {
   compareDeckCardsBySort,
@@ -17,7 +18,7 @@ function makeCard(overrides: Partial<DeckCard> & Pick<DeckCard, 'name'>): DeckCa
     scryfall_id: rest.scryfall_id ?? `${name.toLowerCase()}-scryfall`,
     name,
     quantity: rest.quantity ?? 1,
-    zone: rest.zone ?? 'mainboard',
+    zone: rest.zone ?? DEFAULT_CARD_ZONE_ID,
     tags: rest.tags ?? [],
     printing_scryfall_id: rest.printing_scryfall_id ?? null,
     finish: rest.finish ?? 'nonfoil',

@@ -13,6 +13,13 @@ import {
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase/client"
 import type { DeckCard } from "@/lib/types"
+import {
+  getZoneLabel,
+  isMaybeboardZone,
+  isSideboardZone,
+  normalizeCardZone,
+  zoneCountsTowardMainDeck,
+} from "@/lib/zones"
 
 interface Props {
   deckId: string
@@ -27,9 +34,24 @@ interface Props {
 }
 
 function formatAsText(cards: DeckCard[], commanderIds: string[]): string {
-  const commanders = cards.filter(c => commanderIds.includes(c.scryfall_id))
-  const main = cards.filter(c => !commanderIds.includes(c.scryfall_id) && c.zone !== "sideboard")
-  const side = cards.filter(c => c.zone === "sideboard")
+  const isCommander = (c: DeckCard) => commanderIds.includes(c.scryfall_id)
+
+  const commanders = cards.filter(isCommander)
+  const main = cards.filter(c => !isCommander(c) && zoneCountsTowardMainDeck(c.zone))
+  const side = cards.filter(c => isSideboardZone(c.zone))
+  const maybe = cards.filter(c => isMaybeboardZone(c.zone))
+
+  const customByZone = new Map<string, DeckCard[]>()
+  for (const c of cards) {
+    if (isCommander(c)) continue
+    if (zoneCountsTowardMainDeck(c.zone)) continue
+    if (isSideboardZone(c.zone)) continue
+    if (isMaybeboardZone(c.zone)) continue
+    const zid = normalizeCardZone(c.zone)
+    const list = customByZone.get(zid)
+    if (list) list.push(c)
+    else customByZone.set(zid, [c])
+  }
 
   const lines: string[] = []
 
@@ -48,13 +70,43 @@ function formatAsText(cards: DeckCard[], commanderIds: string[]): string {
     for (const c of side) lines.push(`${c.quantity} ${c.name}`)
   }
 
+  if (maybe.length > 0) {
+    lines.push("")
+    lines.push("// Maybeboard")
+    for (const c of maybe) lines.push(`${c.quantity} ${c.name}`)
+  }
+
+  const customKeys = [...customByZone.keys()].sort((a, b) => getZoneLabel(a).localeCompare(getZoneLabel(b)))
+  for (const zoneId of customKeys) {
+    const list = customByZone.get(zoneId) ?? []
+    if (list.length === 0) continue
+    lines.push("")
+    lines.push(`// ${getZoneLabel(zoneId)}`)
+    for (const c of list) lines.push(`${c.quantity} ${c.name}`)
+  }
+
   return lines.join("\n")
 }
 
 function formatForArena(cards: DeckCard[], commanderIds: string[]): string {
-  const commanders = cards.filter(c => commanderIds.includes(c.scryfall_id))
-  const main = cards.filter(c => !commanderIds.includes(c.scryfall_id) && c.zone !== "sideboard")
-  const side = cards.filter(c => c.zone === "sideboard")
+  const isCommander = (c: DeckCard) => commanderIds.includes(c.scryfall_id)
+
+  const commanders = cards.filter(isCommander)
+  const main = cards.filter(c => !isCommander(c) && zoneCountsTowardMainDeck(c.zone))
+  const side = cards.filter(c => isSideboardZone(c.zone))
+  const maybe = cards.filter(c => isMaybeboardZone(c.zone))
+
+  const customByZone = new Map<string, DeckCard[]>()
+  for (const c of cards) {
+    if (isCommander(c)) continue
+    if (zoneCountsTowardMainDeck(c.zone)) continue
+    if (isSideboardZone(c.zone)) continue
+    if (isMaybeboardZone(c.zone)) continue
+    const zid = normalizeCardZone(c.zone)
+    const list = customByZone.get(zid)
+    if (list) list.push(c)
+    else customByZone.set(zid, [c])
+  }
 
   const cardLine = (c: DeckCard) => {
     const base = `${c.quantity} ${c.name}`
@@ -79,6 +131,21 @@ function formatForArena(cards: DeckCard[], commanderIds: string[]): string {
     lines.push("")
     lines.push("Sideboard")
     for (const c of side) lines.push(cardLine(c))
+  }
+
+  if (maybe.length > 0) {
+    lines.push("")
+    lines.push("Maybeboard")
+    for (const c of maybe) lines.push(cardLine(c))
+  }
+
+  const customKeys = [...customByZone.keys()].sort((a, b) => getZoneLabel(a).localeCompare(getZoneLabel(b)))
+  for (const zoneId of customKeys) {
+    const list = customByZone.get(zoneId) ?? []
+    if (list.length === 0) continue
+    lines.push("")
+    lines.push(getZoneLabel(zoneId))
+    for (const c of list) lines.push(cardLine(c))
   }
 
   return lines.join("\n")

@@ -5,6 +5,11 @@ import { createPortal } from "react-dom"
 import { Badge } from "@/components/ui/badge"
 import { ManaText } from "@/components/mana/ManaText"
 import type { DeckCard } from "@/lib/types"
+import {
+  DEFAULT_CARD_ZONE_ID,
+  getZoneLabel,
+  normalizeCardZone,
+} from "@/lib/zones"
 import { getCardTypeGroup, typeGroupSectionSortMeta } from "@/lib/card-types"
 
 function primaryCardImage(card: DeckCard): string | undefined {
@@ -58,7 +63,7 @@ function typeGroup(card: DeckCard | undefined): string {
 
 function cardComparisonKey(card: DeckCard): string {
   return [
-    card.zone || "mainboard",
+    normalizeCardZone(card.zone),
     card.oracle_id || card.scryfall_id,
     card.effective_printing_id || card.printing_scryfall_id || card.scryfall_id,
     card.finish || "nonfoil",
@@ -67,7 +72,7 @@ function cardComparisonKey(card: DeckCard): string {
 
 function cardBaseKey(card: DeckCard): string {
   return [
-    card.zone || "mainboard",
+    normalizeCardZone(card.zone),
     card.oracle_id || card.scryfall_id,
     card.name,
   ].join("|")
@@ -233,9 +238,9 @@ function CardCell({
           <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
             {finishLabel(card.finish)}
           </Badge>
-          {card.zone && card.zone !== "mainboard" && (
+          {normalizeCardZone(card.zone) !== DEFAULT_CARD_ZONE_ID && (
             <Badge variant="outline" className="px-1.5 py-0 text-[10px] capitalize">
-              {card.zone}
+              {getZoneLabel(card.zone)}
             </Badge>
           )}
         </div>

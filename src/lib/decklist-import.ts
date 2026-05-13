@@ -16,6 +16,12 @@
 
 import { getCardsCollection, getCardBySetAndCN } from "@/lib/scryfall"
 import type { DeckCard } from "@/lib/types"
+import {
+  DEFAULT_CARD_ZONE_ID,
+  MAINBOARD_ZONE_ID,
+  MAYBEBOARD_ZONE_ID,
+  SIDEBOARD_ZONE_ID,
+} from "@/lib/zones"
 
 export interface ParsedDecklistLine {
   quantity: number
@@ -23,7 +29,7 @@ export interface ParsedDecklistLine {
   setCode?: string
   collectorNumber?: string
   foil: boolean
-  /** Zone inferred from section markers. Defaults to 'mainboard'. */
+  /** Zone inferred from section markers. Defaults to the mainboard zone id. */
   zone: string
 }
 
@@ -45,14 +51,15 @@ const MB_PREFIX = /^MB:\s*/i
  */
 function parseSectionMarkerZone(comment: string): string | null {
   const markerText = comment.replace(/^\/\/\s*/, "").trim().toLowerCase()
-  if (markerText === "deck" || markerText === "main" || markerText === "mainboard") return "mainboard"
-  if (markerText === "sideboard" || markerText === "side board" || markerText === "side") return "sideboard"
-  if (markerText === "maybeboard" || markerText === "maybe board" || markerText === "maybe" || markerText === "considering") return "maybeboard"
-  if (markerText === "commander") return "mainboard"
+  if (markerText === "deck" || markerText === "main" || markerText === "mainboard") return MAINBOARD_ZONE_ID
+  if (markerText === "sideboard" || markerText === "side board" || markerText === "side") return SIDEBOARD_ZONE_ID
+  if (markerText === "maybeboard" || markerText === "maybe board" || markerText === "maybe" || markerText === "considering")
+    return MAYBEBOARD_ZONE_ID
+  if (markerText === "commander") return MAINBOARD_ZONE_ID
   return null
 }
 
-export function parseDecklistLine(raw: string, currentZone = "mainboard"): ParsedDecklistLine | null {
+export function parseDecklistLine(raw: string, currentZone: string = DEFAULT_CARD_ZONE_ID): ParsedDecklistLine | null {
   const trimmed = raw.trim()
   if (!trimmed) return null
   if (trimmed.startsWith("#")) return null
@@ -65,10 +72,10 @@ export function parseDecklistLine(raw: string, currentZone = "mainboard"): Parse
 
   // Inline zone prefixes (MTGO format): "SB: 1 Card Name" / "MB: 1 Card Name"
   if (SB_PREFIX.test(body)) {
-    zone = "sideboard"
+    zone = SIDEBOARD_ZONE_ID
     body = body.replace(SB_PREFIX, "")
   } else if (MB_PREFIX.test(body)) {
-    zone = "maybeboard"
+    zone = MAYBEBOARD_ZONE_ID
     body = body.replace(MB_PREFIX, "")
   }
 
@@ -104,7 +111,7 @@ export function parseDecklistLine(raw: string, currentZone = "mainboard"): Parse
 
 export function parseDecklist(text: string): ParsedDecklistLine[] {
   const out: ParsedDecklistLine[] = []
-  let currentZone = "mainboard"
+  let currentZone: string = DEFAULT_CARD_ZONE_ID
   for (const line of text.split("\n")) {
     const trimmed = line.trim()
     // Check for section markers in comment lines.

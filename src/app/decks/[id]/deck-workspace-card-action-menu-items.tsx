@@ -19,7 +19,7 @@ import type { DeckCard, GroupingMode } from "@/lib/types"
 import type { ScryfallPrinting } from "@/lib/scryfall"
 import { TAG_GROUP_UNTAGGED } from "./deck-workspace-constants"
 import { groupSectionHeading } from "./deck-workspace-pure"
-import { getZonesForFormat } from "@/lib/zones"
+import { getZonesForFormat, normalizeCardZone } from "@/lib/zones"
 
 export type DeckWorkspaceCardActionMenuVariant = "dropdown" | "context"
 
@@ -114,7 +114,7 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
 
   const foilSubClass = isCtx ? "bg-white border-border text-foreground" : "bg-white border-border text-foreground"
 
-  const currentZone = c.zone ?? "mainboard"
+  const currentZone = normalizeCardZone(c.zone)
   const allZones = getZonesForFormat(displayedFormat, customZoneIds)
   const otherZones = allZones.filter((z) => z.id !== currentZone)
 

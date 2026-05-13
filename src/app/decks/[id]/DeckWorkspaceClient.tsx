@@ -59,7 +59,7 @@ import { DeckWorkspaceCommanderRail } from "./DeckWorkspaceCommanderRail"
 import { DeckWorkspaceDialogsSection } from "./DeckWorkspaceDialogsSection"
 import type { DeckWorkspaceOverflowMenusProps } from "./deck-workspace-overflow-menus"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
-import { REGISTRY_ZONE_IDS, sanitizeCustomZoneId, validateCustomZoneName } from "@/lib/zones"
+import { REGISTRY_ZONE_IDS, DEFAULT_CARD_ZONE_ID, MAINBOARD_ZONE_ID, normalizeCardZone, sanitizeCustomZoneId, validateCustomZoneName } from "@/lib/zones"
 
 const DeckWorkspaceBoardsTab = dynamic(
   () => import("./DeckWorkspaceBoardsTab").then((m) => ({ default: m.DeckWorkspaceBoardsTab })),
@@ -199,7 +199,7 @@ export default function DeckWorkspaceClient({
   const [deckChromeCollapsed, setDeckChromeCollapsed] = useState(false)
 
   // Active board/zone selector (for decklist view filtering)
-  const [activeZone, setActiveZone] = useState<string>("mainboard")
+  const [activeZone, setActiveZone] = useState<string>(DEFAULT_CARD_ZONE_ID)
 
   const [deckTitleEditing, setDeckTitleEditing] = useState(false)
   const [deckTitleDraft, setDeckTitleDraft] = useState("")
@@ -418,7 +418,7 @@ export default function DeckWorkspaceClient({
         finish: 'nonfoil',
         name: card.name,
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         tags: [],
         image_url: getCardImageUrl(card),
         face_images: getCardFaceImages(card),
@@ -664,9 +664,9 @@ export default function DeckWorkspaceClient({
   const moveCardToZone = async (cardId: string, zone: string) => {
     const card = cards.find(c => c.id === cardId)
     if (!card) return
-    if ((card.zone ?? 'mainboard') === zone) return
+    if (normalizeCardZone(card.zone) === zone) return
     const versionSince = new Date().toISOString()
-    const prevZone = card.zone ?? 'mainboard'
+    const prevZone = normalizeCardZone(card.zone)
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, zone } : c))
     const { error } = await supabase.from('deck_cards').update({ zone }).eq('id', cardId)
     if (error) {
@@ -679,7 +679,7 @@ export default function DeckWorkspaceClient({
 
   /** Batch-move all cards in `fromZone` to `toZone` in a single DB update. */
   const moveAllCardsInZone = async (fromZone: string, toZone: string) => {
-    const zoneCards = cards.filter(c => (c.zone ?? 'mainboard') === fromZone)
+    const zoneCards = cards.filter(c => normalizeCardZone(c.zone) === fromZone)
     if (zoneCards.length === 0) return
     const versionSince = new Date().toISOString()
     const cardIds = zoneCards.map(c => c.id)
@@ -830,13 +830,13 @@ export default function DeckWorkspaceClient({
 
   // Custom zone ids: any zone value not in the registry (user-created boards)
   const customZoneIds = useMemo(
-    () => Array.from(new Set(displayedCards.map(c => c.zone ?? 'mainboard').filter(z => !REGISTRY_ZONE_IDS.has(z)))),
+    () => Array.from(new Set(displayedCards.map(c => normalizeCardZone(c.zone)).filter(z => !REGISTRY_ZONE_IDS.has(z)))),
     [displayedCards]
   )
 
   // Cards filtered to the active zone (for the decklist view)
   const zoneFilteredCards = useMemo(
-    () => displayedCards.filter(c => (c.zone ?? 'mainboard') === activeZone),
+    () => displayedCards.filter(c => normalizeCardZone(c.zone) === activeZone),
     [displayedCards, activeZone]
   )
 
@@ -1164,7 +1164,7 @@ export default function DeckWorkspaceClient({
             }}
             onMoveCardToZone={(cardId, zone) => void moveCardToZone(cardId, zone)}
             onRemoveBoard={(zoneId) => {
-              void moveAllCardsInZone(zoneId, 'mainboard').then(() => {
+              void moveAllCardsInZone(zoneId, MAINBOARD_ZONE_ID).then(() => {
                 toast.success(`Moved all cards from board to mainboard.`)
               })
             }}

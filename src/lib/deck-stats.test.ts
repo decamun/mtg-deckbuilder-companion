@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DeckCardRow, DeckRow } from '@/lib/deck-service'
 import { buildDeckStatsReport, hydrateDeckStatsCards } from '@/lib/deck-stats'
+import { MAINBOARD_ZONE_ID } from '@/lib/zones'
 import { cmcOf, getCardsByIds } from '@/lib/scryfall'
 
 vi.mock('@/lib/scryfall', () => ({
@@ -73,7 +74,7 @@ describe('deck stats wrappers', () => {
         finish: 'nonfoil',
         name: 'Commander Card',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         tags: [],
       },
       {
@@ -85,7 +86,7 @@ describe('deck stats wrappers', () => {
         finish: 'foil',
         name: 'Arcane Signet',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         tags: ['mana ramp'],
       },
     ]
@@ -172,7 +173,7 @@ describe('deck stats wrappers', () => {
         finish: 'nonfoil',
         name: 'Commander Card',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         tags: [],
       },
       {
@@ -184,7 +185,7 @@ describe('deck stats wrappers', () => {
         finish: 'nonfoil',
         name: 'Arcane Signet',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         tags: ['mana ramp'],
       },
     ]

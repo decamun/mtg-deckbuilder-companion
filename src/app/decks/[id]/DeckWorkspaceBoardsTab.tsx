@@ -7,6 +7,8 @@ import {
   getZoneLabel,
   getZonesForFormat,
   isZoneLockedForFormat,
+  normalizeCardZone,
+  REGISTRY_ZONE_IDS,
   type ZoneDefinition,
 } from "@/lib/zones"
 
@@ -32,13 +34,13 @@ export function DeckWorkspaceBoardsTab({
   onZoneChange,
 }: DeckWorkspaceBoardsTabProps) {
   // Find all distinct zone ids across all cards (to show custom boards in use)
-  const allZoneIds = Array.from(new Set(cards.map((c) => c.zone ?? "mainboard")))
-  const customZoneIds = allZoneIds.filter((id) => !["mainboard", "sideboard", "maybeboard"].includes(id))
+  const allZoneIds = Array.from(new Set(cards.map((c) => normalizeCardZone(c.zone))))
+  const customZoneIds = allZoneIds.filter((id) => !REGISTRY_ZONE_IDS.has(id))
 
   const zones = getZonesForFormat(format, customZoneIds)
 
   const cardsByZone = (zoneId: string) =>
-    cards.filter((c) => (c.zone ?? "mainboard") === zoneId)
+    cards.filter((c) => normalizeCardZone(c.zone) === zoneId)
 
   const quantityByZone = (zoneId: string) =>
     cardsByZone(zoneId).reduce((sum, c) => sum + c.quantity, 0)

@@ -7,6 +7,7 @@ import {
   normalizeFormatForValidation,
   validateDeckForFormat,
 } from '@/lib/deck-format-validation'
+import { MAINBOARD_ZONE_ID, MAYBEBOARD_ZONE_ID } from '@/lib/zones'
 
 describe('deck format validation helpers', () => {
   it('normalizes commander to edh and builds color clauses', () => {
@@ -49,7 +50,7 @@ describe('validateDeckForFormat', () => {
         oracle_id: 'cmd-oracle',
         name: 'Commander',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         color_identity: ['G'],
         legalities: { commander: 'legal' },
       },
@@ -59,7 +60,7 @@ describe('validateDeckForFormat', () => {
         oracle_id: 'off-oracle',
         name: 'Off Color',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         color_identity: ['U'],
         legalities: { commander: 'legal' },
       },
@@ -69,7 +70,7 @@ describe('validateDeckForFormat', () => {
         oracle_id: 'ban-oracle',
         name: 'Banned Card',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         color_identity: ['G'],
         legalities: { commander: 'banned' },
       },
@@ -79,7 +80,7 @@ describe('validateDeckForFormat', () => {
         oracle_id: 'singleton-oracle',
         name: 'Duplicate',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         color_identity: ['G'],
         legalities: { commander: 'legal' },
       },
@@ -89,7 +90,7 @@ describe('validateDeckForFormat', () => {
         oracle_id: 'singleton-oracle',
         name: 'Duplicate Printing',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         color_identity: ['G'],
         legalities: { commander: 'legal' },
       },
@@ -99,7 +100,7 @@ describe('validateDeckForFormat', () => {
         oracle_id: 'gc-oracle',
         name: 'Rhystic Study',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         color_identity: ['G'],
         legalities: { commander: 'legal' },
       },
@@ -137,7 +138,7 @@ describe('validateDeckForFormat', () => {
           oracle_id: 'missing-oracle',
           name: 'Unknown Legality',
           quantity: 1,
-          zone: 'mainboard',
+          zone: MAINBOARD_ZONE_ID,
           color_identity: ['G'],
         },
       ],
@@ -147,5 +148,39 @@ describe('validateDeckForFormat', () => {
     expect(result.violationsByCardId.get('missing-legalities')).toContain(
       'Cannot validate Commander legality: missing data from Scryfall',
     )
+  })
+
+  it('does not apply commander singleton rule to maybeboard copies', () => {
+    const cards = [
+      {
+        id: 'main-copy',
+        scryfall_id: 'single-1',
+        oracle_id: 'singleton-oracle',
+        name: 'Duplicate',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { commander: 'legal' },
+      },
+      {
+        id: 'maybe-copy',
+        scryfall_id: 'single-2',
+        oracle_id: 'singleton-oracle',
+        name: 'Duplicate Printing',
+        quantity: 1,
+        zone: MAYBEBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { commander: 'legal' },
+      },
+    ]
+
+    const result = validateDeckForFormat('edh', {
+      cards,
+      commanderScryfallIds: ['cmd-id'],
+      bracket: null,
+    })
+
+    expect(result.violationsByCardId.get('main-copy')).toBeUndefined()
+    expect(result.violationsByCardId.get('maybe-copy')).toBeUndefined()
   })
 })

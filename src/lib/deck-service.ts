@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { DEFAULT_CARD_ZONE_ID } from '@/lib/zones'
 import { getCard, type ScryfallCard } from './scryfall'
 
 /**
@@ -149,7 +150,7 @@ async function recordDeckVersion(
       oracle_id: c.oracle_id ?? null,
       name: c.name,
       quantity: c.quantity,
-      zone: c.zone ?? 'mainboard',
+      zone: c.zone ?? DEFAULT_CARD_ZONE_ID,
       tags: c.tags ?? [],
     })),
     primer_markdown: deck.primer_markdown ?? '',
