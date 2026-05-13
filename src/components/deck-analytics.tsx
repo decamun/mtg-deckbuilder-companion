@@ -28,6 +28,7 @@ import {
   type DeckStatsCard,
   TYPE_PRIORITY,
 } from "@/lib/deck-stats-compute"
+import type { DeckCard } from "@/lib/types"
 
 export type { DeckStatsCard as AnalyticsCard } from "@/lib/deck-stats-compute"
 
@@ -1105,7 +1106,13 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-function HandGenerator({ cards }: { cards: DeckStatsCard[] }) {
+function HandGenerator({
+  cards,
+  onDeckCardRulesPreviewHover,
+}: {
+  cards: DeckStatsCard[]
+  onDeckCardRulesPreviewHover?: (card: DeckCard | null) => void
+}) {
   const library = useMemo(() => {
     const out: DeckStatsCard[] = []
     for (const c of cards) {
@@ -1170,6 +1177,8 @@ function HandGenerator({ cards }: { cards: DeckStatsCard[] }) {
             key={`${c.id}-${idx}`}
             className="relative aspect-[5/7] rounded-lg overflow-hidden border border-border shadow-md bg-muted"
             title={c.name}
+            onMouseEnter={() => onDeckCardRulesPreviewHover?.(c as DeckCard)}
+            onMouseLeave={() => onDeckCardRulesPreviewHover?.(null)}
           >
             {c.image_url ? (
               <img src={c.image_url} className="w-full h-full object-cover" alt={c.name} />
@@ -1188,9 +1197,11 @@ function HandGenerator({ cards }: { cards: DeckStatsCard[] }) {
 export function DeckAnalytics({
   cards,
   commanders,
+  onDeckCardRulesPreviewHover,
 }: {
   cards: DeckStatsCard[]
   commanders: DeckStatsCard[]
+  onDeckCardRulesPreviewHover?: (card: DeckCard | null) => void
 }) {
   return (
     <div className="space-y-6">
@@ -1198,7 +1209,11 @@ export function DeckAnalytics({
       <ManaCurve cards={cards} />
       <ProbabilityTable cards={cards} commanders={commanders} />
       <ColorSpider cards={cards} />
-      <HandGenerator key={cards.map((card) => `${card.id}:${card.quantity}`).join("|")} cards={cards} />
+      <HandGenerator
+        key={cards.map((card) => `${card.id}:${card.quantity}`).join("|")}
+        cards={cards}
+        onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
+      />
     </div>
   )
 }
