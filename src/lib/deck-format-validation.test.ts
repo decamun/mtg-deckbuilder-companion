@@ -36,7 +36,7 @@ describe('validateDeckForFormat', () => {
     expect(getFormatValidationStatus('modern')).toBe('implemented')
     expect(getFormatValidationStatus('pioneer')).toBe('implemented')
     expect(getFormatValidationStatus('legacy')).toBe('not_yet_implemented')
-    expect(getFormatValidationStatus('vintage')).toBe('not_yet_implemented')
+    expect(getFormatValidationStatus('vintage')).toBe('implemented')
     expect(getFormatValidationStatus('pauper')).toBe('implemented')
     expect(getFormatValidationStatus('other')).toBe('neutral')
     expect(getFormatValidationStatus(null)).toBe('neutral')
@@ -44,6 +44,7 @@ describe('validateDeckForFormat', () => {
     expect(isFormatValidationImplemented('standard')).toBe(true)
     expect(getFormatValidationDataVersion('edh')).toContain('game-changers:')
     expect(getFormatValidationDataVersion('standard')).toBe('standard-live-legalities+scryfall')
+    expect(getFormatValidationDataVersion('vintage')).toBe('vintage-live-legalities+scryfall')
     expect(getFormatValidationDataVersion('pauper')).toBe('pauper-live-legalities+scryfall')
   })
 
@@ -469,6 +470,73 @@ describe('validateDeckForFormat', () => {
       'More than 4 copies in validated deck zones',
     )
     expect(result.violationsByCardId.get('dup-maybe')).toBeUndefined()
+  })
+
+  it('validates vintage banned vs restricted with aggregate restricted counting across validated zones', () => {
+    const cards = [
+      {
+        id: 'vintage-filler',
+        scryfall_id: 'vintage-filler-id',
+        oracle_id: 'vintage-filler-oracle',
+        name: 'Vintage Filler',
+        quantity: 58,
+        zone: MAINBOARD_ZONE_ID,
+        type_line: 'Basic Land — Plains',
+        legalities: { vintage: 'legal' },
+      },
+      {
+        id: 'restricted-main',
+        scryfall_id: 'restricted-main-id',
+        oracle_id: 'restricted-oracle',
+        name: 'Restricted Main',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        legalities: { vintage: 'restricted' },
+      },
+      {
+        id: 'restricted-side',
+        scryfall_id: 'restricted-side-id',
+        oracle_id: 'restricted-oracle',
+        name: 'Restricted Side',
+        quantity: 1,
+        zone: SIDEBOARD_ZONE_ID,
+        legalities: { vintage: 'restricted' },
+      },
+      {
+        id: 'banned-card',
+        scryfall_id: 'banned-vintage-id',
+        oracle_id: 'banned-vintage-oracle',
+        name: 'Banned Vintage Card',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        legalities: { vintage: 'banned' },
+      },
+      {
+        id: 'restricted-maybe',
+        scryfall_id: 'restricted-maybe-id',
+        oracle_id: 'restricted-oracle',
+        name: 'Restricted Maybe',
+        quantity: 50,
+        zone: MAYBEBOARD_ZONE_ID,
+        legalities: { vintage: 'restricted' },
+      },
+    ]
+
+    const result = validateDeckForFormat('vintage', { cards, commanderScryfallIds: [] })
+
+    expect(result.status).toBe('implemented')
+    expect(result.deckViolations).toEqual([])
+    expect(result.violationsByCardId.get('restricted-main')).toContain(
+      'Restricted in Vintage (max 1 copy in validated deck zones)',
+    )
+    expect(result.violationsByCardId.get('restricted-side')).toContain(
+      'Restricted in Vintage (max 1 copy in validated deck zones)',
+    )
+    expect(result.violationsByCardId.get('banned-card')).toContain('Banned in Vintage')
+    expect(result.violationsByCardId.get('banned-card')).not.toContain(
+      'Restricted in Vintage (max 1 copy in validated deck zones)',
+    )
+    expect(result.violationsByCardId.get('restricted-maybe')).toBeUndefined()
   })
 
   it('requires at least 60 mainboard cards in pauper', () => {

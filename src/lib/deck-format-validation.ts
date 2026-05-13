@@ -229,9 +229,9 @@ type DeckFormatValidatorDefinition = {
   validate?: (ctx: DeckFormatValidationContext) => ReadonlyMap<string, readonly string[]>
 }
 
-const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern', 'pauper'])
+const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern', 'pauper', 'vintage'])
 
-type SixtyCardConstructedFormat = 'standard' | 'pioneer' | 'modern' | 'pauper'
+type SixtyCardConstructedFormat = 'standard' | 'pioneer' | 'modern' | 'pauper' | 'vintage'
 
 function mergeViolationsInto(
   bucket: Map<string, Set<string>>,
@@ -289,6 +289,52 @@ function validateSixtyCardConstructed(
   return new Map(Array.from(bucket, ([id, set]) => [id, [...set]]))
 }
 
+function validateVintage(cards: FormatValidationCard[]): ReadonlyMap<string, readonly string[]> {
+  const bucket = new Map<string, Set<string>>()
+  const validatingZones = new Set(
+    getZonesForFormat('vintage').filter((zone) => zone.isFormatValidated).map((zone) => zone.id)
+  )
+  const restrictedTotals = new Map<string, { qty: number; cardIds: Set<string> }>()
+
+  for (const card of cards) {
+    if (!validatingZones.has(normalizeCardZone(card.zone))) continue
+    const legalityStatus = card.legalities?.vintage
+    if (legalityStatus === undefined) {
+      getOrCreateCardViolationSet(bucket, card.id).add(
+        'Cannot validate Vintage legality: missing data from Scryfall'
+      )
+      continue
+    }
+    if (legalityStatus === 'banned' || legalityStatus === 'not_legal') {
+      getOrCreateCardViolationSet(bucket, card.id).add(
+        legalityStatus === 'banned' ? 'Banned in Vintage' : 'Not legal in Vintage'
+      )
+      continue
+    }
+    if (legalityStatus !== 'restricted') continue
+    const key = copyLimitAggregationKey(card)
+    const previous = restrictedTotals.get(key)
+    if (previous) {
+      previous.qty += card.quantity
+      previous.cardIds.add(card.id)
+    } else {
+      restrictedTotals.set(key, { qty: card.quantity, cardIds: new Set([card.id]) })
+    }
+  }
+
+  for (const restricted of restrictedTotals.values()) {
+    if (restricted.qty <= 1) continue
+    for (const cardId of restricted.cardIds) {
+      getOrCreateCardViolationSet(bucket, cardId).add(
+        'Restricted in Vintage (max 1 copy in validated deck zones)'
+      )
+    }
+  }
+
+  mergeViolationsInto(bucket, getConstructedCopyLimitViolations('vintage', cards, 4))
+  return new Map(Array.from(bucket, ([id, set]) => [id, [...set]]))
+}
+
 function getDeckZoneViolations(
   format: string | null | undefined,
   cards: FormatValidationCard[]
@@ -334,7 +380,11 @@ const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> =
     validate: ({ cards }) => validateSixtyCardConstructed('pioneer', cards),
   },
   legacy: { label: 'Legacy', status: 'not_yet_implemented' },
-  vintage: { label: 'Vintage', status: 'not_yet_implemented' },
+  vintage: {
+    label: 'Vintage',
+    status: 'implemented',
+    validate: ({ cards }) => validateVintage(cards),
+  },
   pauper: {
     label: 'Pauper',
     status: 'implemented',
