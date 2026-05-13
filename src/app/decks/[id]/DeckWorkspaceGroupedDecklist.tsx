@@ -241,7 +241,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                   )}
                                   {c.quantity > 1 && (
                                     <div
-                                      className={`absolute top-2 right-8 bg-background/80 text-foreground px-1.5 py-0.5 rounded text-xs font-bold border border-border transition-opacity ${
+                                      className={`pointer-events-none absolute bottom-2 left-2 z-[12] bg-background/90 text-foreground px-1.5 py-0.5 text-[11px] font-bold tabular-nums leading-none rounded-full border border-border/60 shadow-sm transition-opacity ${
                                         vlist && vlist.length > 0 && deckFormatHintHoverId === c.id ? "opacity-0" : "opacity-100"
                                       }`}
                                     >
@@ -249,7 +249,12 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                     </div>
                                   )}
                                   {c.tags && c.tags.length > 0 && (
-                                    <div className="absolute bottom-1 left-1 flex flex-wrap gap-1 p-1 max-w-[60%]">
+                                    <div
+                                      className={cn(
+                                        "absolute bottom-1 flex flex-wrap gap-1 p-1 max-w-[60%]",
+                                        c.quantity > 1 ? "left-10" : "left-1"
+                                      )}
+                                    >
                                       {c.tags.map((t) => (
                                         <Badge key={t} className="text-[10px] px-1.5 py-0 bg-background/80 text-foreground border-border truncate max-w-full">
                                           {t}
@@ -400,8 +405,8 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                                 </div>
                                               )}
                                               {card.quantity > 1 && (
-                                                <div className="absolute top-2 right-2 bg-background/85 text-foreground text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
-                                                  {card.quantity}x
+                                                <div className="pointer-events-none absolute bottom-2 left-2 z-[15] bg-background/90 text-foreground text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
+                                                  x{card.quantity}
                                                 </div>
                                               )}
                                               {displayedCommanderIds.includes(card.scryfall_id) && (
