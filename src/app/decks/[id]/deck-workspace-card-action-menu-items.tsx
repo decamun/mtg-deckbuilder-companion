@@ -45,6 +45,10 @@ export type DeckWorkspaceCardActionMenuItemsProps = {
   onMoveToZone: (cardId: string, zone: string) => void
   onOpenCustomBoardDialog: (cardId: string) => void
   onDeleteCard: (cardId: string) => void
+  onAddOneToCard: (cardId: string) => void
+  onOpenAddQuantityDialog: (cardId: string) => void
+  onRemoveOneFromCard: (cardId: string) => void
+  onOpenRemoveQuantityDialog: (cardId: string) => void
 }
 
 export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionMenuItemsProps) {
@@ -70,6 +74,10 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
     onMoveToZone,
     onOpenCustomBoardDialog,
     onDeleteCard,
+    onAddOneToCard,
+    onOpenAddQuantityDialog,
+    onRemoveOneFromCard,
+    onOpenRemoveQuantityDialog,
   } = props
 
   const finishes = c.available_finishes ?? ["nonfoil"]
@@ -120,6 +128,7 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
 
   return (
     <>
+      {/* Deck role & presentation */}
       <Item onClick={() => onSetCommander(c.scryfall_id)} className={cmdItemClass}>
         <Crown className="w-3.5 h-3.5 mr-2" />
         {cmdActive ? "Remove as Commander" : "Set as Commander"}
@@ -129,40 +138,8 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
         {coverActive ? "Remove Cover Image" : "Set as Cover Image"}
       </Item>
       <Sep className="bg-border" />
-      {otherZones.length > 0 && (
-        <>
-          <Sub>
-            <SubTrigger>
-              <ArrowRightLeft className="w-3.5 h-3.5 mr-2" />
-              Move to Board
-            </SubTrigger>
-            <SubContent className={subContentClass}>
-              {otherZones.map((z) => (
-                <Item
-                  key={z.id}
-                  onClick={() => onMoveToZone(c.id, z.id)}
-                >
-                  {z.label}
-                </Item>
-              ))}
-              <Sep className="bg-border" />
-              <Item onClick={() => onOpenCustomBoardDialog(c.id)}>
-                New custom board…
-              </Item>
-            </SubContent>
-          </Sub>
-          <Sep className="bg-border" />
-        </>
-      )}
-      {otherZones.length === 0 && (
-        <>
-          <Item onClick={() => onOpenCustomBoardDialog(c.id)}>
-            <ArrowRightLeft className="w-3.5 h-3.5 mr-2" />
-            Move to Custom Board…
-          </Item>
-          <Sep className="bg-border" />
-        </>
-      )}
+
+      {/* Card appearance */}
       <Sub>
         <SubTrigger onMouseEnter={() => void onEnsurePrintingsLoaded(c)}>Printing</SubTrigger>
         <SubContent className={subContentClass}>
@@ -201,6 +178,8 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
         </SubContent>
       </Sub>
       <Sep className="bg-border" />
+
+      {/* Tags & grouping */}
       <Sub>
         <SubTrigger>Tags</SubTrigger>
         <SubContent className={isCtx ? "bg-white border-border text-foreground" : subContentClass}>
@@ -220,14 +199,68 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
         </SubContent>
       </Sub>
       <Sep className="bg-border" />
-      {grouping === "tag" && groupName !== TAG_GROUP_UNTAGGED && (
+
+      {/* Zone placement */}
+      {otherZones.length > 0 && (
         <>
-          <Item className={tagRemoveClass} onClick={() => onRemoveTag(c.id, groupName)}>
-            Remove from &apos;{groupSectionHeading(groupName, grouping)}&apos;
+          <Sub>
+            <SubTrigger>
+              <ArrowRightLeft className="w-3.5 h-3.5 mr-2" />
+              Move to Board
+            </SubTrigger>
+            <SubContent className={subContentClass}>
+              {otherZones.map((z) => (
+                <Item
+                  key={z.id}
+                  onClick={() => onMoveToZone(c.id, z.id)}
+                >
+                  {z.label}
+                </Item>
+              ))}
+              <Sep className="bg-border" />
+              <Item onClick={() => onOpenCustomBoardDialog(c.id)}>
+                New custom board…
+              </Item>
+            </SubContent>
+          </Sub>
+          <Sep className="bg-border" />
+        </>
+      )}
+      {otherZones.length === 0 && (
+        <>
+          <Item onClick={() => onOpenCustomBoardDialog(c.id)}>
+            <ArrowRightLeft className="w-3.5 h-3.5 mr-2" />
+            Move to Custom Board…
           </Item>
           <Sep className="bg-border" />
         </>
       )}
+
+      {/* Add copies */}
+      <Sub>
+        <SubTrigger>Add</SubTrigger>
+        <SubContent className={subContentClass}>
+          <Item onClick={() => onAddOneToCard(c.id)}>Add 1</Item>
+          <Item onClick={() => onOpenAddQuantityDialog(c.id)}>Add n…</Item>
+        </SubContent>
+      </Sub>
+      {(c.quantity >= 2 || c.quantity >= 4 || (grouping === "tag" && groupName !== TAG_GROUP_UNTAGGED)) && (
+        <>
+          <Sep className="bg-border" />
+          {c.quantity >= 2 && (
+            <Item onClick={() => onRemoveOneFromCard(c.id)}>Remove 1</Item>
+          )}
+          {c.quantity >= 4 && (
+            <Item onClick={() => onOpenRemoveQuantityDialog(c.id)}>Remove n…</Item>
+          )}
+          {grouping === "tag" && groupName !== TAG_GROUP_UNTAGGED && (
+            <Item className={tagRemoveClass} onClick={() => onRemoveTag(c.id, groupName)}>
+              Remove from &apos;{groupSectionHeading(groupName, grouping)}&apos;
+            </Item>
+          )}
+        </>
+      )}
+      <Sep className="bg-border" />
       <Item
         className={deleteClass}
         onClick={(e) => {

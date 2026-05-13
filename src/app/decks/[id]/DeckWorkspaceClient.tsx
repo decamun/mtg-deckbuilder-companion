@@ -121,6 +121,8 @@ export default function DeckWorkspaceClient({
   const [customTagInput, setCustomTagInput] = useState("")
   const [activeCardIdForTag, setActiveCardIdForTag] = useState<string | null>(null)
 
+  const [cardQtyDialog, setCardQtyDialog] = useState<null | { mode: "add" | "remove"; cardId: string }>(null)
+  const [cardQtyDialogInput, setCardQtyDialogInput] = useState("")
   const [boardDialogOpen, setBoardDialogOpen] = useState(false)
   const [customBoardInput, setCustomBoardInput] = useState("")
   const [customBoardError, setCustomBoardError] = useState<string | null>(null)
@@ -492,6 +494,106 @@ export default function DeckWorkspaceClient({
       toast.error(error.message)
     } else {
       recordMutationVersion(`Removed ${card.name}`, versionSince)
+    }
+  }
+
+  const MAX_COPIES_PER_LINE = 999
+
+  const applyDeckCardQuantityDelta = async (cardId: string, delta: number) => {
+    if (delta === 0) return
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    const prevQty = card.quantity
+    let nextQty = prevQty + delta
+    if (nextQty < 0) return
+    if (nextQty === 0) {
+      void deleteCard(cardId)
+      return
+    }
+    if (nextQty > MAX_COPIES_PER_LINE) {
+      nextQty = MAX_COPIES_PER_LINE
+    }
+    const effectiveDelta = nextQty - prevQty
+    if (effectiveDelta === 0) {
+      if (delta > 0) {
+        toast.error(`Cannot exceed ${MAX_COPIES_PER_LINE} copies per line.`)
+      }
+      return
+    }
+    const versionSince = new Date().toISOString()
+    setCards(prev => prev.map(c => c.id === cardId ? { ...c, quantity: nextQty } : c))
+    const { data, error } = await supabase.from('deck_cards').update({ quantity: nextQty }).eq('id', cardId).select().single()
+    if (error) {
+      setCards(prev => prev.map(c => c.id === cardId ? { ...c, quantity: prevQty } : c))
+      toast.error(error.message)
+    } else if (data) {
+      setCards(prev => prev.map(c => c.id === cardId ? mergeDeckCardRow(c, data as DeckCardRow) : c))
+      const abs = Math.abs(effectiveDelta)
+      const dir = effectiveDelta > 0 ? "Added" : "Removed"
+      recordMutationVersion(`${dir} ${abs}× ${card.name} (now ${nextQty})`, versionSince)
+    }
+  }
+
+  const addOneToDeckCard = (cardId: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    if (card.quantity >= MAX_COPIES_PER_LINE) {
+      toast.error(`Cannot exceed ${MAX_COPIES_PER_LINE} copies per line.`)
+      return
+    }
+    void applyDeckCardQuantityDelta(cardId, 1)
+  }
+
+  const removeOneFromDeckCard = (cardId: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card || card.quantity < 2) return
+    void applyDeckCardQuantityDelta(cardId, -1)
+  }
+
+  const handleCardQtyDialogSubmit = () => {
+    if (!cardQtyDialog) return
+    const card = cards.find(c => c.id === cardQtyDialog.cardId)
+    if (!card) {
+      setCardQtyDialog(null)
+      setCardQtyDialogInput("")
+      return
+    }
+    const raw = cardQtyDialogInput.trim()
+    const n = parseInt(raw, 10)
+    if (!Number.isFinite(n) || n < 1) {
+      toast.error("Enter a positive whole number.")
+      return
+    }
+    if (cardQtyDialog.mode === "add") {
+      const maxAdd = MAX_COPIES_PER_LINE - card.quantity
+      if (maxAdd <= 0) {
+        toast.error(`This line already has the maximum of ${MAX_COPIES_PER_LINE} copies.`)
+        return
+      }
+      const add = Math.min(n, maxAdd)
+      setCardQtyDialog(null)
+      setCardQtyDialogInput("")
+      void applyDeckCardQuantityDelta(card.id, add)
+      if (add < n) {
+        toast.info(`Added ${add} copies (capped at ${MAX_COPIES_PER_LINE} per line).`)
+      }
+      return
+    }
+    if (card.quantity < 4) {
+      setCardQtyDialog(null)
+      setCardQtyDialogInput("")
+      return
+    }
+    if (n > card.quantity) {
+      toast.error(`You only have ${card.quantity} copies.`)
+      return
+    }
+    setCardQtyDialog(null)
+    setCardQtyDialogInput("")
+    if (n >= card.quantity) {
+      void deleteCard(card.id)
+    } else {
+      void applyDeckCardQuantityDelta(card.id, -n)
     }
   }
 
@@ -970,6 +1072,20 @@ export default function DeckWorkspaceClient({
     onDeleteCard: (id) => {
       void deleteCard(id)
     },
+    onAddOneToCard: (cardId) => {
+      addOneToDeckCard(cardId)
+    },
+    onOpenAddQuantityDialog: (cardId) => {
+      setCardQtyDialog({ mode: "add", cardId })
+      setCardQtyDialogInput("")
+    },
+    onRemoveOneFromCard: (cardId) => {
+      removeOneFromDeckCard(cardId)
+    },
+    onOpenRemoveQuantityDialog: (cardId) => {
+      setCardQtyDialog({ mode: "remove", cardId })
+      setCardQtyDialogInput("")
+    },
   }
 
   if (accessDenied) {
@@ -1277,6 +1393,12 @@ export default function DeckWorkspaceClient({
         customTagInput={customTagInput}
         setCustomTagInput={setCustomTagInput}
         handleCustomTagSubmit={handleCustomTagSubmit}
+        cardQtyDialog={cardQtyDialog}
+        setCardQtyDialog={setCardQtyDialog}
+        cardQtyDialogInput={cardQtyDialogInput}
+        setCardQtyDialogInput={setCardQtyDialogInput}
+        handleCardQtyDialogSubmit={handleCardQtyDialogSubmit}
+        maxCopiesPerLine={MAX_COPIES_PER_LINE}
         boardDialogOpen={boardDialogOpen}
         setBoardDialogOpen={setBoardDialogOpen}
         customBoardInput={customBoardInput}

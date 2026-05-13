@@ -37,6 +37,10 @@ export type DeckWorkspaceOverflowMenusProps = {
   onMoveToZone: (cardId: string, zone: string) => void
   onOpenCustomBoardDialog: (cardId: string) => void
   onDeleteCard: (cardId: string) => void
+  onAddOneToCard: (cardId: string) => void
+  onOpenAddQuantityDialog: (cardId: string) => void
+  onRemoveOneFromCard: (cardId: string) => void
+  onOpenRemoveQuantityDialog: (cardId: string) => void
 }
 
 /** Overflow menu fields used to build card action rows (excludes ghost-click ref only needed by ⋮ triggers). */
@@ -68,6 +72,10 @@ export function buildDeckWorkspaceMenuItemProps(
     onMoveToZone: menus.onMoveToZone,
     onOpenCustomBoardDialog: menus.onOpenCustomBoardDialog,
     onDeleteCard: menus.onDeleteCard,
+    onAddOneToCard: menus.onAddOneToCard,
+    onOpenAddQuantityDialog: menus.onOpenAddQuantityDialog,
+    onRemoveOneFromCard: menus.onRemoveOneFromCard,
+    onOpenRemoveQuantityDialog: menus.onOpenRemoveQuantityDialog,
   }
 }
 
