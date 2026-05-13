@@ -245,12 +245,12 @@ describe('getConstructedCopyLimitViolations', () => {
       },
     ])
 
-    expect(result.get('split-main')).toContain('More than 4 copies across main + side')
-    expect(result.get('split-side')).toContain('More than 4 copies across main + side')
-    expect(result.get('mdfc-main')).toContain('More than 4 copies across main + side')
-    expect(result.get('mdfc-side')).toContain('More than 4 copies across main + side')
-    expect(result.get('adventure-main')).toContain('More than 4 copies across main + side')
-    expect(result.get('adventure-side')).toContain('More than 4 copies across main + side')
+    expect(result.get('split-main')).toContain('More than 4 copies in validated deck zones')
+    expect(result.get('split-side')).toContain('More than 4 copies in validated deck zones')
+    expect(result.get('mdfc-main')).toContain('More than 4 copies in validated deck zones')
+    expect(result.get('mdfc-side')).toContain('More than 4 copies in validated deck zones')
+    expect(result.get('adventure-main')).toContain('More than 4 copies in validated deck zones')
+    expect(result.get('adventure-side')).toContain('More than 4 copies in validated deck zones')
   })
 
   it('ignores maybeboard rows and any-number/basic exceptions', () => {

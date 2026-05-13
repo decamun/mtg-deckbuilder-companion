@@ -84,8 +84,10 @@ export function oracleTextIgnoresSingletonCap(oracleText: string | undefined): b
   )
 }
 
-function copyLimitAggregationKey(card: Pick<FormatValidationCard, 'oracle_id' | 'scryfall_id'>): string {
-  return card.oracle_id || card.scryfall_id
+function copyLimitAggregationKey(
+  card: Pick<FormatValidationCard, 'id' | 'oracle_id' | 'scryfall_id'>
+): string {
+  return card.oracle_id || card.scryfall_id || card.id
 }
 
 export function getConstructedCopyLimitViolations(
@@ -118,7 +120,7 @@ export function getConstructedCopyLimitViolations(
   for (const card of counted) {
     const key = copyLimitAggregationKey(card)
     if (!overCapKeys.has(key)) continue
-    violations.set(card.id, [`More than ${maxCopies} copies across main + side`])
+    violations.set(card.id, [`More than ${maxCopies} copies in validated deck zones`])
   }
   return violations
 }
