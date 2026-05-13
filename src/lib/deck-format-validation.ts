@@ -85,7 +85,7 @@ export function oracleTextIgnoresSingletonCap(oracleText: string | undefined): b
 }
 
 function copyLimitAggregationKey(card: Pick<FormatValidationCard, 'oracle_id' | 'scryfall_id'>): string {
-  return card.oracle_id ?? card.scryfall_id
+  return card.oracle_id || card.scryfall_id
 }
 
 export function getConstructedCopyLimitViolations(
