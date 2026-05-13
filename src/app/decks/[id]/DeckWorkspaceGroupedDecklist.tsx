@@ -521,6 +521,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
         <DeckAnalytics
           cards={displayedCards.filter((c) => !displayedCommanderIds.includes(c.scryfall_id))}
           commanders={displayedCards.filter((c) => displayedCommanderIds.includes(c.scryfall_id))}
+          onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
         />
       </div>
       </div>
