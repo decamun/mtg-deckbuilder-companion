@@ -245,12 +245,24 @@ function mergeViolationsInto(
   }
 }
 
+function getOrCreateCardViolationSet(
+  bucket: Map<string, Set<string>>,
+  cardId: string
+): Set<string> {
+  let reasons = bucket.get(cardId)
+  if (!reasons) {
+    reasons = new Set()
+    bucket.set(cardId, reasons)
+  }
+  return reasons
+}
+
 function validateSixtyCardConstructed(
   format: 'standard' | 'pioneer' | 'modern',
-  label: string,
   cards: FormatValidationCard[]
 ): ReadonlyMap<string, readonly string[]> {
   const bucket = new Map<string, Set<string>>()
+  const label = FORMAT_VALIDATOR_REGISTRY[format]?.label ?? format
   const validatingZones = new Set(
     getZonesForFormat(format).filter((zone) => zone.isFormatValidated).map((zone) => zone.id)
   )
@@ -259,21 +271,15 @@ function validateSixtyCardConstructed(
     if (!validatingZones.has(normalizeCardZone(card.zone))) continue
     const legalityStatus = card.legalities?.[format]
     if (legalityStatus === undefined) {
-      let reasons = bucket.get(card.id)
-      if (!reasons) {
-        reasons = new Set()
-        bucket.set(card.id, reasons)
-      }
-      reasons.add(`Cannot validate ${label} legality: missing data from Scryfall`)
+      getOrCreateCardViolationSet(bucket, card.id).add(
+        `Cannot validate ${label} legality: missing data from Scryfall`
+      )
       continue
     }
     if (legalityStatus === 'banned' || legalityStatus === 'not_legal') {
-      let reasons = bucket.get(card.id)
-      if (!reasons) {
-        reasons = new Set()
-        bucket.set(card.id, reasons)
-      }
-      reasons.add(legalityStatus === 'banned' ? `Banned in ${label}` : `Not legal in ${label}`)
+      getOrCreateCardViolationSet(bucket, card.id).add(
+        legalityStatus === 'banned' ? `Banned in ${label}` : `Not legal in ${label}`
+      )
     }
   }
 
@@ -313,17 +319,17 @@ const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> =
   standard: {
     label: 'Standard',
     status: 'implemented',
-    validate: ({ cards }) => validateSixtyCardConstructed('standard', 'Standard', cards),
+    validate: ({ cards }) => validateSixtyCardConstructed('standard', cards),
   },
   modern: {
     label: 'Modern',
     status: 'implemented',
-    validate: ({ cards }) => validateSixtyCardConstructed('modern', 'Modern', cards),
+    validate: ({ cards }) => validateSixtyCardConstructed('modern', cards),
   },
   pioneer: {
     label: 'Pioneer',
     status: 'implemented',
-    validate: ({ cards }) => validateSixtyCardConstructed('pioneer', 'Pioneer', cards),
+    validate: ({ cards }) => validateSixtyCardConstructed('pioneer', cards),
   },
   legacy: { label: 'Legacy', status: 'not_yet_implemented' },
   vintage: { label: 'Vintage', status: 'not_yet_implemented' },

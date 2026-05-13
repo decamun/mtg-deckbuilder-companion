@@ -20,7 +20,10 @@ describe('deck format validation helpers', () => {
 
 describe('validateDeckForFormat', () => {
   it('returns no violations for unsupported formats', () => {
-    const result = validateDeckForFormat('alchemy', { cards: [], commanderScryfallIds: [] })
+    const result = validateDeckForFormat('totally-unknown-format', {
+      cards: [],
+      commanderScryfallIds: [],
+    })
     expect(result.status).toBe('neutral')
     expect(result.violationsByCardId.size).toBe(0)
     expect(result.deckViolations).toEqual([])
