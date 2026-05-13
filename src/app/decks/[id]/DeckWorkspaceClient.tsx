@@ -56,6 +56,11 @@ import { DeckWorkspaceDialogsSection } from "./DeckWorkspaceDialogsSection"
 import type { DeckWorkspaceOverflowMenusProps } from "./deck-workspace-overflow-menus"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
 
+const DeckWorkspaceBoardsTab = dynamic(
+  () => import("./DeckWorkspaceBoardsTab").then((m) => ({ default: m.DeckWorkspaceBoardsTab })),
+  { ssr: false }
+)
+
 const DeckAgentSidebar = dynamic(
   () => import("@/components/agent/DeckAgentSidebar").then((m) => ({ default: m.DeckAgentSidebar })),
   { ssr: false }
@@ -181,6 +186,9 @@ export default function DeckWorkspaceClient({
   const [previewFormatHintsHovered, setPreviewFormatHintsHovered] = useState(false)
   const [rulesHover, setRulesHover] = useState<DeckRulesHoverPayload>(null)
   const [deckChromeCollapsed, setDeckChromeCollapsed] = useState(false)
+
+  // Active board/zone selector (for decklist view filtering)
+  const [activeZone, setActiveZone] = useState<string>("mainboard")
 
   const [deckTitleEditing, setDeckTitleEditing] = useState(false)
   const [deckTitleDraft, setDeckTitleDraft] = useState("")
@@ -607,6 +615,22 @@ export default function DeckWorkspaceClient({
     setPrintingsByCard(prev => ({ ...prev, [card.id]: prints }))
   }
 
+  const moveCardToZone = async (cardId: string, zone: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    if ((card.zone ?? 'mainboard') === zone) return
+    const versionSince = new Date().toISOString()
+    const prevZone = card.zone ?? 'mainboard'
+    setCards(prev => prev.map(c => c.id === cardId ? { ...c, zone } : c))
+    const { error } = await supabase.from('deck_cards').update({ zone }).eq('id', cardId)
+    if (error) {
+      setCards(prev => prev.map(c => c.id === cardId ? { ...c, zone: prevZone } : c))
+      toast.error(error.message)
+    } else {
+      recordMutationVersion(`Moved ${card.name} to ${zone}`, versionSince)
+    }
+  }
+
   const handleCustomTagSubmit = () => {
     if (activeCardIdForTag && customTagInput) addTag(activeCardIdForTag, customTagInput)
     setTagDialogOpen(false)
@@ -712,6 +736,22 @@ export default function DeckWorkspaceClient({
     : (deck?.name ?? initialDeckName ?? "Loading…")
   const displayedFormat = viewing ? viewing.deckMeta.format : deck?.format ?? null
   const displayedBracket = viewing ? viewing.deckMeta.bracket : deck?.bracket ?? null
+
+  // Custom zone ids: any zone value not in the registry (user-created boards)
+  const customZoneIds = useMemo(
+    () => {
+      const knownIds = new Set(['mainboard', 'sideboard', 'maybeboard'])
+      return Array.from(new Set(displayedCards.map(c => c.zone ?? 'mainboard').filter(z => !knownIds.has(z))))
+    },
+    [displayedCards]
+  )
+
+  // Cards filtered to the active zone (for the decklist view)
+  const zoneFilteredCards = useMemo(
+    () => displayedCards.filter(c => (c.zone ?? 'mainboard') === activeZone),
+    [displayedCards, activeZone]
+  )
+
   const cardInteractionKey = useMemo(
     () => displayedCards.map(c => `${c.id}:${c.effective_printing_id ?? c.scryfall_id}:${c.quantity}`).join('|'),
     [displayedCards]
@@ -734,11 +774,11 @@ export default function DeckWorkspaceClient({
 
   const deckLandQtyIncludingMdfc = useMemo(
     () =>
-      displayedCards.reduce(
+      zoneFilteredCards.reduce(
         (sum, c) => sum + (hasLandFaceOnTypeLine(c.type_line) ? c.quantity : 0),
         0
       ),
-    [displayedCards]
+    [zoneFilteredCards]
   )
 
   const formatViolationMap = useMemo(() => {
@@ -759,8 +799,8 @@ export default function DeckWorkspaceClient({
   )
 
   const groupedCards = useMemo(
-    () => groupDeckCards(displayedCards, grouping, sorting),
-    [displayedCards, grouping, sorting]
+    () => groupDeckCards(zoneFilteredCards, grouping, sorting),
+    [zoneFilteredCards, grouping, sorting]
   )
 
   const commanderCards = displayedCommanderIds
@@ -801,6 +841,8 @@ export default function DeckWorkspaceClient({
     allUniqueTags,
     printingsByCard,
     formatHintsMenuClosedAtRef,
+    displayedFormat,
+    customZoneIds,
     ensurePrintingsLoaded,
     onSetCommander: (id) => {
       void setAsCommander(id)
@@ -823,6 +865,9 @@ export default function DeckWorkspaceClient({
     onOpenCustomTagDialog: (cardId) => {
       setActiveCardIdForTag(cardId)
       setTagDialogOpen(true)
+    },
+    onMoveToZone: (cardId, zone) => {
+      void moveCardToZone(cardId, zone)
     },
     onDeleteCard: (id) => {
       void deleteCard(id)
@@ -936,6 +981,8 @@ export default function DeckWorkspaceClient({
               viewMode={viewMode}
               displayedFormat={displayedFormat}
               formatViolationCount={formatViolationMap.size}
+              activeZone={activeZone}
+              customZoneIds={customZoneIds}
               onCardSizeChange={(n) => {
                 setCardSize(n)
                 saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting, cardSize: n })
@@ -953,6 +1000,7 @@ export default function DeckWorkspaceClient({
                 saveDeckWorkspaceDisplayPrefs({ viewMode: v, grouping, sorting, cardSize })
               }}
               onOpenFormatHints={() => setFormatHintsListOpen(true)}
+              onZoneChange={setActiveZone}
             />
             <DeckWorkspaceGroupedDecklist
               groupedCards={groupedCards}
@@ -965,7 +1013,7 @@ export default function DeckWorkspaceClient({
               cardDragDisabled={cardDragDisabled}
               deckLandQtyIncludingMdfc={deckLandQtyIncludingMdfc}
               commanderCards={commanderCards}
-              displayedCards={displayedCards}
+              displayedCards={zoneFilteredCards}
               displayedCommanderIds={displayedCommanderIds}
               displayedCoverImageId={displayedCoverImageId}
               formatViolationMap={formatViolationMap}
@@ -980,7 +1028,7 @@ export default function DeckWorkspaceClient({
               stackCardHeight={stackCardHeight}
               stackHoverShift={stackHoverShift}
               cardsLoading={cardsLoading}
-              liveCardCount={cards.length}
+              liveCardCount={zoneFilteredCards.length}
               sensors={dndSensors}
               onTagDragEnd={handleTagDragEnd}
               overflowMenus={overflowMenus}
@@ -988,6 +1036,36 @@ export default function DeckWorkspaceClient({
               onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
             />
           </>
+        )}
+
+        {tab === "boards" && (
+          <DeckWorkspaceBoardsTab
+            cards={displayedCards}
+            format={displayedFormat}
+            isOwner={isOwner}
+            viewing={!!viewing}
+            activeZone={activeZone}
+            onZoneChange={(zone) => {
+              setActiveZone(zone)
+              setTab("decklist")
+            }}
+            onMoveCardToZone={(cardId, zone) => void moveCardToZone(cardId, zone)}
+            onAddCustomBoard={(zoneId) => {
+              // Custom boards are implicitly created when a card is moved to them.
+              // For now, move a placeholder card or just switch to the zone.
+              toast.info(`Board "${zoneId}" will appear once you move a card to it.`)
+            }}
+            onRemoveBoard={(zoneId) => {
+              // Move all cards in this zone back to mainboard
+              const zoneCards = displayedCards.filter(c => (c.zone ?? 'mainboard') === zoneId)
+              if (zoneCards.length > 0) {
+                for (const card of zoneCards) {
+                  void moveCardToZone(card.id, 'mainboard')
+                }
+                toast.success(`Moved all cards from ${zoneId} to mainboard.`)
+              }
+            }}
+          />
         )}
 
 

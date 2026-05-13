@@ -20,6 +20,8 @@ export type DeckWorkspaceOverflowMenusProps = {
   allUniqueTags: string[]
   printingsByCard: Record<string, ScryfallPrinting[]>
   formatHintsMenuClosedAtRef: MutableRefObject<number>
+  displayedFormat: string | null
+  customZoneIds: string[]
   ensurePrintingsLoaded: (card: DeckCard) => void
   onSetCommander: (scryfallId: string) => void
   onSetCoverImage: (scryfallId: string) => void
@@ -28,6 +30,7 @@ export type DeckWorkspaceOverflowMenusProps = {
   onAddTag: (cardId: string, tag: string) => void
   onRemoveTag: (cardId: string, tag: string) => void
   onOpenCustomTagDialog: (cardId: string) => void
+  onMoveToZone: (cardId: string, zone: string) => void
   onDeleteCard: (cardId: string) => void
   onClosePreview: () => void
 }
@@ -48,6 +51,8 @@ export function buildDeckWorkspaceMenuItemProps(
     coverImageId: menus.coverImageId,
     allUniqueTags: menus.allUniqueTags,
     printings: menus.printingsByCard[c.id] ?? [],
+    displayedFormat: menus.displayedFormat,
+    customZoneIds: menus.customZoneIds,
     onEnsurePrintingsLoaded: menus.ensurePrintingsLoaded,
     onSetCommander: menus.onSetCommander,
     onSetCoverImage: menus.onSetCoverImage,
@@ -56,6 +61,7 @@ export function buildDeckWorkspaceMenuItemProps(
     onAddTag: menus.onAddTag,
     onRemoveTag: menus.onRemoveTag,
     onOpenCustomTagDialog: menus.onOpenCustomTagDialog,
+    onMoveToZone: menus.onMoveToZone,
     onDeleteCard: menus.onDeleteCard,
   }
 }

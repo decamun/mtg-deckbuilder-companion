@@ -16,6 +16,7 @@ describe('parseDecklistLine', () => {
       setCode: 'M11',
       collectorNumber: '146',
       foil: true,
+      zone: 'mainboard',
     })
   })
 
@@ -23,6 +24,22 @@ describe('parseDecklistLine', () => {
     expect(parseDecklistLine('')).toBeNull()
     expect(parseDecklistLine('// comment')).toBeNull()
     expect(parseDecklist('1 Sol Ring\n# note\n\n1 Arcane Signet')).toHaveLength(2)
+  })
+
+  it('detects sideboard and maybeboard section markers', () => {
+    const result = parseDecklist(
+      '1 Sol Ring\n// Sideboard\n1 Tormod\'s Crypt\n// Maybeboard\n1 Opt'
+    )
+    expect(result).toHaveLength(3)
+    expect(result[0]?.zone).toBe('mainboard')
+    expect(result[1]?.zone).toBe('sideboard')
+    expect(result[2]?.zone).toBe('maybeboard')
+  })
+
+  it('detects SB: inline sideboard prefix', () => {
+    const result = parseDecklist('SB: 2 Tormod\'s Crypt')
+    expect(result).toHaveLength(1)
+    expect(result[0]?.zone).toBe('sideboard')
   })
 })
 

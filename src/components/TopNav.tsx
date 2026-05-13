@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { IdlebrewLogo } from "@/components/IdlebrewLogo"
 import { supabase } from "@/lib/supabase/client"
 import {
@@ -57,6 +57,7 @@ function navLinkIsActive(
 export function TopNav() {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { guestDeckNav } = useTopNavDeckGuest()
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const currentPath = pathname ?? ""
@@ -64,6 +65,12 @@ export function TopNav() {
   const isScrollShellPage = SHELL_PATHS.has(currentPath)
   const activePath = isScrollShellPage ? visiblePath ?? currentPath : currentPath
   const [loginOpen, setLoginOpen] = useState(false)
+
+  // Determine if "Boards" nav entry should appear and its href/active state.
+  // When on a deck workspace, it navigates to the boards tab of the current deck.
+  const isDeckWs = isDeckWorkspacePath(currentPath)
+  const boardsHref = isDeckWs ? `${currentPath}?tab=boards` : "/decks"
+  const boardsActive = isDeckWs && (searchParams?.get("tab") === "boards")
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -164,6 +171,19 @@ export function TopNav() {
                 </Link>
               )
             },
+          )}
+          {/* Boards nav entry — visible on authenticated deck workspace pages */}
+          {user && isDeckWs && (
+            <Link
+              href={boardsHref}
+              className={`rounded-md px-2 sm:px-4 py-1.5 text-sm font-medium transition-colors ${
+                boardsActive
+                  ? "border border-primary/20 bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              Boards
+            </Link>
           )}
         </nav>
 
