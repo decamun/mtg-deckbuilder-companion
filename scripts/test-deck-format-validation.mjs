@@ -25,8 +25,32 @@ function emitModule(sourcePath, outPath, replacements = []) {
 }
 
 emitModule('src/lib/game-changers.ts', 'game-changers.mjs')
+emitModule('src/lib/zones.ts', 'zones.mjs')
+
+let chSource = readFileSync(join(repoRoot, 'src/lib/canadian-highlander-rules.ts'), 'utf8')
+const chJson = JSON.parse(
+  readFileSync(join(repoRoot, 'src/data/canadian-highlander-rules.json'), 'utf8')
+)
+chSource = chSource.replace(
+  /import CANADIAN_HIGHLANDER_RULES_JSON from ['"]@\/data\/canadian-highlander-rules\.json['"]\s*/,
+  `const CANADIAN_HIGHLANDER_RULES_JSON = ${JSON.stringify(chJson)};\n`
+)
+chSource = chSource.replace(/from ['"]@\/lib\/zones['"]/, "from './zones.mjs'")
+const chEmitted = ts.transpileModule(chSource, {
+  compilerOptions: {
+    module: ts.ModuleKind.ES2022,
+    target: ts.ScriptTarget.ES2022,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    esModuleInterop: true,
+    strict: true,
+  },
+}).outputText
+writeFileSync(join(tmp, 'canadian-highlander-rules.mjs'), chEmitted)
+
 emitModule('src/lib/deck-format-validation.ts', 'deck-format-validation.mjs', [
   ["from '@/lib/game-changers'", "from './game-changers.mjs'"],
+  ["from '@/lib/canadian-highlander-rules'", "from './canadian-highlander-rules.mjs'"],
+  ["from '@/lib/zones'", "from './zones.mjs'"],
 ])
 
 const vf = await import(pathToFileURL(join(tmp, 'deck-format-validation.mjs')).href)
@@ -52,7 +76,7 @@ const deck = [
     quantity: 1,
     zone: 'mainboard',
     color_identity: ['G'],
-    legalities: { commander: 'legal' },
+    legalities: { commander: 'legal', standard: 'legal' },
   },
   {
     id: '2',
@@ -62,7 +86,7 @@ const deck = [
     quantity: 2,
     zone: 'mainboard',
     color_identity: ['G'],
-    legalities: { commander: 'legal' },
+    legalities: { commander: 'legal', standard: 'legal' },
   },
 ]
 
@@ -79,6 +103,24 @@ const r2 = vf.validateDeckForFormat('standard', {
   bracket: null,
 })
 assert.equal(r2.violationsByCardId.size, 0)
+
+const hundredPlains = Array.from({ length: 100 }, (_, i) => ({
+  id: `p-${i}`,
+  scryfall_id: `plains-${i}`,
+  oracle_id: 'bc71ebf6-2056-41f7-be35-b2e5c34afa99',
+  name: 'Plains',
+  quantity: 1,
+  zone: 'mainboard',
+  type_line: 'Basic Land — Plains',
+  legalities: {},
+}))
+const rCan = vf.validateDeckForFormat('canlander', {
+  cards: hundredPlains,
+  commanderScryfallIds: [],
+  bracket: null,
+})
+assert.equal(rCan.deckViolations.length, 0)
+assert.equal(rCan.violationsByCardId.size, 0)
 
 rmSync(tmp, { recursive: true })
 console.log('deck-format-validation tests passed')

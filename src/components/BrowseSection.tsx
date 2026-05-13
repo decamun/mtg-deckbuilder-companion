@@ -46,6 +46,7 @@ const FORMAT_OPTIONS = [
   { value: "legacy", label: "Legacy" },
   { value: "vintage", label: "Vintage" },
   { value: "pauper", label: "Pauper" },
+  { value: "canlander", label: "Canadian Highlander" },
   { value: "other", label: "Other" },
 ]
 

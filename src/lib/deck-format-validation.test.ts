@@ -13,6 +13,8 @@ import { MAINBOARD_ZONE_ID, MAYBEBOARD_ZONE_ID, SIDEBOARD_ZONE_ID } from '@/lib/
 describe('deck format validation helpers', () => {
   it('normalizes commander to edh and builds color clauses', () => {
     expect(normalizeFormatForValidation(' Commander ')).toBe('edh')
+    expect(normalizeFormatForValidation('Canadian Highlander')).toBe('canlander')
+    expect(normalizeFormatForValidation('canadian-highlander')).toBe('canlander')
     expect(colorIdentityScryfallClause(['W', 'U', 'W'])).toBe('id<=wu')
     expect(colorIdentityScryfallClause([])).toBe('id=c')
   })
@@ -38,12 +40,14 @@ describe('validateDeckForFormat', () => {
     expect(getFormatValidationStatus('legacy')).toBe('not_yet_implemented')
     expect(getFormatValidationStatus('vintage')).toBe('not_yet_implemented')
     expect(getFormatValidationStatus('pauper')).toBe('not_yet_implemented')
+    expect(getFormatValidationStatus('canlander')).toBe('implemented')
     expect(getFormatValidationStatus('other')).toBe('neutral')
     expect(getFormatValidationStatus(null)).toBe('neutral')
     expect(isFormatValidationImplemented('edh')).toBe(true)
     expect(isFormatValidationImplemented('standard')).toBe(true)
     expect(getFormatValidationDataVersion('edh')).toContain('game-changers:')
     expect(getFormatValidationDataVersion('standard')).toContain('standard-live-legalities+scryfall')
+    expect(getFormatValidationDataVersion('canlander')).toContain('canlander-artifacts:')
   })
 
   it('flags constructed format legality, 5th copy, 61-card mainboard, and oversized sideboard', () => {
@@ -192,6 +196,78 @@ describe('validateDeckForFormat', () => {
     expect(result.violationsByCardId.get('main-playset')).toBeUndefined()
     expect(result.violationsByCardId.get('maybe-copy')).toBeUndefined()
     expect(result.violationsByCardId.get('maybe-banned')).toBeUndefined()
+  })
+
+  it('validates Canadian Highlander deck size, singleton basics, and bundled points snapshot', () => {
+    const plainsOracle = 'bc71ebf6-2056-41f7-be35-b2e5c34afa99'
+    const hundredBasics = Array.from({ length: 100 }, (_, i) => ({
+      id: `p-${i}`,
+      scryfall_id: `plains-${i}`,
+      oracle_id: plainsOracle,
+      name: 'Plains',
+      quantity: 1,
+      zone: MAINBOARD_ZONE_ID,
+      type_line: 'Basic Land — Plains',
+      legalities: {},
+    }))
+    const ok = validateDeckForFormat('canlander', { cards: hundredBasics, commanderScryfallIds: [] })
+    expect(ok.status).toBe('implemented')
+    expect(ok.deckViolations).toEqual([])
+    expect(ok.violationsByCardId.size).toBe(0)
+
+    const short = hundredBasics.slice(0, 99)
+    const shortResult = validateDeckForFormat('canlander', { cards: short, commanderScryfallIds: [] })
+    expect(shortResult.deckViolations.some((m) => m.includes('100 cards'))).toBe(true)
+
+    const timeWalkOracle = 'd0209d3f-3f7e-4fd5-bce5-10bce6f29c86'
+    const thoracleOracle = '1de1b591-a73f-4974-b507-8c63e07a0868'
+    const oneRingOracle = '3aa83ed2-f48b-4ce6-a614-2c54ddf50538'
+    const fillers = Array.from({ length: 97 }, (_, i) => ({
+      id: `f-${i}`,
+      scryfall_id: `f-${i}`,
+      oracle_id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      name: `Filler ${i}`,
+      quantity: 1,
+      zone: MAINBOARD_ZONE_ID,
+      type_line: 'Creature — Filler',
+      legalities: {},
+    }))
+    const overPointsDeck = [
+      ...fillers,
+      {
+        id: 'tw',
+        scryfall_id: 'tw',
+        oracle_id: timeWalkOracle,
+        name: 'Time Walk',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        type_line: 'Sorcery',
+        legalities: {},
+      },
+      {
+        id: 'th',
+        scryfall_id: 'th',
+        oracle_id: thoracleOracle,
+        name: "Thassa's Oracle",
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        type_line: 'Creature — Merfolk Wizard',
+        legalities: {},
+      },
+      {
+        id: 'tor',
+        scryfall_id: 'tor',
+        oracle_id: oneRingOracle,
+        name: 'The One Ring',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        type_line: 'Legendary Artifact',
+        legalities: {},
+      },
+    ]
+    const over = validateDeckForFormat('canlander', { cards: overPointsDeck, commanderScryfallIds: [] })
+    expect(over.deckViolations.some((m) => m.includes('points'))).toBe(true)
+    expect(over.violationsByCardId.get('tw')?.some((r) => r.includes('Contributes'))).toBe(true)
   })
 
   it('uses per-format Scryfall legality for Pioneer and Modern', () => {

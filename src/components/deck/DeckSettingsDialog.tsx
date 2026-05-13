@@ -127,6 +127,7 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
                 <SelectItem value="legacy">Legacy</SelectItem>
                 <SelectItem value="vintage">Vintage</SelectItem>
                 <SelectItem value="pauper">Pauper</SelectItem>
+                <SelectItem value="canlander">Canadian Highlander</SelectItem>
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
