@@ -12,6 +12,7 @@ import {
   validateDeckForFormat,
   type FormatValidationCard,
 } from '@/lib/deck-format-validation'
+import { DEFAULT_CARD_ZONE_ID, zoneCountsTowardMainDeck } from '@/lib/zones'
 
 /** Card shape for analytics + Commander format hints (matches hydrated deck rows). */
 export interface DeckStatsCard {
@@ -591,7 +592,7 @@ function asValidationCards(cards: DeckStatsCard[]): FormatValidationCard[] {
     oracle_id: c.oracle_id ?? null,
     name: c.name,
     quantity: c.quantity,
-    zone: c.zone ?? 'mainboard',
+    zone: c.zone ?? DEFAULT_CARD_ZONE_ID,
     type_line: c.type_line,
     oracle_text: c.oracle_text,
     color_identity: c.color_identity,
@@ -642,7 +643,9 @@ export interface DeckStatsReport {
 
 export function computeDeckStatsReport(deck: DeckRow, allCards: DeckStatsCard[]): DeckStatsReport {
   const commanderIds = deck.commander_scryfall_ids ?? []
-  const mainboard = allCards.filter(c => !commanderIds.includes(c.scryfall_id))
+  const mainboard = allCards.filter(
+    c => !commanderIds.includes(c.scryfall_id) && zoneCountsTowardMainDeck(c.zone)
+  )
   const commanders = allCards.filter(c => commanderIds.includes(c.scryfall_id))
 
   let sumPrice = 0

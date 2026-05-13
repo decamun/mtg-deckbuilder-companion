@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DeckCard } from '@/lib/types'
+import { MAINBOARD_ZONE_ID, MAYBEBOARD_ZONE_ID, SIDEBOARD_ZONE_ID } from '@/lib/zones'
 import { parseDecklist, parseDecklistLine, resolveDecklist } from '@/lib/decklist-import'
 import { getCardBySetAndCN, getCardsCollection } from '@/lib/scryfall'
 
@@ -16,7 +17,7 @@ describe('parseDecklistLine', () => {
       setCode: 'M11',
       collectorNumber: '146',
       foil: true,
-      zone: 'mainboard',
+      zone: MAINBOARD_ZONE_ID,
     })
   })
 
@@ -31,15 +32,15 @@ describe('parseDecklistLine', () => {
       '1 Sol Ring\n// Sideboard\n1 Tormod\'s Crypt\n// Maybeboard\n1 Opt'
     )
     expect(result).toHaveLength(3)
-    expect(result[0]?.zone).toBe('mainboard')
-    expect(result[1]?.zone).toBe('sideboard')
-    expect(result[2]?.zone).toBe('maybeboard')
+    expect(result[0]?.zone).toBe(MAINBOARD_ZONE_ID)
+    expect(result[1]?.zone).toBe(SIDEBOARD_ZONE_ID)
+    expect(result[2]?.zone).toBe(MAYBEBOARD_ZONE_ID)
   })
 
   it('detects SB: inline sideboard prefix', () => {
     const result = parseDecklist('SB: 2 Tormod\'s Crypt')
     expect(result).toHaveLength(1)
-    expect(result[0]?.zone).toBe('sideboard')
+    expect(result[0]?.zone).toBe(SIDEBOARD_ZONE_ID)
   })
 })
 
@@ -88,7 +89,7 @@ describe('resolveDecklist', () => {
         oracle_id: 'wear-tear-oracle',
         printing_scryfall_id: 'wear-tear-printing',
         finish: 'nonfoil',
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
       },
     ])
     expect(result.warnings).toContain(
@@ -117,7 +118,7 @@ describe('resolveDecklist', () => {
         scryfall_id: 'sol-ring-scryfall',
         name: 'Sol Ring',
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         tags: [],
         printing_scryfall_id: 'existing-printing',
         finish: 'foil',

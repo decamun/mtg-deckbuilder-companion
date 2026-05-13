@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { DeckRow } from '@/lib/deck-service'
 import {
+  MAINBOARD_ZONE_ID,
+  MAYBEBOARD_ZONE_ID,
+  SIDEBOARD_ZONE_ID,
+} from '@/lib/zones'
+import {
   buildManaCurveData,
   computeDeckStatsReport,
   countLandSources,
@@ -17,7 +22,7 @@ function makeCard(overrides: Partial<DeckStatsCard> = {}): DeckStatsCard {
     scryfall_id: overrides.scryfall_id ?? 'scryfall-id',
     name: overrides.name ?? 'Card Name',
     quantity: overrides.quantity ?? 1,
-    zone: overrides.zone ?? 'mainboard',
+    zone: overrides.zone ?? MAINBOARD_ZONE_ID,
     type_line: overrides.type_line ?? 'Creature',
     mana_cost: overrides.mana_cost ?? '',
     oracle_text: overrides.oracle_text ?? '',
@@ -181,5 +186,30 @@ describe('computeDeckStatsReport', () => {
     expect(manaCurve.grid.C[2].count).toBe(1)
     expect(manaCurve.grid.G[3].count).toBe(1)
     expect(manaCurve.grid.G[4].count).toBe(1)
+  })
+
+  it('excludes maybeboard and sideboard from mainboard_quantity while keeping total_card_quantity', () => {
+    const deck: DeckRow = {
+      id: 'deck-2',
+      user_id: 'user-1',
+      name: 'Zoned',
+      format: 'Commander',
+      description: null,
+      is_public: false,
+      budget_usd: null,
+      bracket: null,
+      cover_image_scryfall_id: null,
+      commander_scryfall_ids: [],
+      primer_markdown: '',
+      created_at: '2026-01-01T00:00:00.000Z',
+    }
+    const cards: DeckStatsCard[] = [
+      makeCard({ id: 'm1', scryfall_id: 'a', name: 'A', quantity: 1, zone: MAINBOARD_ZONE_ID }),
+      makeCard({ id: 'm2', scryfall_id: 'b', name: 'B', quantity: 2, zone: MAYBEBOARD_ZONE_ID }),
+      makeCard({ id: 'm3', scryfall_id: 'c', name: 'C', quantity: 3, zone: SIDEBOARD_ZONE_ID }),
+    ]
+    const report = computeDeckStatsReport(deck, cards)
+    expect(report.counts.total_card_quantity).toBe(6)
+    expect(report.counts.mainboard_quantity).toBe(1)
   })
 })

@@ -13,6 +13,21 @@
  * the migration that defines them.
  */
 
+/** Canonical zone id stored in `deck_cards.zone` for the primary deck. */
+export const MAINBOARD_ZONE_ID = 'mainboard' as const
+
+/** Canonical zone id for the sideboard (when the format uses one). */
+export const SIDEBOARD_ZONE_ID = 'sideboard' as const
+
+/** Canonical zone id for cards under consideration (excluded from legality counts). */
+export const MAYBEBOARD_ZONE_ID = 'maybeboard' as const
+
+/**
+ * Fallback when `zone` is null, undefined, or blank — matches the DB default
+ * on `deck_cards.zone`.
+ */
+export const DEFAULT_CARD_ZONE_ID = MAINBOARD_ZONE_ID
+
 export interface ZoneDefinition {
   /** Value stored in `deck_cards.zone`. */
   id: string
@@ -62,7 +77,7 @@ export const SIDEBOARD_FORMATS = [
 
 export const ZONE_REGISTRY: ZoneDefinition[] = [
   {
-    id: 'mainboard',
+    id: MAINBOARD_ZONE_ID,
     label: 'Mainboard',
     countsTowardMainDeck: true,
     isFormatValidated: true,
@@ -73,7 +88,7 @@ export const ZONE_REGISTRY: ZoneDefinition[] = [
     maxCards: null,
   },
   {
-    id: 'sideboard',
+    id: SIDEBOARD_ZONE_ID,
     label: 'Sideboard',
     countsTowardMainDeck: false,
     isFormatValidated: true,
@@ -89,7 +104,7 @@ export const ZONE_REGISTRY: ZoneDefinition[] = [
     maxCards: 15,
   },
   {
-    id: 'maybeboard',
+    id: MAYBEBOARD_ZONE_ID,
     label: 'Maybeboard',
     countsTowardMainDeck: false,
     isFormatValidated: false,
@@ -170,6 +185,29 @@ export function isZoneLockedForFormat(
 
 /** Set of all zone ids defined in the registry. Used to distinguish custom zones from canonical ones. */
 export const REGISTRY_ZONE_IDS: ReadonlySet<string> = new Set(ZONE_REGISTRY.map((z) => z.id))
+
+/** Normalize a stored zone value for comparisons (empty → {@link DEFAULT_CARD_ZONE_ID}). */
+export function normalizeCardZone(zone: string | null | undefined): string {
+  const t = zone?.trim()
+  return t || DEFAULT_CARD_ZONE_ID
+}
+
+/**
+ * True when this zone participates in "main deck" analytics and export sections
+ * (see {@link ZoneDefinition.countsTowardMainDeck}). Unknown / custom zones are false.
+ */
+export function zoneCountsTowardMainDeck(zone: string | null | undefined): boolean {
+  const z = normalizeCardZone(zone)
+  return ZONE_BY_ID.get(z)?.countsTowardMainDeck === true
+}
+
+export function isSideboardZone(zone: string | null | undefined): boolean {
+  return normalizeCardZone(zone) === SIDEBOARD_ZONE_ID
+}
+
+export function isMaybeboardZone(zone: string | null | undefined): boolean {
+  return normalizeCardZone(zone) === MAYBEBOARD_ZONE_ID
+}
 
 /**
  * Sanitize a user-provided board name into a valid zone id.

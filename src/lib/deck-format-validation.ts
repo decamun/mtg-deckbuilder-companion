@@ -12,6 +12,7 @@ import {
   type Bracket,
   isGameChanger,
 } from '@/lib/game-changers'
+import { zoneCountsTowardMainDeck } from '@/lib/zones'
 
 const MANA = new Set(['W', 'U', 'B', 'R', 'G'])
 
@@ -102,7 +103,7 @@ function validateEdh(ctx: {
     s.add(reason)
   }
 
-  const mainboard = ctx.cards.filter((c) => (c.zone ?? 'mainboard') === 'mainboard')
+  const mainboard = ctx.cards.filter((c) => zoneCountsTowardMainDeck(c.zone))
   const commanderRows = ctx.cards.filter((c) => ctx.commanderScryfallIds.includes(c.scryfall_id))
   const canAssessColorIdentity =
     ctx.commanderScryfallIds.length > 0 &&
