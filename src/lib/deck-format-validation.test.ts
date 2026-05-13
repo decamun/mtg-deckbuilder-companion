@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   colorIdentityScryfallClause,
+  getConstructedCopyLimitViolations,
   getFormatValidationDataVersion,
   getFormatValidationStatus,
   isFormatValidationImplemented,
   normalizeFormatForValidation,
   validateDeckForFormat,
 } from '@/lib/deck-format-validation'
-import { MAINBOARD_ZONE_ID, MAYBEBOARD_ZONE_ID } from '@/lib/zones'
+import { MAINBOARD_ZONE_ID, MAYBEBOARD_ZONE_ID, SIDEBOARD_ZONE_ID } from '@/lib/zones'
 
 describe('deck format validation helpers', () => {
   it('normalizes commander to edh and builds color clauses', () => {
@@ -182,5 +183,116 @@ describe('validateDeckForFormat', () => {
 
     expect(result.violationsByCardId.get('main-copy')).toBeUndefined()
     expect(result.violationsByCardId.get('maybe-copy')).toBeUndefined()
+  })
+})
+
+describe('getConstructedCopyLimitViolations', () => {
+  it('aggregates split/MDFC/adventure copies by oracle id across mainboard + sideboard', () => {
+    const result = getConstructedCopyLimitViolations('standard', [
+      {
+        id: 'split-main',
+        scryfall_id: 'split-main-printing',
+        oracle_id: 'split-oracle',
+        name: 'Fire // Ice',
+        quantity: 3,
+        zone: MAINBOARD_ZONE_ID,
+        type_line: 'Instant // Instant',
+      },
+      {
+        id: 'split-side',
+        scryfall_id: 'split-side-printing',
+        oracle_id: 'split-oracle',
+        name: 'Fire // Ice',
+        quantity: 2,
+        zone: SIDEBOARD_ZONE_ID,
+        type_line: 'Instant // Instant',
+      },
+      {
+        id: 'mdfc-main',
+        scryfall_id: 'mdfc-main-printing',
+        oracle_id: 'mdfc-oracle',
+        name: 'Bala Ged Recovery // Bala Ged Sanctuary',
+        quantity: 2,
+        zone: MAINBOARD_ZONE_ID,
+        type_line: 'Sorcery // Land',
+      },
+      {
+        id: 'mdfc-side',
+        scryfall_id: 'mdfc-side-printing',
+        oracle_id: 'mdfc-oracle',
+        name: 'Bala Ged Recovery // Bala Ged Sanctuary',
+        quantity: 3,
+        zone: SIDEBOARD_ZONE_ID,
+        type_line: 'Sorcery // Land',
+      },
+      {
+        id: 'adventure-main',
+        scryfall_id: 'adventure-main-printing',
+        oracle_id: 'adventure-oracle',
+        name: 'Bonecrusher Giant // Stomp',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        type_line: 'Creature — Giant // Instant — Adventure',
+      },
+      {
+        id: 'adventure-side',
+        scryfall_id: 'adventure-side-printing',
+        oracle_id: 'adventure-oracle',
+        name: 'Bonecrusher Giant // Stomp',
+        quantity: 4,
+        zone: SIDEBOARD_ZONE_ID,
+        type_line: 'Creature — Giant // Instant — Adventure',
+      },
+    ])
+
+    expect(result.get('split-main')).toContain('More than 4 copies across main + side')
+    expect(result.get('split-side')).toContain('More than 4 copies across main + side')
+    expect(result.get('mdfc-main')).toContain('More than 4 copies across main + side')
+    expect(result.get('mdfc-side')).toContain('More than 4 copies across main + side')
+    expect(result.get('adventure-main')).toContain('More than 4 copies across main + side')
+    expect(result.get('adventure-side')).toContain('More than 4 copies across main + side')
+  })
+
+  it('ignores maybeboard rows and any-number/basic exceptions', () => {
+    const result = getConstructedCopyLimitViolations('standard', [
+      {
+        id: 'main-copy',
+        scryfall_id: 'main-printing',
+        oracle_id: 'same-oracle',
+        name: 'Relentless Rats',
+        quantity: 4,
+        zone: MAINBOARD_ZONE_ID,
+        oracle_text: 'A deck can have any number of cards named Relentless Rats.',
+      },
+      {
+        id: 'maybe-copy',
+        scryfall_id: 'maybe-printing',
+        oracle_id: 'same-oracle',
+        name: 'Relentless Rats',
+        quantity: 99,
+        zone: MAYBEBOARD_ZONE_ID,
+        oracle_text: 'A deck can have any number of cards named Relentless Rats.',
+      },
+      {
+        id: 'basic-main',
+        scryfall_id: 'island-main',
+        oracle_id: 'island-oracle',
+        name: 'Island',
+        quantity: 20,
+        zone: MAINBOARD_ZONE_ID,
+        type_line: 'Basic Land — Island',
+      },
+      {
+        id: 'basic-side',
+        scryfall_id: 'island-side',
+        oracle_id: 'island-oracle',
+        name: 'Island',
+        quantity: 20,
+        zone: SIDEBOARD_ZONE_ID,
+        type_line: 'Basic Land — Island',
+      },
+    ])
+
+    expect(result.size).toBe(0)
   })
 })

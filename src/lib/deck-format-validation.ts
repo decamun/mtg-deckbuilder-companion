@@ -12,7 +12,7 @@ import {
   type Bracket,
   isGameChanger,
 } from '@/lib/game-changers'
-import { zoneCountsTowardMainDeck } from '@/lib/zones'
+import { getZonesForFormat, normalizeCardZone, zoneCountsTowardMainDeck } from '@/lib/zones'
 
 const MANA = new Set(['W', 'U', 'B', 'R', 'G'])
 
@@ -82,6 +82,45 @@ export function oracleTextIgnoresSingletonCap(oracleText: string | undefined): b
     o.includes('your deck can have any number of cards named') ||
     o.includes('the deck has any number of cards named')
   )
+}
+
+function copyLimitAggregationKey(card: Pick<FormatValidationCard, 'oracle_id' | 'scryfall_id'>): string {
+  return card.oracle_id ?? card.scryfall_id
+}
+
+export function getConstructedCopyLimitViolations(
+  format: string | null | undefined,
+  cards: readonly FormatValidationCard[],
+  maxCopies = 4
+): ReadonlyMap<string, readonly string[]> {
+  const validatingZones = new Set(
+    getZonesForFormat(format).filter((zone) => zone.isFormatValidated).map((zone) => zone.id)
+  )
+  const counted = cards.filter(
+    (card) =>
+      validatingZones.has(normalizeCardZone(card.zone)) &&
+      !isBasicLandTypeLine(card.type_line) &&
+      !oracleTextIgnoresSingletonCap(card.oracle_text)
+  )
+  const copyTotals = new Map<string, number>()
+  for (const card of counted) {
+    const key = copyLimitAggregationKey(card)
+    const prev = copyTotals.get(key) ?? 0
+    copyTotals.set(key, prev + card.quantity)
+  }
+
+  const overCapKeys = new Set(
+    [...copyTotals].filter(([, quantity]) => quantity > maxCopies).map(([key]) => key)
+  )
+  if (overCapKeys.size === 0) return new Map()
+
+  const violations = new Map<string, string[]>()
+  for (const card of counted) {
+    const key = copyLimitAggregationKey(card)
+    if (!overCapKeys.has(key)) continue
+    violations.set(card.id, [`More than ${maxCopies} copies across main + side`])
+  }
+  return violations
 }
 
 function commanderLegalityStatus(legalities: Record<string, string> | undefined): string | undefined {
