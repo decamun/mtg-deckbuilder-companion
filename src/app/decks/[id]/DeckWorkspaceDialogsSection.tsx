@@ -58,6 +58,8 @@ export type DeckWorkspaceDialogsSectionProps = {
   maxCopiesPerLine: number
   boardDialogOpen: boolean
   setBoardDialogOpen: (v: boolean) => void
+  /** Number of deck rows being moved (for plural dialog copy). */
+  customBoardTargetCount: number
   customBoardInput: string
   setCustomBoardInput: (v: string) => void
   customBoardError: string | null
@@ -321,7 +323,12 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
         <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Move to Custom Board</DialogTitle>
-            <DialogDescription>Enter a name for the new board. The card will be moved to it immediately.</DialogDescription>
+            <DialogDescription>
+              Enter a name for the new board.{" "}
+              {props.customBoardTargetCount <= 1
+                ? "The card will be moved to it immediately."
+                : `All ${props.customBoardTargetCount} selected cards will be moved to it immediately.`}
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-2">
             <Input
@@ -343,7 +350,7 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
               Cancel
             </Button>
             <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={props.handleCustomBoardSubmit} disabled={!props.customBoardInput.trim()}>
-              Move Card
+              {props.customBoardTargetCount <= 1 ? "Move card" : "Move cards"}
             </Button>
           </DialogFooter>
         </DialogContent>
