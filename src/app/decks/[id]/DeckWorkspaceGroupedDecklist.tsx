@@ -20,7 +20,6 @@ import {
   compareTypeGroupSectionKeys,
   deckCardDragId,
   groupSectionHeading,
-  primaryDeckCardImage,
   visualDeckCardChrome,
 } from "./deck-workspace-pure"
 import { TAG_GROUP_UNTAGGED } from "./deck-workspace-constants"
@@ -33,35 +32,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
 import { DeckWorkspaceCardRulesPreview, rulesHoverPayloadToArtImageUrl, rulesHoverPayloadToFields } from "./DeckWorkspaceCardRulesPreview"
-
-function DeckWorkspaceDockCardArtPreview({ imageUrl, label }: { imageUrl: string | null; label: string }) {
-  return (
-    <div
-      className={cn(
-        "pointer-events-none relative shrink-0 overflow-hidden rounded-lg border border-border/60 bg-zinc-100",
-        "aspect-[5/7] w-full max-w-[12.5rem] sm:w-44 sm:max-w-none",
-        "max-h-[min(36vh,19rem)] sm:max-h-[min(42vh,26rem)]"
-      )}
-    >
-      {imageUrl ? (
-        <>
-          <img
-            src={imageUrl}
-            alt={label ? `${label} art` : ""}
-            className="h-full w-full object-cover object-center scale-[1.18]"
-            draggable={false}
-          />
-          <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-black/[0.08]" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_22%,rgba(0,0,0,0.52)_92%)]" />
-        </>
-      ) : (
-        <div className="flex h-full min-h-[9rem] flex-col items-center justify-center px-2 text-center text-xs italic text-muted-foreground">
-          Hover a card for art
-        </div>
-      )}
-    </div>
-  )
-}
+import { DeckWorkspaceDockCardArtPreview } from "./DeckWorkspaceDockCardArtPreview"
 
 export type DeckWorkspaceGroupedDecklistProps = {
   groupedCards: Record<string, DeckCard[]>
@@ -73,7 +44,6 @@ export type DeckWorkspaceGroupedDecklistProps = {
   toggleAllSections: (allNames: string[], anchorEl: HTMLElement) => void
   cardDragDisabled: boolean
   deckLandQtyIncludingMdfc: number
-  commanderCards: DeckCard[]
   displayedCards: DeckCard[]
   displayedCommanderIds: string[]
   displayedCoverImageId: string | null
@@ -95,6 +65,8 @@ export type DeckWorkspaceGroupedDecklistProps = {
   overflowMenus: DeckWorkspaceOverflowMenusProps
   rulesHover: DeckRulesHoverPayload
   onDeckCardRulesPreviewHover: (card: DeckCard | null) => void
+  /** Right inset in px so fixed dock clears the deck assistant rail. */
+  dockRightInsetPx: number
 }
 
 export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklistProps) {
@@ -108,7 +80,6 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
     toggleAllSections,
     cardDragDisabled,
     deckLandQtyIncludingMdfc,
-    commanderCards,
     displayedCards,
     displayedCommanderIds,
     displayedCoverImageId,
@@ -130,44 +101,19 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
     overflowMenus,
     rulesHover,
     onDeckCardRulesPreviewHover,
+    dockRightInsetPx,
   } = props
 
   const previewFields = rulesHoverPayloadToFields(rulesHover)
   const artImageUrl = rulesHoverPayloadToArtImageUrl(rulesHover)
-  const hasCommanders = commanderCards.length > 0
 
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] hidden justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 md:flex">
-        <div className="pointer-events-none flex w-full max-w-7xl flex-col gap-2 rounded-xl border border-border bg-white p-3 text-foreground shadow-2xl">
-          {hasCommanders ? (
-            <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2 border-b border-border/60 pb-2">
-              {commanderCards.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="group flex max-w-full items-center gap-2 overflow-hidden rounded-lg border border-yellow-400/50 bg-white px-2 py-1.5 text-left text-foreground transition hover:border-yellow-300 sm:max-w-[14rem]"
-                  onClick={() => showClickedPreview(c, "Commander")}
-                  onMouseEnter={() => onDeckCardRulesPreviewHover(c)}
-                  onMouseLeave={() => onDeckCardRulesPreviewHover(null)}
-                >
-                  {primaryDeckCardImage(c) ? (
-                    <CardThumbnail card={c} className="h-11 shrink-0" imageClassName="h-11 w-auto rounded-md border border-border/60" overlayClassName="rounded-md" />
-                  ) : (
-                    <div className="flex aspect-[5/7] h-11 shrink-0 items-center justify-center rounded-md border border-border/40 bg-zinc-100">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/50" />
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <div className="mb-0.5 inline-flex items-center gap-1 rounded-full bg-yellow-400/90 px-1.5 py-0.5 text-[9px] font-bold uppercase text-yellow-950">
-                      <Crown className="h-2.5 w-2.5" /> CMD
-                    </div>
-                    <div className="truncate text-xs font-semibold text-foreground">{c.name}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : null}
+      <div
+        className="pointer-events-none fixed bottom-0 left-0 z-[60] hidden justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 md:flex"
+        style={{ right: dockRightInsetPx }}
+      >
+        <div className="pointer-events-none flex w-full max-w-7xl flex-col rounded-xl border border-border bg-white p-3 text-foreground shadow-2xl">
           <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row sm:items-stretch">
             <div
               className={cn(
@@ -177,7 +123,11 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
             >
               <DeckWorkspaceCardRulesPreview fields={previewFields} />
             </div>
-            <DeckWorkspaceDockCardArtPreview imageUrl={artImageUrl} label={previewFields?.name ?? ""} />
+            <DeckWorkspaceDockCardArtPreview
+              key={artImageUrl ?? ""}
+              imageUrl={artImageUrl}
+              label={previewFields?.name ?? ""}
+            />
           </div>
         </div>
       </div>
