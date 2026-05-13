@@ -20,6 +20,9 @@ import {
 } from '@/lib/zones'
 
 const MANA = new Set(['W', 'U', 'B', 'R', 'G'])
+const MIN_MAINBOARD_SIZE_BY_FORMAT: Readonly<Record<string, number>> = {
+  pauper: 60,
+}
 
 /** Minimal card shape for validation (DeckCard satisfies this). */
 export type FormatValidationCard = {
@@ -271,12 +274,15 @@ function getDeckZoneViolations(
   cards: FormatValidationCard[]
 ): string[] {
   const violations: string[] = []
-  if (format === 'pauper') {
+  const minMainboardSize = (format ? MIN_MAINBOARD_SIZE_BY_FORMAT[format] : undefined) ?? null
+  if (minMainboardSize != null) {
     const mainDeckQuantity = cards
       .filter((card) => zoneCountsTowardMainDeck(card.zone))
       .reduce((sum, card) => sum + card.quantity, 0)
-    if (mainDeckQuantity < 60) {
-      violations.push(`Mainboard must contain at least 60 cards (has ${mainDeckQuantity}).`)
+    if (mainDeckQuantity < minMainboardSize) {
+      violations.push(
+        `Mainboard must contain at least ${minMainboardSize} cards (has ${mainDeckQuantity}).`
+      )
     }
   }
 

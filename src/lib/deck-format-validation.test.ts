@@ -207,7 +207,7 @@ describe('validateDeckForFormat', () => {
     expect(commander.deckViolations).toEqual([])
   })
 
-  it('validates pauper legality and copy limits across mainboard and sideboard only', () => {
+  it('validates pauper legality and copy limits across validated zones while excluding maybeboard', () => {
     const cards = [
       {
         id: 'main-filler',
