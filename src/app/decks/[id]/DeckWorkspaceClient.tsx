@@ -923,7 +923,10 @@ export default function DeckWorkspaceClient({
       />
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-background/20 min-w-0">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto bg-background/20 min-w-0 [transform:translate3d(0,0,0)]"
+        >
           <div className="p-6 max-w-7xl mx-auto space-y-8">
         {tab === "decklist" && (
           <>
