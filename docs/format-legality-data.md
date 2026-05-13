@@ -15,7 +15,7 @@ This project uses a **live-first** legality pipeline for deck-format checks.
 
 ## Failure behavior
 
-- If Commander legality is missing from hydrated Scryfall data, validation emits `Commander legality data unavailable` (no silent “empty list means all legal” behavior).
+- If Commander legality is missing from hydrated Scryfall data, validation emits `Cannot validate Commander legality: missing data from Scryfall` (no silent “empty list means all legal” behavior).
 - If the fallback game-changer list is empty/malformed, `src/lib/game-changers.ts` throws on module load so startup/tests fail loudly.
 
 ## Refresh cadence and procedure
