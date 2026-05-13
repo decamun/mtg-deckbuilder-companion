@@ -19,7 +19,7 @@ describe('deck format validation helpers', () => {
 })
 
 describe('validateDeckForFormat', () => {
-  it('returns no violations for unsupported formats', () => {
+  it('returns neutral status for unknown formats', () => {
     const result = validateDeckForFormat('totally-unknown-format', {
       cards: [],
       commanderScryfallIds: [],
