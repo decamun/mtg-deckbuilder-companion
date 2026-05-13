@@ -285,7 +285,7 @@ function validateSixtyCardConstructed(
     }
   }
 
-  mergeViolationsInto(bucket, getConstructedCopyLimitViolations(format, cards))
+  mergeViolationsInto(bucket, getConstructedCopyLimitViolations(format, cards, 4))
   return new Map(Array.from(bucket, ([id, set]) => [id, [...set]]))
 }
 

@@ -43,8 +43,8 @@ describe('validateDeckForFormat', () => {
     expect(isFormatValidationImplemented('edh')).toBe(true)
     expect(isFormatValidationImplemented('standard')).toBe(true)
     expect(getFormatValidationDataVersion('edh')).toContain('game-changers:')
-    expect(getFormatValidationDataVersion('standard')).toContain('standard-live-legalities+scryfall')
-    expect(getFormatValidationDataVersion('pauper')).toContain('pauper-live-legalities+scryfall')
+    expect(getFormatValidationDataVersion('standard')).toBe('standard-live-legalities+scryfall')
+    expect(getFormatValidationDataVersion('pauper')).toBe('pauper-live-legalities+scryfall')
   })
 
   it('flags constructed format legality, 5th copy, 61-card mainboard, and oversized sideboard', () => {
