@@ -537,6 +537,32 @@ describe('validateDeckForFormat', () => {
       'Restricted in Vintage (max 1 copy in validated deck zones)',
     )
     expect(result.violationsByCardId.get('restricted-maybe')).toBeUndefined()
+
+    const legalSingleRestricted = validateDeckForFormat('vintage', {
+      cards: [
+        {
+          id: 'single-restricted-main',
+          scryfall_id: 'single-restricted-main-id',
+          oracle_id: 'single-restricted-oracle',
+          name: 'Single Restricted',
+          quantity: 1,
+          zone: MAINBOARD_ZONE_ID,
+          legalities: { vintage: 'restricted' },
+        },
+        {
+          id: 'single-restricted-filler',
+          scryfall_id: 'single-restricted-filler-id',
+          oracle_id: 'single-restricted-filler-oracle',
+          name: 'Single Restricted Filler',
+          quantity: 59,
+          zone: MAINBOARD_ZONE_ID,
+          type_line: 'Basic Land — Plains',
+          legalities: { vintage: 'legal' },
+        },
+      ],
+      commanderScryfallIds: [],
+    })
+    expect(legalSingleRestricted.violationsByCardId.get('single-restricted-main')).toBeUndefined()
   })
 
   it('requires at least 60 mainboard cards in pauper', () => {
