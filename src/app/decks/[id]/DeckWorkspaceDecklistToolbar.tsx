@@ -32,20 +32,19 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {zones.length > 1 && (
-        <Select value={props.activeZone} onValueChange={(v) => v && props.onZoneChange(v)}>
-          <SelectTrigger className="w-36 bg-card border-border h-8 text-foreground">
-            <SelectValue placeholder="Board" />
-          </SelectTrigger>
-          <SelectContent className="bg-card border-border text-foreground">
-            {zones.map((z) => (
-              <SelectItem key={z.id} value={z.id}>
-                {z.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+      <Tabs value={props.viewMode} onValueChange={(v) => props.onViewModeChange(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
+        <TabsList className="h-7 bg-transparent">
+          <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
+            <LayoutGrid className="w-3.5 h-3.5" />
+          </TabsTrigger>
+          <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
+            <StackIcon className="w-3.5 h-3.5" />
+          </TabsTrigger>
+          <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
+            <List className="w-3.5 h-3.5" />
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
       <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">
         Card size
         <input
@@ -81,19 +80,20 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
           <SelectItem value="rarity">Rarity</SelectItem>
         </SelectContent>
       </Select>
-      <Tabs value={props.viewMode} onValueChange={(v) => props.onViewModeChange(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
-        <TabsList className="h-7 bg-transparent">
-          <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
-            <LayoutGrid className="w-3.5 h-3.5" />
-          </TabsTrigger>
-          <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
-            <StackIcon className="w-3.5 h-3.5" />
-          </TabsTrigger>
-          <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
-            <List className="w-3.5 h-3.5" />
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {zones.length > 1 && (
+        <Select value={props.activeZone} onValueChange={(v) => v && props.onZoneChange(v)}>
+          <SelectTrigger className="w-36 bg-card border-border h-8 text-foreground">
+            <SelectValue placeholder="Board" />
+          </SelectTrigger>
+          <SelectContent className="bg-card border-border text-foreground">
+            {zones.map((z) => (
+              <SelectItem key={z.id} value={z.id}>
+                {z.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
       {props.formatValidationStatus === 'not_yet_implemented' && props.formatDeckViolations.length > 0 && (
         <div className="max-w-[18rem] text-xs leading-snug text-muted-foreground">
           {props.formatDeckViolations.map((msg, index) => (
