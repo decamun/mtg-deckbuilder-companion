@@ -29,7 +29,6 @@ export type DeckWorkspaceOverflowMenusProps = {
   onRemoveTag: (cardId: string, tag: string) => void
   onOpenCustomTagDialog: (cardId: string) => void
   onDeleteCard: (cardId: string) => void
-  onClosePreview: () => void
 }
 
 /** Overflow menu fields used to build card action rows (excludes ghost-click ref only needed by ⋮ triggers). */
@@ -116,7 +115,6 @@ export function DeckWorkspacePreviewDropdownMenu(
         open
         onOpenChange={(next) => {
           if (next) void menus.ensurePrintingsLoaded(c)
-          else menus.onClosePreview()
         }}
       >
         <DropdownMenuTrigger
