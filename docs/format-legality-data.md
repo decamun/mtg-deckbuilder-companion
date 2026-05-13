@@ -20,7 +20,7 @@ This project uses a **live-first** legality pipeline for deck-format checks.
 
 ## Refresh cadence and procedure
 
-- **Scryfall legality data**: live at request time (no artifact refresh needed).
+- **Scryfall legality data**: live when deck cards are hydrated from Scryfall (editor + deck stats), so legality updates are picked up on subsequent card fetches without an artifact refresh.
 - **Game-changer fallback list**: refresh manually when WotC updates the bracket list.
   1. Update names and bump `GAME_CHANGER_DATA_VERSION` in `src/lib/game-changers.ts`.
   2. Run `npm test` and `npm run test:deck-format`.

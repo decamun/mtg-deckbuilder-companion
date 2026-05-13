@@ -145,7 +145,7 @@ describe('validateDeckForFormat', () => {
     })
 
     expect(result.violationsByCardId.get('missing-legalities')).toContain(
-      'Commander legality data unavailable',
+      'Cannot validate Commander legality: missing data from Scryfall',
     )
   })
 })

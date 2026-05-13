@@ -115,7 +115,7 @@ function validateEdh(ctx: {
   for (const c of mainboard) {
     const status = commanderLegalityStatus(c.legalities)
     if (status === undefined) {
-      add(c.id, 'Commander legality data unavailable')
+      add(c.id, 'Cannot validate Commander legality: missing data from Scryfall')
     } else if (status === 'banned') {
       add(c.id, 'Banned in Commander')
     } else if (status === 'not_legal') {

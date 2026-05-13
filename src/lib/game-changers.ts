@@ -65,7 +65,7 @@ export const GAME_CHANGERS: ReadonlySet<string> = new Set(
 )
 
 if (GAME_CHANGERS.size === 0) {
-  throw new Error('Commander game-changer list is empty: refusing to start with invalid legality data.')
+  throw new Error('Commander game-changer list is empty: check NAMES in src/lib/game-changers.ts.')
 }
 
 export type Bracket = 1 | 2 | 3 | 4 | 5
