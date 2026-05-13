@@ -827,7 +827,6 @@ export default function DeckWorkspaceClient({
     onDeleteCard: (id) => {
       void deleteCard(id)
     },
-    onClosePreview: () => setClickedPreview(null),
   }
 
   if (accessDenied) {
