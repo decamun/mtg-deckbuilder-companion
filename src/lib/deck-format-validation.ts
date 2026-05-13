@@ -229,7 +229,9 @@ type DeckFormatValidatorDefinition = {
   validate?: (ctx: DeckFormatValidationContext) => ReadonlyMap<string, readonly string[]>
 }
 
-const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern'])
+const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern', 'pauper'])
+
+type SixtyCardConstructedFormat = 'standard' | 'pioneer' | 'modern' | 'pauper'
 
 function mergeViolationsInto(
   bucket: Map<string, Set<string>>,
@@ -258,7 +260,7 @@ function getOrCreateCardViolationSet(
 }
 
 function validateSixtyCardConstructed(
-  format: 'standard' | 'pioneer' | 'modern',
+  format: SixtyCardConstructedFormat,
   cards: FormatValidationCard[]
 ): ReadonlyMap<string, readonly string[]> {
   const bucket = new Map<string, Set<string>>()
@@ -283,7 +285,7 @@ function validateSixtyCardConstructed(
     }
   }
 
-  mergeViolationsInto(bucket, getConstructedCopyLimitViolations(format, cards))
+  mergeViolationsInto(bucket, getConstructedCopyLimitViolations(format, cards, 4))
   return new Map(Array.from(bucket, ([id, set]) => [id, [...set]]))
 }
 
@@ -333,7 +335,11 @@ const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> =
   },
   legacy: { label: 'Legacy', status: 'not_yet_implemented' },
   vintage: { label: 'Vintage', status: 'not_yet_implemented' },
-  pauper: { label: 'Pauper', status: 'not_yet_implemented' },
+  pauper: {
+    label: 'Pauper',
+    status: 'implemented',
+    validate: ({ cards }) => validateSixtyCardConstructed('pauper', cards),
+  },
   other: { label: 'Other', status: 'neutral' },
 }
 
