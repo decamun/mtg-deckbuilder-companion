@@ -234,7 +234,9 @@ type DeckFormatValidatorDefinition = {
   validate?: (ctx: DeckFormatValidationContext) => ValidatedFormatViolationBundle
 }
 
-const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern'])
+const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern', 'pauper'])
+
+type SixtyCardConstructedFormat = 'standard' | 'pioneer' | 'modern' | 'pauper'
 
 const CANADIAN_HIGHLANDER_FORMAT = 'canlander' as const
 
@@ -276,7 +278,7 @@ function getOrCreateCardViolationSet(
 }
 
 function validateSixtyCardConstructed(
-  format: 'standard' | 'pioneer' | 'modern',
+  format: SixtyCardConstructedFormat,
   cards: FormatValidationCard[]
 ): ValidatedFormatViolationBundle {
   const bucket = new Map<string, Set<string>>()
@@ -301,7 +303,7 @@ function validateSixtyCardConstructed(
     }
   }
 
-  mergeViolationsInto(bucket, getConstructedCopyLimitViolations(format, cards))
+  mergeViolationsInto(bucket, getConstructedCopyLimitViolations(format, cards, 4))
   return asViolationBundle(new Map(Array.from(bucket, ([id, set]) => [id, [...set]])))
 }
 
@@ -365,7 +367,11 @@ const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> =
   },
   legacy: { label: 'Legacy', status: 'not_yet_implemented' },
   vintage: { label: 'Vintage', status: 'not_yet_implemented' },
-  pauper: { label: 'Pauper', status: 'not_yet_implemented' },
+  pauper: {
+    label: 'Pauper',
+    status: 'implemented',
+    validate: ({ cards }) => validateSixtyCardConstructed('pauper', cards),
+  },
   other: { label: 'Other', status: 'neutral' },
 }
 

@@ -19,7 +19,7 @@ const TABS: { key: DeckTab; label: string }[] = [
 
 export function DeckTabs({ tab, onChange, afterTabs }: Props) {
   return (
-    <nav className="container mx-auto px-6 pt-4 flex flex-wrap items-end gap-x-6 gap-y-2 text-sm font-medium border-b border-border/40">
+    <nav className="container mx-auto flex flex-wrap items-end gap-x-6 gap-y-2 border-b border-border bg-background/80 px-6 pt-4 text-sm font-medium backdrop-blur-xl">
       <div className="flex gap-6">
         {TABS.map(t => {
           const active = tab === t.key

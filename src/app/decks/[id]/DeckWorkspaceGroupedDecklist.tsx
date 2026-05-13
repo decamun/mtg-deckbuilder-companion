@@ -113,11 +113,11 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
         className="pointer-events-none fixed bottom-0 left-0 z-[60] hidden justify-center px-4 pt-4 pb-0 md:flex"
         style={{ right: dockRightInsetPx }}
       >
-        <div className="pointer-events-none flex w-full max-w-7xl flex-col rounded-xl border border-border bg-white p-3 text-foreground shadow-sm">
+        <div className="pointer-events-none flex w-full max-w-7xl flex-col rounded-xl border border-border bg-background/80 p-3 text-foreground shadow-sm backdrop-blur-xl">
           <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row sm:items-stretch">
             <div
               className={cn(
-                "pointer-events-none min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-border/60 bg-white p-3",
+                "pointer-events-none min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-border/60 bg-transparent p-3",
                 "max-h-[min(38vh,22rem)] sm:max-h-[min(42vh,26rem)]"
               )}
             >
