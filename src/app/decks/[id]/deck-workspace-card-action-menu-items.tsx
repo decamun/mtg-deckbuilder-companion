@@ -40,6 +40,10 @@ export type DeckWorkspaceCardActionMenuItemsProps = {
   onRemoveTag: (cardId: string, tag: string) => void
   onOpenCustomTagDialog: (cardId: string) => void
   onDeleteCard: (cardId: string) => void
+  onAddOneToCard: (cardId: string) => void
+  onOpenAddQuantityDialog: (cardId: string) => void
+  onRemoveOneFromCard: (cardId: string) => void
+  onOpenRemoveQuantityDialog: (cardId: string) => void
 }
 
 export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionMenuItemsProps) {
@@ -61,6 +65,10 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
     onRemoveTag,
     onOpenCustomTagDialog,
     onDeleteCard,
+    onAddOneToCard,
+    onOpenAddQuantityDialog,
+    onRemoveOneFromCard,
+    onOpenRemoveQuantityDialog,
   } = props
 
   const finishes = c.available_finishes ?? ["nonfoil"]
@@ -115,6 +123,15 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
         <ImageIcon className="w-3.5 h-3.5 mr-2" />
         {coverActive ? "Remove Cover Image" : "Set as Cover Image"}
       </Item>
+      <Sep className="bg-border" />
+      <Item onClick={() => onAddOneToCard(c.id)}>Add 1</Item>
+      <Item onClick={() => onOpenAddQuantityDialog(c.id)}>Add n…</Item>
+      {c.quantity >= 2 && (
+        <Item onClick={() => onRemoveOneFromCard(c.id)}>Remove 1</Item>
+      )}
+      {c.quantity >= 4 && (
+        <Item onClick={() => onOpenRemoveQuantityDialog(c.id)}>Remove n…</Item>
+      )}
       <Sep className="bg-border" />
       <Sub>
         <SubTrigger onMouseEnter={() => void onEnsurePrintingsLoaded(c)}>Printing</SubTrigger>

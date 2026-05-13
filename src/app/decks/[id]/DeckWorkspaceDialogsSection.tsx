@@ -50,6 +50,12 @@ export type DeckWorkspaceDialogsSectionProps = {
   customTagInput: string
   setCustomTagInput: (v: string) => void
   handleCustomTagSubmit: () => void
+  cardQtyDialog: null | { mode: "add" | "remove"; cardId: string }
+  setCardQtyDialog: (v: null | { mode: "add" | "remove"; cardId: string }) => void
+  cardQtyDialogInput: string
+  setCardQtyDialogInput: React.Dispatch<React.SetStateAction<string>>
+  handleCardQtyDialogSubmit: () => void
+  maxCopiesPerLine: number
 }
 
 export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionProps) {
@@ -231,6 +237,77 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
               Add Tag
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!props.cardQtyDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            props.setCardQtyDialog(null)
+            props.setCardQtyDialogInput("")
+          }
+        }}
+      >
+        <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
+          {props.cardQtyDialog && (() => {
+            const d = props.cardQtyDialog
+            const card = props.cards.find((c) => c.id === d.cardId)
+            const isAdd = d.mode === "add"
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{isAdd ? "Add copies" : "Remove copies"}</DialogTitle>
+                  <DialogDescription>
+                    {card ? (
+                      <>
+                        <span className="font-medium text-foreground">{card.name}</span>
+                        {" "}
+                        — currently {card.quantity} in this deck
+                        {isAdd ? ` (max ${props.maxCopiesPerLine} per line).` : "."}
+                      </>
+                    ) : (
+                      "This card is no longer in the deck."
+                    )}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                  <Input
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    value={props.cardQtyDialogInput}
+                    onChange={(e) => props.setCardQtyDialogInput(e.target.value)}
+                    placeholder={isAdd ? "Number to add" : "Number to remove"}
+                    className="bg-background border-border text-foreground placeholder:text-muted-foreground"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") props.handleCardQtyDialogSubmit()
+                    }}
+                    autoFocus
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      props.setCardQtyDialog(null)
+                      props.setCardQtyDialogInput("")
+                    }}
+                    className="hover:bg-accent hover:text-accent-foreground"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className={isAdd ? "bg-primary hover:bg-primary/90 text-primary-foreground" : "bg-destructive hover:bg-destructive/90 text-destructive-foreground"}
+                    onClick={props.handleCardQtyDialogSubmit}
+                    disabled={!card}
+                  >
+                    {isAdd ? "Add" : "Remove"}
+                  </Button>
+                </DialogFooter>
+              </>
+            )
+          })()}
         </DialogContent>
       </Dialog>
     </>
