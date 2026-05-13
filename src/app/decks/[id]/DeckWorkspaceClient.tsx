@@ -917,6 +917,7 @@ export default function DeckWorkspaceClient({
   }, [cardsLoading, cardInteractionKey, grouping, sorting, viewMode])
 
   const showClickedPreview = (card: DeckCard, groupName: string) => {
+    if (performance.now() - formatHintsMenuClosedAtRef.current < 450) return
     setPreviewFaceIndex(0)
     setPreviewFormatHintsHovered(false)
     setClickedPreview({ card, groupName })

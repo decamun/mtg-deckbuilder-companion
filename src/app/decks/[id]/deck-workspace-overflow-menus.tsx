@@ -72,14 +72,12 @@ export function DeckWorkspaceThreeDotMenu(
     c: DeckCard
     groupName: string
     align?: "start" | "end"
-    fromFormatHintsDialog?: boolean
   }
 ) {
   const {
     c,
     groupName,
     align = "end",
-    fromFormatHintsDialog = false,
     formatHintsMenuClosedAtRef,
     ...menus
   } = props
@@ -88,7 +86,7 @@ export function DeckWorkspaceThreeDotMenu(
     <DropdownMenu
       onOpenChange={(open) => {
         if (open) void menus.ensurePrintingsLoaded(c)
-        else if (fromFormatHintsDialog) {
+        else {
           queueMicrotask(() => {
             formatHintsMenuClosedAtRef.current = performance.now()
           })
