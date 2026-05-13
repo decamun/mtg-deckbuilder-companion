@@ -22,6 +22,8 @@ import {
   computeStatsLineSummary,
   PROB_TURNS,
   SPIDER_COLOR_KEYS,
+  type SpiderColor,
+  type SpiderTotals,
   type OpeningMeasureId,
   type ProbRowValueKind,
   type CurveData,
@@ -886,27 +888,128 @@ function spiderPoint(cx: number, cy: number, r: number, axisIndex: number, axes:
   }
 }
 
+function colorsWithPips(totals: SpiderTotals): SpiderColor[] {
+  return SPIDER_COLOR_KEYS.filter(c => totals.pips[c] > 0)
+}
+
+function ColorBalanceBars({ colors, totals }: { colors: SpiderColor[]; totals: SpiderTotals }) {
+  const vbW = Math.max(200, colors.length * 88)
+  const vbH = 196
+  const padTop = 12
+  const padBottom = 40
+  const padLR = 20
+  const chartH = vbH - padTop - padBottom
+  const max = Math.max(
+    1,
+    ...colors.flatMap(c => [totals.production[c], totals.pips[c]]),
+  )
+
+  const innerW = vbW - padLR * 2
+  const slotW = innerW / Math.max(1, colors.length)
+  const baseY = padTop + chartH
+
+  return (
+    <svg
+      viewBox={`0 0 ${vbW} ${vbH}`}
+      className="w-full max-w-[300px] h-auto shrink-0"
+      role="img"
+      aria-label="Color production vs spell pips bar chart"
+    >
+      {[0.25, 0.5, 0.75, 1].map(t => {
+        const y = padTop + chartH * (1 - t)
+        return (
+          <line
+            key={t}
+            x1={padLR}
+            x2={vbW - padLR}
+            y1={y}
+            y2={y}
+            stroke="currentColor"
+            strokeOpacity={0.08}
+            className="text-muted-foreground"
+          />
+        )
+      })}
+      {colors.map((color, i) => {
+        const cx = padLR + slotW * (i + 0.5)
+        const bw = Math.min(20, slotW * 0.22)
+        const gap = 5
+        const prodH = (totals.production[color] / max) * chartH
+        const pipH = (totals.pips[color] / max) * chartH
+        return (
+          <g key={color}>
+            <rect
+              x={cx - bw - gap / 2}
+              y={baseY - prodH}
+              width={bw}
+              height={Math.max(prodH, 0)}
+              fill="#3d9a5a"
+              rx={2}
+            />
+            <rect
+              x={cx + gap / 2}
+              y={baseY - pipH}
+              width={bw}
+              height={Math.max(pipH, 0)}
+              fill="#d44545"
+              rx={2}
+            />
+            <circle
+              cx={cx}
+              cy={baseY + 22}
+              r={9}
+              fill={COLOR_META[color].fill}
+              stroke="currentColor"
+              strokeOpacity={0.3}
+              className="text-border"
+            />
+            <text
+              x={cx}
+              y={baseY + 22}
+              dy="0.35em"
+              textAnchor="middle"
+              fontSize="10"
+              fontWeight="700"
+              fill={COLOR_META[color].text}
+            >
+              {color}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
 function ColorSpider({ cards }: { cards: DeckStatsCard[] }) {
   const totals = useMemo(() => buildSpiderTotals(cards), [cards])
 
-  const max = Math.max(
-    1,
-    ...SPIDER_COLOR_KEYS.map(c => totals.production[c]),
-    ...SPIDER_COLOR_KEYS.map(c => totals.pips[c]),
-  )
+  const pipColors = useMemo(() => colorsWithPips(totals), [totals])
+  const showSpider = pipColors.length >= 3
+  const barColors: SpiderColor[] = useMemo(() => {
+    if (pipColors.length > 0) return pipColors
+    return SPIDER_COLOR_KEYS.filter(c => totals.production[c] > 0)
+  }, [pipColors, totals])
 
-  const niceMax = Math.ceil(max / 5) * 5 || 5
+  const spiderAxesColors = pipColors
+
+  const spiderMax = Math.max(
+    1,
+    ...spiderAxesColors.map(c => totals.production[c]),
+    ...spiderAxesColors.map(c => totals.pips[c]),
+  )
+  const niceMax = Math.ceil(spiderMax / 5) * 5 || 5
 
   const cx = 110
   const cy = 110
   const radius = 80
-  const axes = SPIDER_COLOR_KEYS.length
+  const axes = spiderAxesColors.length
   const ringCount = 4
 
-  const productionPoints = SPIDER_COLOR_KEYS.map((color, i) =>
+  const productionPoints = spiderAxesColors.map((color, i) =>
     spiderPoint(cx, cy, radius, i, axes, totals.production[color], niceMax),
   )
-  const pipPoints = SPIDER_COLOR_KEYS.map((color, i) =>
+  const pipPoints = spiderAxesColors.map((color, i) =>
     spiderPoint(cx, cy, radius, i, axes, totals.pips[color], niceMax),
   )
 
@@ -915,28 +1018,19 @@ function ColorSpider({ cards }: { cards: DeckStatsCard[] }) {
 
   const rings = Array.from({ length: ringCount }, (_, k) => {
     const ringR = ((k + 1) / ringCount) * radius
-    return SPIDER_COLOR_KEYS.map((_, i) => {
+    return spiderAxesColors.map((_, i) => {
       const angle = -Math.PI / 2 + (i * 2 * Math.PI) / axes
       return `${(cx + Math.cos(angle) * ringR).toFixed(1)},${(cy + Math.sin(angle) * ringR).toFixed(1)}`
     }).join(' ')
   })
 
   const hasAny = SPIDER_COLOR_KEYS.some(c => totals.production[c] > 0 || totals.pips[c] > 0)
+  const tableColors = showSpider ? spiderAxesColors : barColors
 
   return (
     <div className="rounded-lg border border-border bg-card/60 p-4">
-      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+      <div className="mb-3">
         <h3 className="font-heading text-base tracking-wider">Color Balance</h3>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: '#3d9a5a' }} />
-            <span>Production</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: '#d44545' }} />
-            <span>Pips on spells</span>
-          </div>
-        </div>
       </div>
 
       {!hasAny ? (
@@ -944,102 +1038,107 @@ function ColorSpider({ cards }: { cards: DeckStatsCard[] }) {
           Add cards with mana costs and lands to see the balance.
         </div>
       ) : (
-        <div className="flex flex-col md:flex-row items-center gap-4">
-          <svg
-            viewBox="0 0 220 220"
-            className="w-full max-w-[260px] h-auto"
-            role="img"
-            aria-label="Color production vs spell pips spider chart"
-          >
-            {rings.map((points, i) => (
+        <div className="flex flex-col gap-3 w-full">
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            {showSpider ? (
+            <svg
+              viewBox="0 0 220 220"
+              className="w-full max-w-[260px] h-auto shrink-0"
+              role="img"
+              aria-label="Color production vs spell pips spider chart"
+            >
+              {rings.map((points, i) => (
+                <polygon
+                  key={i}
+                  points={points}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeOpacity={0.15}
+                  strokeWidth={1}
+                  className="text-muted-foreground"
+                />
+              ))}
+
+              {spiderAxesColors.map((color, i) => {
+                const angle = -Math.PI / 2 + (i * 2 * Math.PI) / axes
+                const ex = cx + Math.cos(angle) * radius
+                const ey = cy + Math.sin(angle) * radius
+                const lx = cx + Math.cos(angle) * (radius + 16)
+                const ly = cy + Math.sin(angle) * (radius + 16)
+                return (
+                  <g key={color}>
+                    <line
+                      x1={cx}
+                      y1={cy}
+                      x2={ex}
+                      y2={ey}
+                      stroke="currentColor"
+                      strokeOpacity={0.2}
+                      className="text-muted-foreground"
+                    />
+                    <circle
+                      cx={lx}
+                      cy={ly}
+                      r={9}
+                      fill={COLOR_META[color].fill}
+                      stroke="currentColor"
+                      strokeOpacity={0.3}
+                      className="text-border"
+                    />
+                    <text
+                      x={lx}
+                      y={ly}
+                      dy="0.35em"
+                      textAnchor="middle"
+                      fontSize="10"
+                      fontWeight="700"
+                      fill={COLOR_META[color].text}
+                    >
+                      {color}
+                    </text>
+                  </g>
+                )
+              })}
+
               <polygon
-                key={i}
-                points={points}
-                fill="none"
-                stroke="currentColor"
-                strokeOpacity={0.15}
-                strokeWidth={1}
-                className="text-muted-foreground"
-              />
-            ))}
-
-            {SPIDER_COLOR_KEYS.map((color, i) => {
-              const angle = -Math.PI / 2 + (i * 2 * Math.PI) / axes
-              const ex = cx + Math.cos(angle) * radius
-              const ey = cy + Math.sin(angle) * radius
-              const lx = cx + Math.cos(angle) * (radius + 16)
-              const ly = cy + Math.sin(angle) * (radius + 16)
-              return (
-                <g key={color}>
-                  <line
-                    x1={cx}
-                    y1={cy}
-                    x2={ex}
-                    y2={ey}
-                    stroke="currentColor"
-                    strokeOpacity={0.2}
-                    className="text-muted-foreground"
-                  />
-                  <circle
-                    cx={lx}
-                    cy={ly}
-                    r={9}
-                    fill={COLOR_META[color].fill}
-                    stroke="currentColor"
-                    strokeOpacity={0.3}
-                    className="text-border"
-                  />
-                  <text
-                    x={lx}
-                    y={ly}
-                    dy="0.35em"
-                    textAnchor="middle"
-                    fontSize="10"
-                    fontWeight="700"
-                    fill={COLOR_META[color].text}
-                  >
-                    {color}
-                  </text>
-                </g>
-              )
-            })}
-
-            <polygon
-              points={productionPath}
-              fill="#3d9a5a"
-              fillOpacity={0.35}
-              stroke="#3d9a5a"
-              strokeWidth={1.5}
-            />
-            {productionPoints.map((p, i) => (
-              <circle
-                key={`prod-${i}`}
-                cx={p.x}
-                cy={p.y}
-                r={2.5}
+                points={productionPath}
                 fill="#3d9a5a"
+                fillOpacity={0.35}
+                stroke="#3d9a5a"
+                strokeWidth={1.5}
               />
-            ))}
+              {productionPoints.map((p, i) => (
+                <circle
+                  key={`prod-${i}`}
+                  cx={p.x}
+                  cy={p.y}
+                  r={2.5}
+                  fill="#3d9a5a"
+                />
+              ))}
 
-            <polygon
-              points={pipPath}
-              fill="#d44545"
-              fillOpacity={0.3}
-              stroke="#d44545"
-              strokeWidth={1.5}
-            />
-            {pipPoints.map((p, i) => (
-              <circle
-                key={`pip-${i}`}
-                cx={p.x}
-                cy={p.y}
-                r={2.5}
+              <polygon
+                points={pipPath}
                 fill="#d44545"
+                fillOpacity={0.3}
+                stroke="#d44545"
+                strokeWidth={1.5}
               />
-            ))}
-          </svg>
+              {pipPoints.map((p, i) => (
+                <circle
+                  key={`pip-${i}`}
+                  cx={p.x}
+                  cy={p.y}
+                  r={2.5}
+                  fill="#d44545"
+                />
+              ))}
+            </svg>
+            ) : (
+              <ColorBalanceBars colors={barColors} totals={totals} />
+            )}
 
-          <div className="flex-1 min-w-0 w-full">
+            <div className="flex-1 min-w-0 w-full">
             <table className="w-full text-xs tabular-nums">
               <thead>
                 <tr className="text-muted-foreground border-b border-border/60">
@@ -1052,7 +1151,7 @@ function ColorSpider({ cards }: { cards: DeckStatsCard[] }) {
                 </tr>
               </thead>
               <tbody>
-                {SPIDER_COLOR_KEYS.map(color => {
+                {tableColors.map(color => {
                   const total = totals.production[color]
                   const pip = totals.pips[color]
                   const ratio = pip > 0 ? total / pip : null
@@ -1086,9 +1185,35 @@ function ColorSpider({ cards }: { cards: DeckStatsCard[] }) {
               </tbody>
             </table>
             <div className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
-              Production counts each source per color it can produce (a dual land
-              contributes to both axes). Hybrid pips are split evenly. Ratio &lt; 1
-              means more demand than sources for that color.
+              {pipColors.length === 0 ? (
+                <span>
+                  No colored mana pips on non-land cards yet—bars show production by color. Add spells with mana
+                  costs to compare sources to demand.
+                </span>
+              ) : showSpider ? (
+                <span>
+                  Spider axes are colors with spell pips only. Production counts each source per color it can produce
+                  (a dual land contributes to both axes). Hybrid pips are split evenly. Ratio &lt; 1 means more demand
+                  than sources for that color.
+                </span>
+              ) : (
+                <span>
+                  Production counts each source per color it can produce (a dual land contributes to both colors).
+                  Hybrid pips are split evenly. Ratio &lt; 1 means more demand than sources for that color.
+                </span>
+              )}
+            </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-muted-foreground self-start">
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: '#3d9a5a' }} />
+              <span>Production</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: '#d44545' }} />
+              <span>Pips on spells</span>
             </div>
           </div>
         </div>
