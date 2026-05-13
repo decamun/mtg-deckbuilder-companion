@@ -59,7 +59,15 @@ import { DeckWorkspaceCommanderRail } from "./DeckWorkspaceCommanderRail"
 import { DeckWorkspaceDialogsSection } from "./DeckWorkspaceDialogsSection"
 import type { DeckWorkspaceOverflowMenusProps } from "./deck-workspace-overflow-menus"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
-import { REGISTRY_ZONE_IDS, DEFAULT_CARD_ZONE_ID, MAINBOARD_ZONE_ID, normalizeCardZone, sanitizeCustomZoneId, validateCustomZoneName } from "@/lib/zones"
+import {
+  REGISTRY_ZONE_IDS,
+  DEFAULT_CARD_ZONE_ID,
+  MAINBOARD_ZONE_ID,
+  getZoneLabel,
+  normalizeCardZone,
+  sanitizeCustomZoneId,
+  validateCustomZoneName,
+} from "@/lib/zones"
 
 const DeckWorkspaceBoardsTab = dynamic(
   () => import("./DeckWorkspaceBoardsTab").then((m) => ({ default: m.DeckWorkspaceBoardsTab })),
@@ -126,7 +134,10 @@ export default function DeckWorkspaceClient({
   const [boardDialogOpen, setBoardDialogOpen] = useState(false)
   const [customBoardInput, setCustomBoardInput] = useState("")
   const [customBoardError, setCustomBoardError] = useState<string | null>(null)
-  const [activeCardIdForBoard, setActiveCardIdForBoard] = useState<string | null>(null)
+  /** Snapshot for dialog copy (cleared ids would otherwise show 0 while closing). */
+  const [customBoardDialogTargetCount, setCustomBoardDialogTargetCount] = useState(1)
+  /** Deck card row ids targeted by the custom-board name dialog (one or many). */
+  const [activeCardIdsForBoard, setActiveCardIdsForBoard] = useState<string[]>([])
 
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
   const [cardSize, setCardSize] = useState(DEFAULT_CARD_SIZE)
@@ -763,20 +774,43 @@ export default function DeckWorkspaceClient({
     setPrintingsByCard(prev => ({ ...prev, [card.id]: prints }))
   }
 
-  const moveCardToZone = async (cardId: string, zone: string) => {
-    const card = cards.find(c => c.id === cardId)
-    if (!card) return
-    if (normalizeCardZone(card.zone) === zone) return
+  const handleBoardDialogOpenChange = (open: boolean) => {
+    setBoardDialogOpen(open)
+    if (!open) {
+      setActiveCardIdsForBoard([])
+      setCustomBoardDialogTargetCount(1)
+      setCustomBoardInput("")
+      setCustomBoardError(null)
+    }
+  }
+
+  const moveCardsToZone = async (cardIds: string[], toZone: string) => {
+    const idSet = new Set(cardIds)
+    const targets = cards.filter((c) => idSet.has(c.id) && normalizeCardZone(c.zone) !== toZone)
+    if (targets.length === 0) return
     const versionSince = new Date().toISOString()
-    const prevZone = normalizeCardZone(card.zone)
-    setCards(prev => prev.map(c => c.id === cardId ? { ...c, zone } : c))
-    const { error } = await supabase.from('deck_cards').update({ zone }).eq('id', cardId)
+    const prevById = new Map(targets.map((c) => [c.id, normalizeCardZone(c.zone)]))
+    const ids = targets.map((c) => c.id)
+    setCards((prev) => prev.map((c) => (ids.includes(c.id) ? { ...c, zone: toZone } : c)))
+    const { error } = await supabase.from("deck_cards").update({ zone: toZone }).in("id", ids)
     if (error) {
-      setCards(prev => prev.map(c => c.id === cardId ? { ...c, zone: prevZone } : c))
+      setCards((prev) =>
+        prev.map((c) => {
+          const pz = prevById.get(c.id)
+          return pz !== undefined ? { ...c, zone: pz } : c
+        })
+      )
       toast.error(error.message)
     } else {
-      recordMutationVersion(`Moved ${card.name} to ${zone}`, versionSince)
+      const zoneLabel = getZoneLabel(toZone)
+      const summary =
+        targets.length === 1 ? targets[0]!.name : `${targets.length} cards`
+      recordMutationVersion(`Moved ${summary} to ${zoneLabel}`, versionSince)
     }
+  }
+
+  const moveCardToZone = async (cardId: string, zone: string) => {
+    await moveCardsToZone([cardId], zone)
   }
 
   /** Batch-move all cards in `fromZone` to `toZone` in a single DB update. */
@@ -822,13 +856,10 @@ export default function DeckWorkspaceClient({
       setCustomBoardError("Board name is invalid.")
       return
     }
-    if (activeCardIdForBoard) {
-      void moveCardToZone(activeCardIdForBoard, zoneId)
+    if (activeCardIdsForBoard.length > 0) {
+      void moveCardsToZone(activeCardIdsForBoard, zoneId)
     }
-    setBoardDialogOpen(false)
-    setCustomBoardInput("")
-    setCustomBoardError(null)
-    setActiveCardIdForBoard(null)
+    handleBoardDialogOpenChange(false)
   }
 
   const handleTagDragEnd = (event: DragEndEvent) => {
@@ -1064,10 +1095,11 @@ export default function DeckWorkspaceClient({
       void moveCardToZone(cardId, zone)
     },
     onOpenCustomBoardDialog: (cardId) => {
-      setActiveCardIdForBoard(cardId)
+      setActiveCardIdsForBoard([cardId])
+      setCustomBoardDialogTargetCount(1)
       setCustomBoardInput("")
       setCustomBoardError(null)
-      setBoardDialogOpen(true)
+      handleBoardDialogOpenChange(true)
     },
     onDeleteCard: (id) => {
       void deleteCard(id)
@@ -1280,7 +1312,14 @@ export default function DeckWorkspaceClient({
               setActiveZone(zone)
               setTab("decklist")
             }}
-            onMoveCardToZone={(cardId, zone) => void moveCardToZone(cardId, zone)}
+            onMoveCardsToZone={(cardIds, zone) => void moveCardsToZone(cardIds, zone)}
+            onOpenCustomBoardForCards={(cardIds) => {
+              setActiveCardIdsForBoard(cardIds)
+              setCustomBoardDialogTargetCount(Math.max(1, cardIds.length))
+              setCustomBoardInput("")
+              setCustomBoardError(null)
+              handleBoardDialogOpenChange(true)
+            }}
             onRemoveBoard={(zoneId) => {
               void moveAllCardsInZone(zoneId, MAINBOARD_ZONE_ID).then(() => {
                 toast.success(`Moved all cards from board to mainboard.`)
@@ -1401,7 +1440,8 @@ export default function DeckWorkspaceClient({
         handleCardQtyDialogSubmit={handleCardQtyDialogSubmit}
         maxCopiesPerLine={MAX_COPIES_PER_LINE}
         boardDialogOpen={boardDialogOpen}
-        setBoardDialogOpen={setBoardDialogOpen}
+        setBoardDialogOpen={handleBoardDialogOpenChange}
+        customBoardTargetCount={customBoardDialogTargetCount}
         customBoardInput={customBoardInput}
         setCustomBoardInput={setCustomBoardInput}
         customBoardError={customBoardError}
