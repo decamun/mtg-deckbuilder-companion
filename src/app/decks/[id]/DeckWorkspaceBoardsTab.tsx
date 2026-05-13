@@ -1,17 +1,12 @@
 "use client"
 
-import { useState } from "react"
-import { Plus, Lock, Trash2 } from "lucide-react"
-import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
+import { Lock, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { DeckCard } from "@/lib/types"
 import {
   getZoneLabel,
   getZonesForFormat,
   isZoneLockedForFormat,
-  sanitizeCustomZoneId,
-  validateCustomZoneName,
   type ZoneDefinition,
 } from "@/lib/zones"
 
@@ -21,7 +16,6 @@ interface DeckWorkspaceBoardsTabProps {
   isOwner: boolean
   viewing: boolean
   onMoveCardToZone: (cardId: string, zone: string) => void
-  onAddCustomBoard: (zoneId: string) => void
   onRemoveBoard: (zoneId: string) => void
   activeZone: string
   onZoneChange: (zone: string) => void
@@ -33,14 +27,10 @@ export function DeckWorkspaceBoardsTab({
   isOwner,
   viewing,
   onMoveCardToZone,
-  onAddCustomBoard,
   onRemoveBoard,
   activeZone,
   onZoneChange,
 }: DeckWorkspaceBoardsTabProps) {
-  const [newBoardName, setNewBoardName] = useState("")
-  const [addingBoard, setAddingBoard] = useState(false)
-
   // Find all distinct zone ids across all cards (to show custom boards in use)
   const allZoneIds = Array.from(new Set(cards.map((c) => c.zone ?? "mainboard")))
   const customZoneIds = allZoneIds.filter((id) => !["mainboard", "sideboard", "maybeboard"].includes(id))
@@ -52,20 +42,6 @@ export function DeckWorkspaceBoardsTab({
 
   const quantityByZone = (zoneId: string) =>
     cardsByZone(zoneId).reduce((sum, c) => sum + c.quantity, 0)
-
-  const handleAddBoard = () => {
-    const error = validateCustomZoneName(newBoardName)
-    if (error === "empty") return
-    if (error === "reserved") {
-      toast.error(`"${newBoardName.trim()}" is a reserved board name. Please choose a different name.`)
-      return
-    }
-    const boardZoneId = sanitizeCustomZoneId(newBoardName)
-    if (!boardZoneId) return
-    onAddCustomBoard(boardZoneId)
-    setNewBoardName("")
-    setAddingBoard(false)
-  }
 
   const interactionsLocked = !isOwner || viewing
 
@@ -92,50 +68,9 @@ export function DeckWorkspaceBoardsTab({
       </div>
 
       {!interactionsLocked && (
-        <div>
-          {addingBoard ? (
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault()
-                handleAddBoard()
-              }}
-            >
-              <input
-                autoFocus
-                type="text"
-                value={newBoardName}
-                onChange={(e) => setNewBoardName(e.target.value)}
-                placeholder="Board name (e.g. Wishboard)"
-                className="h-8 rounded-md border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-              <Button type="submit" size="sm" variant="outline" disabled={!newBoardName.trim()}>
-                Add
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setAddingBoard(false)
-                  setNewBoardName("")
-                }}
-              >
-                Cancel
-              </Button>
-            </form>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setAddingBoard(true)}
-              className="gap-1.5"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Custom Board
-            </Button>
-          )}
-        </div>
+        <p className="text-xs text-muted-foreground">
+          To create a custom board, use the <strong>Move to Board → New custom board…</strong> option in a card&apos;s action menu.
+        </p>
       )}
 
       {/* Zone detail: cards in the active zone */}

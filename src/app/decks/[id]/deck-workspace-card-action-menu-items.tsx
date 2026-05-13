@@ -43,6 +43,7 @@ export type DeckWorkspaceCardActionMenuItemsProps = {
   onRemoveTag: (cardId: string, tag: string) => void
   onOpenCustomTagDialog: (cardId: string) => void
   onMoveToZone: (cardId: string, zone: string) => void
+  onOpenCustomBoardDialog: (cardId: string) => void
   onDeleteCard: (cardId: string) => void
 }
 
@@ -67,6 +68,7 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
     onRemoveTag,
     onOpenCustomTagDialog,
     onMoveToZone,
+    onOpenCustomBoardDialog,
     onDeleteCard,
   } = props
 
@@ -143,8 +145,21 @@ export function DeckWorkspaceCardActionMenuItems(props: DeckWorkspaceCardActionM
                   {z.label}
                 </Item>
               ))}
+              <Sep className="bg-border" />
+              <Item onClick={() => onOpenCustomBoardDialog(c.id)}>
+                New custom board…
+              </Item>
             </SubContent>
           </Sub>
+          <Sep className="bg-border" />
+        </>
+      )}
+      {otherZones.length === 0 && (
+        <>
+          <Item onClick={() => onOpenCustomBoardDialog(c.id)}>
+            <ArrowRightLeft className="w-3.5 h-3.5 mr-2" />
+            Move to Custom Board…
+          </Item>
           <Sep className="bg-border" />
         </>
       )}

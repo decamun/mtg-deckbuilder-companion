@@ -31,6 +31,7 @@ export type DeckWorkspaceOverflowMenusProps = {
   onRemoveTag: (cardId: string, tag: string) => void
   onOpenCustomTagDialog: (cardId: string) => void
   onMoveToZone: (cardId: string, zone: string) => void
+  onOpenCustomBoardDialog: (cardId: string) => void
   onDeleteCard: (cardId: string) => void
   onClosePreview: () => void
 }
@@ -62,6 +63,7 @@ export function buildDeckWorkspaceMenuItemProps(
     onRemoveTag: menus.onRemoveTag,
     onOpenCustomTagDialog: menus.onOpenCustomTagDialog,
     onMoveToZone: menus.onMoveToZone,
+    onOpenCustomBoardDialog: menus.onOpenCustomBoardDialog,
     onDeleteCard: menus.onDeleteCard,
   }
 }
