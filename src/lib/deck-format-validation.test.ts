@@ -301,7 +301,7 @@ describe('validateDeckForFormat', () => {
     ]
 
     const result = validateDeckForFormat('pauper', { cards, commanderScryfallIds: [] })
-    expect(result.deckViolations).toContain('Mainboard must contain at least 60 cards (has 59).')
+    expect(result.deckViolations).toContain('Mainboard must contain at least 60 cards (has 59)')
   })
 
   it('does not apply pauper mainboard minimum to other formats', () => {
@@ -319,7 +319,7 @@ describe('validateDeckForFormat', () => {
     ]
 
     const result = validateDeckForFormat('standard', { cards, commanderScryfallIds: [] })
-    expect(result.deckViolations).not.toContain('Mainboard must contain at least 60 cards (has 1).')
+    expect(result.deckViolations).not.toContain('Mainboard must contain at least 60 cards (has 1)')
   })
 })
 

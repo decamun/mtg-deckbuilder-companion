@@ -281,7 +281,7 @@ function getDeckZoneViolations(
       .reduce((sum, card) => sum + card.quantity, 0)
     if (mainDeckQuantity < minMainboardSize) {
       violations.push(
-        `Mainboard must contain at least ${minMainboardSize} cards (has ${mainDeckQuantity}).`
+        `Mainboard must contain at least ${minMainboardSize} cards (has ${mainDeckQuantity})`
       )
     }
   }
