@@ -184,6 +184,27 @@ describe('validateDeckForFormat', () => {
     expect(result.violationsByCardId.get('main-copy')).toBeUndefined()
     expect(result.violationsByCardId.get('maybe-copy')).toBeUndefined()
   })
+
+  it('validates sideboard max size only for formats where sideboard exists', () => {
+    const cards = [
+      {
+        id: 'side-over',
+        scryfall_id: 'side-id',
+        oracle_id: 'side-oracle',
+        name: 'Side Card',
+        quantity: 16,
+        zone: SIDEBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { commander: 'legal' },
+      },
+    ]
+
+    const standard = validateDeckForFormat('standard', { cards, commanderScryfallIds: [] })
+    expect(standard.deckViolations).toContain('Sideboard exceeds max 15 cards (has 16).')
+
+    const commander = validateDeckForFormat('commander', { cards, commanderScryfallIds: [] })
+    expect(commander.deckViolations).toEqual([])
+  })
 })
 
 describe('getConstructedCopyLimitViolations', () => {

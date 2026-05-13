@@ -12,7 +12,12 @@ import {
   type Bracket,
   isGameChanger,
 } from '@/lib/game-changers'
-import { getZonesForFormat, normalizeCardZone, zoneCountsTowardMainDeck } from '@/lib/zones'
+import {
+  getZonesForFormat,
+  normalizeCardZone,
+  SIDEBOARD_ZONE_ID,
+  zoneCountsTowardMainDeck,
+} from '@/lib/zones'
 
 const MANA = new Set(['W', 'U', 'B', 'R', 'G'])
 
@@ -224,6 +229,23 @@ type DeckFormatValidatorDefinition = {
   validate?: (ctx: DeckFormatValidationContext) => ReadonlyMap<string, readonly string[]>
 }
 
+function getDeckZoneViolations(
+  format: string | null | undefined,
+  cards: FormatValidationCard[]
+): string[] {
+  const sideboardZone = getZonesForFormat(format).find(
+    (zone) => zone.id === SIDEBOARD_ZONE_ID && zone.isFormatValidated
+  )
+  if (!sideboardZone || sideboardZone.maxCards == null) return []
+
+  const sideboardQuantity = cards
+    .filter((card) => normalizeCardZone(card.zone) === SIDEBOARD_ZONE_ID)
+    .reduce((sum, card) => sum + card.quantity, 0)
+
+  if (sideboardQuantity <= sideboardZone.maxCards) return []
+  return [`Sideboard exceeds max ${sideboardZone.maxCards} cards (has ${sideboardQuantity}).`]
+}
+
 const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> = {
   edh: { label: 'EDH / Commander', status: 'implemented', validate: validateEdh },
   standard: { label: 'Standard', status: 'not_yet_implemented' },
@@ -263,6 +285,7 @@ export function validateDeckForFormat(
   const definition = normalized ? FORMAT_VALIDATOR_REGISTRY[normalized] : undefined
   const status = definition?.status ?? 'neutral'
   const dataVersion = ctx.dataVersion ?? getFormatValidationDataVersion(normalized)
+  const deckZoneViolations = getDeckZoneViolations(normalized, ctx.cards)
 
   if (status === 'implemented' && definition?.validate) {
     return {
@@ -272,15 +295,18 @@ export function validateDeckForFormat(
         commanderScryfallIds: ctx.commanderScryfallIds,
         bracket: ctx.bracket ?? null,
       }),
-      deckViolations: [],
+      deckViolations: deckZoneViolations,
       dataVersion,
     }
   }
 
   const deckViolations =
     status === 'not_yet_implemented'
-      ? [`${definition?.label ?? normalized ?? 'This format'} validation is not yet implemented.`]
-      : []
+      ? [
+          ...deckZoneViolations,
+          `${definition?.label ?? normalized ?? 'This format'} validation is not yet implemented.`,
+        ]
+      : deckZoneViolations
 
   return {
     status,
