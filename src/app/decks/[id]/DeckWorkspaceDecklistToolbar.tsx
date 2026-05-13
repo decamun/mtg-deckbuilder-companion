@@ -75,7 +75,11 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
         </TabsList>
       </Tabs>
       {props.formatValidationStatus === 'not_yet_implemented' && props.formatDeckViolations.length > 0 && (
-        <p className="max-w-[18rem] text-xs leading-snug text-muted-foreground">{props.formatDeckViolations[0]}</p>
+        <div className="max-w-[18rem] text-xs leading-snug text-muted-foreground">
+          {props.formatDeckViolations.map((msg, index) => (
+            <p key={`${msg}-${index}`}>{msg}</p>
+          ))}
+        </div>
       )}
       {props.formatViolationCount > 0 && props.formatValidationStatus === 'implemented' && (
         <button

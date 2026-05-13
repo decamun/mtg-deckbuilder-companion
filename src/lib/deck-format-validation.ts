@@ -169,35 +169,26 @@ type DeckFormatValidationContext = {
 }
 
 type DeckFormatValidatorDefinition = {
+  label: string
   status: DeckFormatValidationStatus
   validate?: (ctx: DeckFormatValidationContext) => Map<string, string[]>
 }
 
 const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> = {
-  edh: { status: 'implemented', validate: validateEdh },
-  standard: { status: 'not_yet_implemented' },
-  modern: { status: 'not_yet_implemented' },
-  pioneer: { status: 'not_yet_implemented' },
-  legacy: { status: 'not_yet_implemented' },
-  vintage: { status: 'not_yet_implemented' },
-  pauper: { status: 'not_yet_implemented' },
-  other: { status: 'neutral' },
-}
-
-const FORMAT_VALIDATION_LABELS: Record<string, string> = {
-  edh: 'EDH / Commander',
-  standard: 'Standard',
-  modern: 'Modern',
-  pioneer: 'Pioneer',
-  legacy: 'Legacy',
-  vintage: 'Vintage',
-  pauper: 'Pauper',
-  other: 'Other',
+  edh: { label: 'EDH / Commander', status: 'implemented', validate: validateEdh },
+  standard: { label: 'Standard', status: 'not_yet_implemented' },
+  modern: { label: 'Modern', status: 'not_yet_implemented' },
+  pioneer: { label: 'Pioneer', status: 'not_yet_implemented' },
+  legacy: { label: 'Legacy', status: 'not_yet_implemented' },
+  vintage: { label: 'Vintage', status: 'not_yet_implemented' },
+  pauper: { label: 'Pauper', status: 'not_yet_implemented' },
+  other: { label: 'Other', status: 'neutral' },
 }
 
 export function getFormatValidationStatus(format: string | null | undefined): DeckFormatValidationStatus {
   const normalized = normalizeFormatForValidation(format)
   if (!normalized) return 'neutral'
+  // Unknown formats default to neutral until explicitly registered.
   return FORMAT_VALIDATOR_REGISTRY[normalized]?.status ?? 'neutral'
 }
 
@@ -226,8 +217,8 @@ export function validateDeckForFormat(
   }
 
   const deckViolations =
-    status === 'not_yet_implemented' && normalized
-      ? [`${FORMAT_VALIDATION_LABELS[normalized] ?? normalized} validation is not yet implemented.`]
+    status === 'not_yet_implemented'
+      ? [`${definition?.label ?? normalized ?? 'This format'} validation is not yet implemented.`]
       : []
 
   return {
