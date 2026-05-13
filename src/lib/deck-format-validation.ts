@@ -210,6 +210,43 @@ function validateEdh(ctx: {
   return new Map(Array.from(bucket, ([id, set]) => [id, [...set]]))
 }
 
+function validatePauper(ctx: DeckFormatValidationContext): Map<string, string[]> {
+  const bucket = new Map<string, Set<string>>()
+  const add = (id: string, reason: string) => {
+    let s = bucket.get(id)
+    if (!s) {
+      s = new Set()
+      bucket.set(id, s)
+    }
+    s.add(reason)
+  }
+
+  const validatingZones = new Set(
+    getZonesForFormat('pauper').filter((zone) => zone.isFormatValidated).map((zone) => zone.id)
+  )
+  const validatedCards = ctx.cards.filter((card) =>
+    validatingZones.has(normalizeCardZone(card.zone))
+  )
+
+  for (const card of validatedCards) {
+    const status = card.legalities?.pauper
+    if (status === undefined) {
+      add(card.id, 'Cannot validate Pauper legality: missing data from Scryfall')
+    } else if (status === 'banned') {
+      add(card.id, 'Banned in Pauper')
+    } else if (status === 'not_legal') {
+      add(card.id, 'Not legal in Pauper')
+    }
+  }
+
+  const copyLimitViolations = getConstructedCopyLimitViolations('pauper', ctx.cards, 4)
+  for (const [cardId, reasons] of copyLimitViolations) {
+    for (const reason of reasons) add(cardId, reason)
+  }
+
+  return new Map(Array.from(bucket, ([id, set]) => [id, [...set]]))
+}
+
 export type DeckFormatValidationResult = {
   status: DeckFormatValidationStatus
   violationsByCardId: ReadonlyMap<string, readonly string[]>
@@ -233,17 +270,30 @@ function getDeckZoneViolations(
   format: string | null | undefined,
   cards: FormatValidationCard[]
 ): string[] {
+  const violations: string[] = []
+  if (format === 'pauper') {
+    const mainDeckQuantity = cards
+      .filter((card) => zoneCountsTowardMainDeck(card.zone))
+      .reduce((sum, card) => sum + card.quantity, 0)
+    if (mainDeckQuantity < 60) {
+      violations.push(`Mainboard must contain at least 60 cards (has ${mainDeckQuantity}).`)
+    }
+  }
+
   const sideboardZone = getZonesForFormat(format).find(
     (zone) => zone.id === SIDEBOARD_ZONE_ID && zone.isFormatValidated
   )
-  if (!sideboardZone || sideboardZone.maxCards == null) return []
+  if (!sideboardZone || sideboardZone.maxCards == null) return violations
 
   const sideboardQuantity = cards
     .filter((card) => normalizeCardZone(card.zone) === SIDEBOARD_ZONE_ID)
     .reduce((sum, card) => sum + card.quantity, 0)
 
-  if (sideboardQuantity <= sideboardZone.maxCards) return []
-  return [`Sideboard exceeds max ${sideboardZone.maxCards} cards (has ${sideboardQuantity}).`]
+  if (sideboardQuantity > sideboardZone.maxCards) {
+    violations.push(`Sideboard exceeds max ${sideboardZone.maxCards} cards (has ${sideboardQuantity}).`)
+  }
+
+  return violations
 }
 
 const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> = {
@@ -253,7 +303,7 @@ const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> =
   pioneer: { label: 'Pioneer', status: 'not_yet_implemented' },
   legacy: { label: 'Legacy', status: 'not_yet_implemented' },
   vintage: { label: 'Vintage', status: 'not_yet_implemented' },
-  pauper: { label: 'Pauper', status: 'not_yet_implemented' },
+  pauper: { label: 'Pauper', status: 'implemented', validate: validatePauper },
   other: { label: 'Other', status: 'neutral' },
 }
 
@@ -268,6 +318,9 @@ export function getFormatValidationDataVersion(format: string | null | undefined
   const normalized = normalizeFormatForValidation(format)
   if (normalized === 'edh') {
     return `edh-live-legalities+scryfall|game-changers:${GAME_CHANGER_DATA_VERSION}`
+  }
+  if (normalized === 'pauper') {
+    return 'pauper-live-legalities+scryfall'
   }
   return null
 }

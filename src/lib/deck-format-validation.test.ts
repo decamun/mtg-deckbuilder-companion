@@ -34,12 +34,13 @@ describe('validateDeckForFormat', () => {
     expect(getFormatValidationStatus('pioneer')).toBe('not_yet_implemented')
     expect(getFormatValidationStatus('legacy')).toBe('not_yet_implemented')
     expect(getFormatValidationStatus('vintage')).toBe('not_yet_implemented')
-    expect(getFormatValidationStatus('pauper')).toBe('not_yet_implemented')
+    expect(getFormatValidationStatus('pauper')).toBe('implemented')
     expect(getFormatValidationStatus('other')).toBe('neutral')
     expect(getFormatValidationStatus(null)).toBe('neutral')
     expect(isFormatValidationImplemented('edh')).toBe(true)
     expect(isFormatValidationImplemented('standard')).toBe(false)
     expect(getFormatValidationDataVersion('edh')).toContain('game-changers:')
+    expect(getFormatValidationDataVersion('pauper')).toBe('pauper-live-legalities+scryfall')
     expect(getFormatValidationDataVersion('standard')).toBeNull()
   })
 
@@ -204,6 +205,103 @@ describe('validateDeckForFormat', () => {
 
     const commander = validateDeckForFormat('commander', { cards, commanderScryfallIds: [] })
     expect(commander.deckViolations).toEqual([])
+  })
+
+  it('validates pauper legality and copy limits across mainboard and sideboard only', () => {
+    const cards = [
+      {
+        id: 'main-filler',
+        scryfall_id: 'main-filler-id',
+        oracle_id: 'main-filler-oracle',
+        name: 'Main Filler',
+        quantity: 56,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { pauper: 'legal' },
+      },
+      {
+        id: 'banned-main',
+        scryfall_id: 'banned-main-id',
+        oracle_id: 'banned-main-oracle',
+        name: 'Banned Main',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { pauper: 'banned' },
+      },
+      {
+        id: 'not-legal-side',
+        scryfall_id: 'not-legal-side-id',
+        oracle_id: 'not-legal-side-oracle',
+        name: 'Not Legal Side',
+        quantity: 1,
+        zone: SIDEBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { pauper: 'not_legal' },
+      },
+      {
+        id: 'dup-main',
+        scryfall_id: 'dup-main-id',
+        oracle_id: 'dup-oracle',
+        name: 'Duplicate Main',
+        quantity: 3,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { pauper: 'legal' },
+      },
+      {
+        id: 'dup-side',
+        scryfall_id: 'dup-side-id',
+        oracle_id: 'dup-oracle',
+        name: 'Duplicate Side',
+        quantity: 2,
+        zone: SIDEBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { pauper: 'legal' },
+      },
+      {
+        id: 'dup-maybe',
+        scryfall_id: 'dup-maybe-id',
+        oracle_id: 'dup-oracle',
+        name: 'Duplicate Maybe',
+        quantity: 99,
+        zone: MAYBEBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { pauper: 'legal' },
+      },
+    ]
+
+    const result = validateDeckForFormat('pauper', { cards, commanderScryfallIds: [] })
+
+    expect(result.status).toBe('implemented')
+    expect(result.deckViolations).toEqual([])
+    expect(result.violationsByCardId.get('banned-main')).toContain('Banned in Pauper')
+    expect(result.violationsByCardId.get('not-legal-side')).toContain('Not legal in Pauper')
+    expect(result.violationsByCardId.get('dup-main')).toContain(
+      'More than 4 copies in validated deck zones',
+    )
+    expect(result.violationsByCardId.get('dup-side')).toContain(
+      'More than 4 copies in validated deck zones',
+    )
+    expect(result.violationsByCardId.get('dup-maybe')).toBeUndefined()
+  })
+
+  it('requires at least 60 mainboard cards in pauper', () => {
+    const cards = [
+      {
+        id: 'short-mainboard',
+        scryfall_id: 'short-mainboard-id',
+        oracle_id: 'short-mainboard-oracle',
+        name: 'Short Mainboard',
+        quantity: 59,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { pauper: 'legal' },
+      },
+    ]
+
+    const result = validateDeckForFormat('pauper', { cards, commanderScryfallIds: [] })
+    expect(result.deckViolations).toContain('Mainboard must contain at least 60 cards (has 59).')
   })
 })
 
