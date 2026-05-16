@@ -451,15 +451,14 @@ export function validateDeckForFormat(
       commanderScryfallIds: ctx.commanderScryfallIds,
       bracket: ctx.bracket ?? null,
     })
-    const violationsByCardId =
-      validated instanceof Map
-        ? validated
-        : isValidatorBundleResult(validated)
-          ? validated.violationsByCardId
-          : new Map()
-    const validatorDeckViolations = isValidatorBundleResult(validated)
-      ? (validated.deckViolations ?? [])
-      : []
+    let violationsByCardId: ReadonlyMap<string, readonly string[]> = new Map()
+    let validatorDeckViolations: readonly string[] = []
+    if (validated instanceof Map) {
+      violationsByCardId = validated
+    } else if (isValidatorBundleResult(validated)) {
+      violationsByCardId = validated.violationsByCardId
+      validatorDeckViolations = validated.deckViolations ?? []
+    }
 
     return {
       status,
