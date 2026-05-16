@@ -217,6 +217,19 @@ export type DeckFormatValidationResult = {
   dataVersion: string | null
 }
 
+type ValidatedFormatLike =
+  | ReadonlyMap<string, readonly string[]>
+  | {
+      violationsByCardId: ReadonlyMap<string, readonly string[]>
+      deckViolations?: readonly string[]
+    }
+
+function isValidatedFormatBundle(
+  validated: ValidatedFormatLike
+): validated is Extract<ValidatedFormatLike, { violationsByCardId: ReadonlyMap<string, readonly string[]> }> {
+  return typeof validated === 'object' && validated != null && 'violationsByCardId' in validated
+}
+
 type DeckFormatValidationContext = {
   cards: FormatValidationCard[]
   commanderScryfallIds: readonly string[]
@@ -427,14 +440,20 @@ export function validateDeckForFormat(
   const deckZoneViolations = getDeckZoneViolations(normalized, ctx.cards)
 
   if (status === 'implemented' && definition?.validate) {
+    const validated = definition.validate({
+      cards: ctx.cards,
+      commanderScryfallIds: ctx.commanderScryfallIds,
+      bracket: ctx.bracket ?? null,
+    }) as ValidatedFormatLike
+    const violationsByCardId = isValidatedFormatBundle(validated)
+      ? validated.violationsByCardId
+      : validated
+    const extraDeck = isValidatedFormatBundle(validated) ? (validated.deckViolations ?? []) : []
+
     return {
       status,
-      violationsByCardId: definition.validate({
-        cards: ctx.cards,
-        commanderScryfallIds: ctx.commanderScryfallIds,
-        bracket: ctx.bracket ?? null,
-      }),
-      deckViolations: deckZoneViolations,
+      violationsByCardId,
+      deckViolations: [...deckZoneViolations, ...extraDeck],
       dataVersion,
     }
   }
