@@ -65,6 +65,7 @@ function DecksSectionContent() {
   const [importDeckName, setImportDeckName] = useState("")
   const [importDeckFormat, setImportDeckFormat] = useState("edh")
   const [importSourceLabel, setImportSourceLabel] = useState<string | null>(null)
+  const [importSourceUrl, setImportSourceUrl] = useState("")
   const [importUrlError, setImportUrlError] = useState<string | null>(null)
   const [isImportFetching, setIsImportFetching] = useState(false)
   const [isImportCreating, setIsImportCreating] = useState(false)
@@ -135,6 +136,7 @@ function DecksSectionContent() {
     name: string
     format: string
     listText: string
+    description?: string | null
   }): Promise<{ ok: true; deckId: string } | { ok: false }> {
     const trimmedName = args.name.trim()
     if (!trimmedName) {
@@ -168,6 +170,7 @@ function DecksSectionContent() {
         format: args.format,
         commander_scryfall_ids,
         cover_image_scryfall_id,
+        ...(args.description != null ? { description: args.description } : {}),
       })
       .select()
       .single()
@@ -261,6 +264,7 @@ function DecksSectionContent() {
       setImportDecklistText(body.decklistText)
       setImportDeckName((body.deckName ?? "").trim() || "Imported deck")
       setImportSourceLabel(label)
+      setImportSourceUrl(trimmed)
       setImportStep("confirm")
     } catch {
       setImportUrlError("Network error while fetching the deck")
@@ -272,10 +276,12 @@ function DecksSectionContent() {
   const handleConfirmUrlImport = async () => {
     setIsImportCreating(true)
     try {
+      const sourceUrl = importSourceUrl.trim() || importUrl.trim()
       const result = await persistNewDeckWithList({
         name: importDeckName,
         format: importDeckFormat,
         listText: importDecklistText,
+        description: sourceUrl ? `Imported from ${sourceUrl}` : null,
       })
       if (result.ok) {
         setImportDialogOpen(false)
@@ -285,6 +291,7 @@ function DecksSectionContent() {
         setImportDeckName("")
         setImportDeckFormat("edh")
         setImportSourceLabel(null)
+        setImportSourceUrl("")
         setImportUrlError(null)
         router.push(`/decks/${result.deckId}`)
       }
@@ -523,6 +530,7 @@ function DecksSectionContent() {
               setImportDeckName("")
               setImportDeckFormat("edh")
               setImportSourceLabel(null)
+              setImportSourceUrl("")
               setImportUrlError(null)
               setIsImportFetching(false)
               setIsImportCreating(false)
@@ -563,8 +571,7 @@ function DecksSectionContent() {
                     }}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Supported sources: {supportedImportHosts}. Additional deck sites can be wired in through
-                    the shared import registry without changing this dialog.
+                    Supported sources: {supportedImportHosts}.
                   </p>
                 </div>
                 {importUrlError ? (
