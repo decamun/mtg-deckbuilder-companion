@@ -9,9 +9,11 @@ import { Badge } from "@/components/ui/badge"
 import type { Deck, DeckCard } from "@/lib/types"
 import type { ScryfallCard } from "@/lib/scryfall"
 import { getCardImageUrl } from "@/lib/scryfall"
+import { cn } from "@/lib/utils"
 import { ManaText } from "@/components/mana/ManaText"
 import { formatPrice } from "@/lib/format"
 import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
+import { DeckLikeButton } from "@/components/deck/DeckLikeButton"
 import type { DeckTab } from "@/components/deck/DeckTabs"
 
 export type DeckWorkspaceHeaderProps = {
@@ -45,15 +47,27 @@ export type DeckWorkspaceHeaderProps = {
   onSearchFocus: () => void
   onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void
   onSearchResultHover: (idx: number) => void
+  /** Fired when the pointer enters or leaves a search hit row (for deck rules preview). */
+  onSearchResultRulesHover?: (card: ScryfallCard | null) => void
   onAddCard: (card: ScryfallCard) => void
   onOpenSettings: () => void
   onImportClick: () => void
   onVisibilityChange: (pub: boolean) => void
+  /** When true, the cover banner uses a shorter layout to free vertical space while scrolling. */
+  collapsedChrome?: boolean
 }
 
 export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
+  const showSearch = !headerProps.interactionsLocked && headerProps.tab === "decklist"
+  const compact = !!headerProps.collapsedChrome
+
   return (
-    <header className="border-b border-border h-28 shrink-0 relative z-40">
+    <header
+      className={cn(
+        "relative z-40 shrink-0 border-b border-border transition-[min-height] duration-200 ease-out",
+        compact ? "min-h-14 sm:h-14" : "min-h-28 sm:h-28"
+      )}
+    >
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {headerProps.displayedCoverImageUrl ? (
           <>
@@ -61,9 +75,17 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
               src={headerProps.displayedCoverImageUrl}
               alt=""
               aria-hidden
-              className="absolute inset-0 w-full h-full object-cover object-center"
+              className={cn(
+                "absolute inset-0 h-full w-full object-cover object-center transition-transform duration-200",
+                compact && "scale-105 object-[center_20%]"
+              )}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-secondary/95 via-secondary/70 to-secondary/30" />
+            <div
+              className={cn(
+                "absolute inset-0 bg-gradient-to-t from-secondary/95 via-secondary/70 to-secondary/30 transition-opacity duration-200",
+                compact && "via-secondary/80 to-secondary/50"
+              )}
+            />
             <div className="absolute inset-0 backdrop-blur-[2px]" />
           </>
         ) : (
@@ -71,12 +93,18 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
         )}
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 px-4 pb-2 sm:flex-row sm:items-center sm:gap-3 sm:h-14 sm:pb-0">
-        <div className="flex h-9 items-center gap-2 w-full sm:contents">
-          <Button variant="ghost" size="sm" onClick={headerProps.onBack} className="text-muted-foreground hover:text-foreground shrink-0">
+      <div
+        className={cn(
+          "relative z-10 flex flex-col px-4 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:flex-wrap sm:items-end sm:pt-0",
+          compact ? "gap-1 pb-2 pt-12 sm:gap-x-2 sm:gap-y-2 sm:pb-1.5" : "gap-2 pb-3 pt-10 sm:gap-x-3 sm:gap-y-2 sm:pb-2"
+        )}
+      >
+        <div className="flex min-h-9 min-w-0 w-full items-center gap-2 sm:contents">
+          <Button variant="ghost" size="sm" onClick={headerProps.onBack} className="shrink-0 text-muted-foreground hover:text-foreground">
             &larr; Back
           </Button>
-          <div className="flex flex-1 min-w-0 sm:flex-none sm:shrink-0 items-center gap-2 border-r border-border pr-3">
+
+          <div className="flex min-h-9 min-w-0 flex-1 items-center gap-2 sm:min-w-0 sm:max-w-[min(100%,28rem)] sm:flex-none sm:border-r sm:border-border sm:pr-3">
             {headerProps.deckTitleEditing && headerProps.deck ? (
               <div ref={headerProps.deckTitleFieldRef} className="min-w-0 flex-1 sm:flex-none sm:max-w-[min(100%,28rem)]">
                 <Input
@@ -85,7 +113,7 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
                   disabled={headerProps.deckTitleSaving}
                   onBlur={headerProps.onDeckTitleInputBlur}
                   onKeyDown={headerProps.onDeckTitleInputKeyDown}
-                  className="h-9 w-full font-bold text-base bg-background/70 border-border text-foreground drop-shadow-md md:text-base"
+                  className="h-9 w-full border-border bg-background/70 text-base font-bold text-foreground drop-shadow-md md:text-base"
                   aria-label="Deck name"
                 />
               </div>
@@ -93,18 +121,22 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
               <div
                 className={
                   headerProps.isOwner && !headerProps.viewing && headerProps.deck
-                    ? "group relative min-w-0 flex-1 max-w-full rounded-md px-2 py-0.5 -mx-1"
-                    : "relative min-w-0 flex-1 max-w-full"
+                    ? "group relative -mx-1 min-w-0 flex-1 max-w-full rounded-md px-2 py-0.5 sm:flex-none"
+                    : "relative min-w-0 flex-1 max-w-full sm:flex-none"
                 }
               >
                 {headerProps.isOwner && !headerProps.viewing && headerProps.deck && (
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-md border border-border/80 bg-background/55 shadow-sm opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100"
+                    className="pointer-events-none absolute inset-0 rounded-md border border-border/80 bg-background/55 opacity-0 shadow-sm transition-opacity duration-300 ease-out group-hover:opacity-100"
                   />
                 )}
                 <h1
-                  className={`relative z-10 min-w-0 truncate font-bold text-base drop-shadow-md sm:whitespace-nowrap ${headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "cursor-text select-none" : ""}`}
+                  className={cn(
+                    "relative min-w-0 truncate font-bold drop-shadow-md sm:whitespace-nowrap",
+                    compact ? "text-sm sm:text-sm" : "text-base",
+                    headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "cursor-text select-none" : ""
+                  )}
                   title={headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "Double-click to rename" : undefined}
                   onDoubleClick={headerProps.onDeckTitleDisplayDoubleClick}
                 >
@@ -112,28 +144,31 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
                 </h1>
               </div>
             )}
-            <Badge variant="outline" className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm">
+            <Badge variant="outline" className="shrink-0 border-border bg-background/40 text-muted-foreground backdrop-blur-sm">
               {headerProps.displayedCards.reduce((a, c) => a + c.quantity, 0)}
             </Badge>
             <Badge
               variant="outline"
-              className="border-border text-muted-foreground shrink-0 bg-background/40 backdrop-blur-sm font-mono"
+              className="shrink-0 border-border bg-background/40 font-mono text-muted-foreground backdrop-blur-sm"
               title={headerProps.totalUsd.anyMissing ? "Some cards have no price data" : undefined}
             >
               {formatPrice(headerProps.totalUsd.sum)}
               {headerProps.totalUsd.anyMissing ? "+" : ""}
             </Badge>
-            {headerProps.deck && !headerProps.deck.is_public && <Badge className="bg-muted text-muted-foreground border-border">Private</Badge>}
+            {headerProps.deck && !headerProps.deck.is_public && <Badge className="shrink-0 border-border bg-muted text-muted-foreground">Private</Badge>}
           </div>
         </div>
 
-        <div className="flex h-9 items-center gap-2 w-full sm:contents">
-          {!headerProps.interactionsLocked && headerProps.tab === "decklist" ? (
-            <div ref={headerProps.searchContainerRef} className="flex-1 relative min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <div className="flex min-h-9 w-full min-w-0 items-center gap-2 sm:contents">
+          {showSearch ? (
+            <div ref={headerProps.searchContainerRef} className="relative min-h-9 min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Add a card..."
-                className="pl-9 pr-4 bg-background/60 border-border text-foreground h-9 w-full"
+                className={cn(
+                  "w-full border-border bg-background/60 pl-9 pr-4 text-foreground",
+                  compact ? "h-8 text-sm" : "h-9"
+                )}
                 value={headerProps.query}
                 onChange={(e) => {
                   headerProps.onQueryChange(e.target.value)
@@ -143,25 +178,31 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
                 onKeyDown={headerProps.onSearchKeyDown}
               />
               {headerProps.searchFocused && headerProps.results.length > 0 && (
-                <div className="absolute top-full mt-1 left-0 right-0 bg-card border border-border rounded-lg shadow-2xl overflow-hidden z-50">
+                <div
+                  className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-card shadow-2xl"
+                  onMouseLeave={() => headerProps.onSearchResultRulesHover?.(null)}
+                >
                   <div className="max-h-80 overflow-y-auto">
                     {headerProps.results.slice(0, 10).map((card, idx) => (
                       <div
                         key={card.id}
-                        className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
+                        className={`flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors ${
                           idx === headerProps.selectedResultIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"
                         }`}
-                        onMouseEnter={() => headerProps.onSearchResultHover(idx)}
+                        onMouseEnter={() => {
+                          headerProps.onSearchResultHover(idx)
+                          headerProps.onSearchResultRulesHover?.(card)
+                        }}
                         onClick={() => headerProps.onAddCard(card)}
                       >
                         {getCardImageUrl(card, "small") && (
-                          <img src={getCardImageUrl(card, "small")} alt="" className="w-7 h-auto rounded shrink-0" draggable={false} />
+                          <img src={getCardImageUrl(card, "small")} alt="" className="h-auto w-7 shrink-0 rounded" draggable={false} />
                         )}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{card.name}</div>
-                          <div className="text-xs text-muted-foreground truncate">{card.type_line}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">{card.name}</div>
+                          <div className="truncate text-xs text-muted-foreground">{card.type_line}</div>
                         </div>
-                        <ManaText text={card.mana_cost} className="text-xs text-muted-foreground shrink-0 ml-2" />
+                        <ManaText text={card.mana_cost} className="ml-2 shrink-0 text-xs text-muted-foreground" />
                       </div>
                     ))}
                   </div>
@@ -169,34 +210,32 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
               )}
             </div>
           ) : (
-            <div className="flex-1 min-w-0" />
+            <div className="hidden min-h-9 sm:block sm:min-h-0 sm:flex-1 sm:min-w-0" aria-hidden />
           )}
-
-          <div className="flex items-center gap-2 shrink-0">
-            {headerProps.isOwner && !headerProps.viewing && (
-              <button
-                type="button"
-                onClick={() => headerProps.onOpenSettings()}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-md bg-card border border-border hover:bg-accent text-foreground"
-                title="Deck settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-            )}
-            {headerProps.deck && (
-              <ExportDeckMenu
-                deckId={headerProps.deckId}
-                deckName={headerProps.displayedDeckName}
-                cards={headerProps.displayedCards}
-                primerMarkdown={headerProps.exportPrimerMarkdown}
-                commanderIds={headerProps.displayedCommanderIds}
-                isPublic={!!headerProps.deck.is_public}
-                isOwner={headerProps.isOwner}
-                onVisibilityChange={headerProps.onVisibilityChange}
-                onImportClick={headerProps.isOwner && !headerProps.viewing ? headerProps.onImportClick : undefined}
-              />
-            )}
-          </div>
+          {headerProps.deck ? <DeckLikeButton deckId={headerProps.deckId} /> : null}
+          {headerProps.isOwner && !headerProps.viewing && (
+            <button
+              type="button"
+              onClick={() => headerProps.onOpenSettings()}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent"
+              title="Deck settings"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+          )}
+          {headerProps.deck && (
+            <ExportDeckMenu
+              deckId={headerProps.deckId}
+              deckName={headerProps.displayedDeckName}
+              cards={headerProps.displayedCards}
+              primerMarkdown={headerProps.exportPrimerMarkdown}
+              commanderIds={headerProps.displayedCommanderIds}
+              isPublic={!!headerProps.deck.is_public}
+              isOwner={headerProps.isOwner}
+              onVisibilityChange={headerProps.onVisibilityChange}
+              onImportClick={headerProps.isOwner && !headerProps.viewing ? headerProps.onImportClick : undefined}
+            />
+          )}
         </div>
       </div>
     </header>

@@ -13,6 +13,7 @@ import {
   cmcOf,
   getCardFaceImages,
   getCardImageUrl,
+  rulesTextForDisplay,
   type ScryfallCard,
   type ScryfallPrinting,
 } from "@/lib/scryfall"
@@ -25,7 +26,11 @@ import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner
 import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { pickPrice } from "@/lib/format"
 import { hasLandFaceOnTypeLine } from "@/lib/card-types"
-import { validateDeckForFormat } from "@/lib/deck-format-validation"
+import {
+  getFormatValidationDataVersion,
+  validateDeckForFormat,
+} from "@/lib/deck-format-validation"
+import { useTopNavDeckGuest } from "@/components/TopNavDeckGuestContext"
 import { useDeckWorkspaceFetch } from "./use-deck-workspace-fetch"
 import { hydrateVersionSnapshot } from "./deck-workspace-version-hydrate"
 import {
@@ -38,6 +43,7 @@ import {
   STACK_PEEK_RATIO,
   TAG_GROUP_UNTAGGED,
 } from "./deck-workspace-constants"
+import { loadDeckWorkspaceDisplayPrefs, saveDeckWorkspaceDisplayPrefs } from "./deck-workspace-display-prefs"
 import {
   defaultPrimerSeed,
   groupDeckCards,
@@ -49,8 +55,24 @@ import type { CardInteractionPhase, DeckCardRow, DiffTargetState, ViewingSnapsho
 import { DeckWorkspaceHeader } from "./DeckWorkspaceHeader"
 import { DeckWorkspaceDecklistToolbar } from "./DeckWorkspaceDecklistToolbar"
 import { DeckWorkspaceGroupedDecklist } from "./DeckWorkspaceGroupedDecklist"
+import { DeckWorkspaceCommanderRail } from "./DeckWorkspaceCommanderRail"
 import { DeckWorkspaceDialogsSection } from "./DeckWorkspaceDialogsSection"
 import type { DeckWorkspaceOverflowMenusProps } from "./deck-workspace-overflow-menus"
+import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
+import {
+  REGISTRY_ZONE_IDS,
+  DEFAULT_CARD_ZONE_ID,
+  MAINBOARD_ZONE_ID,
+  getZoneLabel,
+  normalizeCardZone,
+  sanitizeCustomZoneId,
+  validateCustomZoneName,
+} from "@/lib/zones"
+
+const DeckWorkspaceBoardsTab = dynamic(
+  () => import("./DeckWorkspaceBoardsTab").then((m) => ({ default: m.DeckWorkspaceBoardsTab })),
+  { ssr: false }
+)
 
 const DeckAgentSidebar = dynamic(
   () => import("@/components/agent/DeckAgentSidebar").then((m) => ({ default: m.DeckAgentSidebar })),
@@ -107,9 +129,33 @@ export default function DeckWorkspaceClient({
   const [customTagInput, setCustomTagInput] = useState("")
   const [activeCardIdForTag, setActiveCardIdForTag] = useState<string | null>(null)
 
+  const [cardQtyDialog, setCardQtyDialog] = useState<null | { mode: "add" | "remove"; cardId: string }>(null)
+  const [cardQtyDialogInput, setCardQtyDialogInput] = useState("")
+  const [boardDialogOpen, setBoardDialogOpen] = useState(false)
+  const [customBoardInput, setCustomBoardInput] = useState("")
+  const [customBoardError, setCustomBoardError] = useState<string | null>(null)
+  /** Snapshot for dialog copy (cleared ids would otherwise show 0 while closing). */
+  const [customBoardDialogTargetCount, setCustomBoardDialogTargetCount] = useState(1)
+  /** Deck card row ids targeted by the custom-board name dialog (one or many). */
+  const [activeCardIdsForBoard, setActiveCardIdsForBoard] = useState<string[]>([])
+
   const [hoveredStack, setHoveredStack] = useState<{ groupName: string; colIdx: number; itemIdx: number } | null>(null)
   const [cardSize, setCardSize] = useState(DEFAULT_CARD_SIZE)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const [agentOpen, setAgentOpen] = useState(false)
+
+  // One-shot sync from localStorage (guest + signed-in); cannot read during SSR render.
+  useLayoutEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- hydrate decklist toolbar prefs from localStorage */
+    const p = loadDeckWorkspaceDisplayPrefs()
+    setViewMode(p.viewMode)
+    setGrouping(p.grouping)
+    setSorting(p.sorting)
+    setCardSize(p.cardSize)
+    // Match Tailwind `md`: assistant expanded on desktop, collapsed on narrow viewports (before first paint).
+    setAgentOpen(window.matchMedia("(min-width: 768px)").matches)
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [])
   const toggleSection = (name: string) => setCollapsedSections(prev => {
     const next = new Set(prev)
     if (next.has(name)) next.delete(name); else next.add(name)
@@ -131,7 +177,7 @@ export default function DeckWorkspaceClient({
   const [clickedPreview, setClickedPreview] = useState<{ card: DeckCard; groupName: string } | null>(null)
   const [previewFaceIndex, setPreviewFaceIndex] = useState(0)
   const [readyCardInteractionKey, setReadyCardInteractionKey] = useState<string | null>(null)
-  /** After closing a ⋮ menu in the format-hints dialog, ignore row clicks for a short window (ghost click-through). */
+  /** After interacting with a card ⋮ menu (or format-hints dialog rows), ignore stray row/preview clicks briefly (portaled menu click-through). */
   const formatHintsMenuClosedAtRef = useRef(0)
 
   // New: ownership, tabs, settings, primer, version-viewing
@@ -141,13 +187,13 @@ export default function DeckWorkspaceClient({
   const [tab, setTabState] = useState<DeckTab>(tabParam ?? "decklist")
   const setTab = (t: DeckTab) => {
     setTabState(t)
+    if (t !== "decklist") setRulesHover(null)
     const url = new URL(window.location.href)
     if (t === "decklist") url.searchParams.delete("tab")
     else url.searchParams.set("tab", t)
     router.replace(`${url.pathname}${url.search}`)
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [agentOpen, setAgentOpen] = useState(true)
   const [primerEditing, setPrimerEditing] = useState(false)
   const [primerMarkdown, setPrimerMarkdown] = useState("")
   const [cardsLoading, setCardsLoading] = useState(true)
@@ -161,6 +207,12 @@ export default function DeckWorkspaceClient({
   const [formatHintsListOpen, setFormatHintsListOpen] = useState(false)
   const [deckFormatHintHoverId, setDeckFormatHintHoverId] = useState<string | null>(null)
   const [previewFormatHintsHovered, setPreviewFormatHintsHovered] = useState(false)
+  const [rulesHover, setRulesHover] = useState<DeckRulesHoverPayload>(null)
+  /** Deck workspace header chrome only — toggled by scrolling the decklist area. */
+  const [deckChromeCollapsed, setDeckChromeCollapsed] = useState(false)
+
+  // Active board/zone selector (for decklist view filtering)
+  const [activeZone, setActiveZone] = useState<string>(DEFAULT_CARD_ZONE_ID)
 
   const [deckTitleEditing, setDeckTitleEditing] = useState(false)
   const [deckTitleDraft, setDeckTitleDraft] = useState("")
@@ -169,6 +221,84 @@ export default function DeckWorkspaceClient({
   const skipDeckTitleBlurCommitRef = useRef(false)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
+
+  const [agentRailInsetPx, setAgentRailInsetPx] = useState(0)
+  const dockRightInsetPx = isOwner && !viewing ? agentRailInsetPx : 0
+
+  const onDeckCardRulesPreviewHover = useCallback((card: DeckCard | null) => {
+    setRulesHover((prev) => {
+      if (card) return { kind: "deck", card }
+      return prev?.kind === "deck" ? null : prev
+    })
+  }, [])
+
+  const onSearchResultRulesHover = useCallback((card: ScryfallCard | null) => {
+    setRulesHover((prev) => {
+      if (card) return { kind: "scryfall", card }
+      return prev?.kind === "scryfall" ? null : prev
+    })
+  }, [])
+
+  const endSearchDropdown = useCallback(() => {
+    setSearchFocused(false)
+    setRulesHover((prev) => (prev?.kind === "scryfall" ? null : prev))
+  }, [])
+
+  const { setGuestDeckNav, deckEditorScrollCompact, setDeckEditorScrollCompact } =
+    useTopNavDeckGuest()
+
+  useEffect(() => {
+    if (accessDenied) return
+    const el = scrollContainerRef.current
+    if (!el) return
+    let raf = 0
+    const onScroll = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const y = el.scrollTop
+        setDeckChromeCollapsed((prev) => {
+          if (y > 48 && !prev) return true
+          if (y < 10 && prev) return false
+          return prev
+        })
+      })
+    }
+    el.addEventListener("scroll", onScroll, { passive: true })
+    onScroll()
+    return () => {
+      el.removeEventListener("scroll", onScroll)
+      cancelAnimationFrame(raf)
+    }
+  }, [tab, deckId, accessDenied])
+
+  /** Site top nav: stay expanded until the deck is ready, then animate to the default compact bar. */
+  useEffect(() => {
+    if (accessDenied || !deck || deck.id !== deckId) {
+      setDeckEditorScrollCompact(false)
+      return () => {
+        setDeckEditorScrollCompact(false)
+      }
+    }
+    if (cardsLoading) {
+      setDeckEditorScrollCompact(false)
+      return () => {
+        setDeckEditorScrollCompact(false)
+      }
+    }
+    let cancelled = false
+    let innerRaf = 0
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        if (!cancelled) setDeckEditorScrollCompact(true)
+      })
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(outerRaf)
+      cancelAnimationFrame(innerRaf)
+      setDeckEditorScrollCompact(false)
+    }
+  }, [accessDenied, deck, deckId, cardsLoading, setDeckEditorScrollCompact])
 
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -239,12 +369,12 @@ export default function DeckWorkspaceClient({
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
-        setSearchFocused(false)
+        endSearchDropdown()
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [endSearchDropdown])
 
   useEffect(() => {
     if (!clickedPreview) return
@@ -266,6 +396,15 @@ export default function DeckWorkspaceClient({
     setCardsLoading,
     setCoverImageUrl,
   })
+
+  useEffect(() => {
+    if (!deck || deck.id !== deckId || accessDenied) {
+      setGuestDeckNav(false)
+      return
+    }
+    setGuestDeckNav(!isOwner)
+    return () => setGuestDeckNav(false)
+  }, [deck, deckId, accessDenied, isOwner, setGuestDeckNav])
 
   const addToDeck = async (card: ScryfallCard) => {
     const existing = cards.find(c => c.scryfall_id === card.id)
@@ -292,7 +431,7 @@ export default function DeckWorkspaceClient({
         finish: 'nonfoil',
         name: card.name,
         quantity: 1,
-        zone: 'mainboard',
+        zone: MAINBOARD_ZONE_ID,
         tags: [],
         image_url: getCardImageUrl(card),
         face_images: getCardFaceImages(card),
@@ -302,7 +441,7 @@ export default function DeckWorkspaceClient({
         colors: card.colors ?? [],
         color_identity: card.color_identity ?? [],
         legalities: card.legalities,
-        oracle_text: card.oracle_text || '',
+        oracle_text: rulesTextForDisplay(card) || card.oracle_text || "",
         set_code: card.set,
         collector_number: card.collector_number,
         available_finishes: card.finishes,
@@ -334,7 +473,7 @@ export default function DeckWorkspaceClient({
     addToDeck(card)
     setQuery('')
     setResults([])
-    setSearchFocused(false)
+    endSearchDropdown()
     setSelectedResultIdx(0)
   }
 
@@ -349,7 +488,7 @@ export default function DeckWorkspaceClient({
     } else if (e.key === 'Enter') {
       if (results[selectedResultIdx]) handleAddCard(results[selectedResultIdx])
     } else if (e.key === 'Escape') {
-      setSearchFocused(false)
+      endSearchDropdown()
       setQuery('')
     }
   }
@@ -366,6 +505,106 @@ export default function DeckWorkspaceClient({
       toast.error(error.message)
     } else {
       recordMutationVersion(`Removed ${card.name}`, versionSince)
+    }
+  }
+
+  const MAX_COPIES_PER_LINE = 999
+
+  const applyDeckCardQuantityDelta = async (cardId: string, delta: number) => {
+    if (delta === 0) return
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    const prevQty = card.quantity
+    let nextQty = prevQty + delta
+    if (nextQty < 0) return
+    if (nextQty === 0) {
+      void deleteCard(cardId)
+      return
+    }
+    if (nextQty > MAX_COPIES_PER_LINE) {
+      nextQty = MAX_COPIES_PER_LINE
+    }
+    const effectiveDelta = nextQty - prevQty
+    if (effectiveDelta === 0) {
+      if (delta > 0) {
+        toast.error(`Cannot exceed ${MAX_COPIES_PER_LINE} copies per line.`)
+      }
+      return
+    }
+    const versionSince = new Date().toISOString()
+    setCards(prev => prev.map(c => c.id === cardId ? { ...c, quantity: nextQty } : c))
+    const { data, error } = await supabase.from('deck_cards').update({ quantity: nextQty }).eq('id', cardId).select().single()
+    if (error) {
+      setCards(prev => prev.map(c => c.id === cardId ? { ...c, quantity: prevQty } : c))
+      toast.error(error.message)
+    } else if (data) {
+      setCards(prev => prev.map(c => c.id === cardId ? mergeDeckCardRow(c, data as DeckCardRow) : c))
+      const abs = Math.abs(effectiveDelta)
+      const dir = effectiveDelta > 0 ? "Added" : "Removed"
+      recordMutationVersion(`${dir} ${abs}× ${card.name} (now ${nextQty})`, versionSince)
+    }
+  }
+
+  const addOneToDeckCard = (cardId: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    if (card.quantity >= MAX_COPIES_PER_LINE) {
+      toast.error(`Cannot exceed ${MAX_COPIES_PER_LINE} copies per line.`)
+      return
+    }
+    void applyDeckCardQuantityDelta(cardId, 1)
+  }
+
+  const removeOneFromDeckCard = (cardId: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card || card.quantity < 2) return
+    void applyDeckCardQuantityDelta(cardId, -1)
+  }
+
+  const handleCardQtyDialogSubmit = () => {
+    if (!cardQtyDialog) return
+    const card = cards.find(c => c.id === cardQtyDialog.cardId)
+    if (!card) {
+      setCardQtyDialog(null)
+      setCardQtyDialogInput("")
+      return
+    }
+    const raw = cardQtyDialogInput.trim()
+    const n = parseInt(raw, 10)
+    if (!Number.isFinite(n) || n < 1) {
+      toast.error("Enter a positive whole number.")
+      return
+    }
+    if (cardQtyDialog.mode === "add") {
+      const maxAdd = MAX_COPIES_PER_LINE - card.quantity
+      if (maxAdd <= 0) {
+        toast.error(`This line already has the maximum of ${MAX_COPIES_PER_LINE} copies.`)
+        return
+      }
+      const add = Math.min(n, maxAdd)
+      setCardQtyDialog(null)
+      setCardQtyDialogInput("")
+      void applyDeckCardQuantityDelta(card.id, add)
+      if (add < n) {
+        toast.info(`Added ${add} copies (capped at ${MAX_COPIES_PER_LINE} per line).`)
+      }
+      return
+    }
+    if (card.quantity < 4) {
+      setCardQtyDialog(null)
+      setCardQtyDialogInput("")
+      return
+    }
+    if (n > card.quantity) {
+      toast.error(`You only have ${card.quantity} copies.`)
+      return
+    }
+    setCardQtyDialog(null)
+    setCardQtyDialogInput("")
+    if (n >= card.quantity) {
+      void deleteCard(card.id)
+    } else {
+      void applyDeckCardQuantityDelta(card.id, -n)
     }
   }
 
@@ -535,11 +774,92 @@ export default function DeckWorkspaceClient({
     setPrintingsByCard(prev => ({ ...prev, [card.id]: prints }))
   }
 
+  const handleBoardDialogOpenChange = (open: boolean) => {
+    setBoardDialogOpen(open)
+    if (!open) {
+      setActiveCardIdsForBoard([])
+      setCustomBoardDialogTargetCount(1)
+      setCustomBoardInput("")
+      setCustomBoardError(null)
+    }
+  }
+
+  const moveCardsToZone = async (cardIds: string[], toZone: string) => {
+    const idSet = new Set(cardIds)
+    const targets = cards.filter((c) => idSet.has(c.id) && normalizeCardZone(c.zone) !== toZone)
+    if (targets.length === 0) return
+    const versionSince = new Date().toISOString()
+    const prevById = new Map(targets.map((c) => [c.id, normalizeCardZone(c.zone)]))
+    const ids = targets.map((c) => c.id)
+    setCards((prev) => prev.map((c) => (ids.includes(c.id) ? { ...c, zone: toZone } : c)))
+    const { error } = await supabase.from("deck_cards").update({ zone: toZone }).in("id", ids)
+    if (error) {
+      setCards((prev) =>
+        prev.map((c) => {
+          const pz = prevById.get(c.id)
+          return pz !== undefined ? { ...c, zone: pz } : c
+        })
+      )
+      toast.error(error.message)
+    } else {
+      const zoneLabel = getZoneLabel(toZone)
+      const summary =
+        targets.length === 1 ? targets[0]!.name : `${targets.length} cards`
+      recordMutationVersion(`Moved ${summary} to ${zoneLabel}`, versionSince)
+    }
+  }
+
+  const moveCardToZone = async (cardId: string, zone: string) => {
+    await moveCardsToZone([cardId], zone)
+  }
+
+  /** Batch-move all cards in `fromZone` to `toZone` in a single DB update. */
+  const moveAllCardsInZone = async (fromZone: string, toZone: string) => {
+    const zoneCards = cards.filter(c => normalizeCardZone(c.zone) === fromZone)
+    if (zoneCards.length === 0) return
+    const versionSince = new Date().toISOString()
+    const cardIds = zoneCards.map(c => c.id)
+    // Optimistic update
+    setCards(prev => prev.map(c => cardIds.includes(c.id) ? { ...c, zone: toZone } : c))
+    const { error } = await supabase
+      .from('deck_cards')
+      .update({ zone: toZone })
+      .in('id', cardIds)
+    if (error) {
+      // Revert
+      setCards(prev => prev.map(c => cardIds.includes(c.id) ? { ...c, zone: fromZone } : c))
+      toast.error(error.message)
+    } else {
+      recordMutationVersion(`Moved all cards from ${fromZone} to ${toZone}`, versionSince)
+    }
+  }
+
   const handleCustomTagSubmit = () => {
     if (activeCardIdForTag && customTagInput) addTag(activeCardIdForTag, customTagInput)
     setTagDialogOpen(false)
     setCustomTagInput("")
     setActiveCardIdForTag(null)
+  }
+
+  const handleCustomBoardSubmit = () => {
+    const error = validateCustomZoneName(customBoardInput)
+    if (error === "empty") {
+      setCustomBoardError("Board name cannot be empty.")
+      return
+    }
+    if (error === "reserved") {
+      setCustomBoardError(`"${customBoardInput.trim()}" is a reserved board name. Please choose a different name.`)
+      return
+    }
+    const zoneId = sanitizeCustomZoneId(customBoardInput)
+    if (!zoneId) {
+      setCustomBoardError("Board name is invalid.")
+      return
+    }
+    if (activeCardIdsForBoard.length > 0) {
+      void moveCardsToZone(activeCardIdsForBoard, zoneId)
+    }
+    handleBoardDialogOpenChange(false)
   }
 
   const handleTagDragEnd = (event: DragEndEvent) => {
@@ -640,6 +960,19 @@ export default function DeckWorkspaceClient({
     : (deck?.name ?? initialDeckName ?? "Loading…")
   const displayedFormat = viewing ? viewing.deckMeta.format : deck?.format ?? null
   const displayedBracket = viewing ? viewing.deckMeta.bracket : deck?.bracket ?? null
+
+  // Custom zone ids: any zone value not in the registry (user-created boards)
+  const customZoneIds = useMemo(
+    () => Array.from(new Set(displayedCards.map(c => normalizeCardZone(c.zone)).filter(z => !REGISTRY_ZONE_IDS.has(z)))),
+    [displayedCards]
+  )
+
+  // Cards filtered to the active zone (for the decklist view)
+  const zoneFilteredCards = useMemo(
+    () => displayedCards.filter(c => normalizeCardZone(c.zone) === activeZone),
+    [displayedCards, activeZone]
+  )
+
   const cardInteractionKey = useMemo(
     () => displayedCards.map(c => `${c.id}:${c.effective_printing_id ?? c.scryfall_id}:${c.quantity}`).join('|'),
     [displayedCards]
@@ -662,21 +995,24 @@ export default function DeckWorkspaceClient({
 
   const deckLandQtyIncludingMdfc = useMemo(
     () =>
-      displayedCards.reduce(
+      zoneFilteredCards.reduce(
         (sum, c) => sum + (hasLandFaceOnTypeLine(c.type_line) ? c.quantity : 0),
         0
       ),
-    [displayedCards]
+    [zoneFilteredCards]
   )
 
-  const formatViolationMap = useMemo(() => {
-    const { violationsByCardId } = validateDeckForFormat(displayedFormat, {
-      cards: displayedCards,
-      commanderScryfallIds: displayedCommanderIds,
-      bracket: displayedBracket,
-    })
-    return violationsByCardId
-  }, [displayedCards, displayedCommanderIds, displayedFormat, displayedBracket])
+  const formatValidation = useMemo(
+    () =>
+      validateDeckForFormat(displayedFormat, {
+        cards: displayedCards,
+        commanderScryfallIds: displayedCommanderIds,
+        bracket: displayedBracket,
+        dataVersion: getFormatValidationDataVersion(displayedFormat),
+      }),
+    [displayedCards, displayedCommanderIds, displayedFormat, displayedBracket]
+  )
+  const formatViolationMap = formatValidation.violationsByCardId
 
   const formatHintCardList = useMemo(
     () =>
@@ -687,8 +1023,8 @@ export default function DeckWorkspaceClient({
   )
 
   const groupedCards = useMemo(
-    () => groupDeckCards(displayedCards, grouping, sorting),
-    [displayedCards, grouping, sorting]
+    () => groupDeckCards(zoneFilteredCards, grouping, sorting),
+    [zoneFilteredCards, grouping, sorting]
   )
 
   const commanderCards = displayedCommanderIds
@@ -714,6 +1050,7 @@ export default function DeckWorkspaceClient({
   }, [cardsLoading, cardInteractionKey, grouping, sorting, viewMode])
 
   const showClickedPreview = (card: DeckCard, groupName: string) => {
+    if (performance.now() - formatHintsMenuClosedAtRef.current < 450) return
     setPreviewFaceIndex(0)
     setPreviewFormatHintsHovered(false)
     setClickedPreview({ card, groupName })
@@ -729,6 +1066,8 @@ export default function DeckWorkspaceClient({
     allUniqueTags,
     printingsByCard,
     formatHintsMenuClosedAtRef,
+    displayedFormat,
+    customZoneIds,
     ensurePrintingsLoaded,
     onSetCommander: (id) => {
       void setAsCommander(id)
@@ -752,10 +1091,33 @@ export default function DeckWorkspaceClient({
       setActiveCardIdForTag(cardId)
       setTagDialogOpen(true)
     },
+    onMoveToZone: (cardId, zone) => {
+      void moveCardToZone(cardId, zone)
+    },
+    onOpenCustomBoardDialog: (cardId) => {
+      setActiveCardIdsForBoard([cardId])
+      setCustomBoardDialogTargetCount(1)
+      setCustomBoardInput("")
+      setCustomBoardError(null)
+      handleBoardDialogOpenChange(true)
+    },
     onDeleteCard: (id) => {
       void deleteCard(id)
     },
-    onClosePreview: () => setClickedPreview(null),
+    onAddOneToCard: (cardId) => {
+      addOneToDeckCard(cardId)
+    },
+    onOpenAddQuantityDialog: (cardId) => {
+      setCardQtyDialog({ mode: "add", cardId })
+      setCardQtyDialogInput("")
+    },
+    onRemoveOneFromCard: (cardId) => {
+      removeOneFromDeckCard(cardId)
+    },
+    onOpenRemoveQuantityDialog: (cardId) => {
+      setCardQtyDialog({ mode: "remove", cardId })
+      setCardQtyDialogInput("")
+    },
   }
 
   if (accessDenied) {
@@ -775,7 +1137,11 @@ export default function DeckWorkspaceClient({
     : null
 
   return (
-    <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
+    <div
+      className={`fixed inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground transition-[top] duration-200 ease-out ${
+        deckEditorScrollCompact ? "top-7" : "top-14"
+      }`}
+    >
 
       <DeckWorkspaceHeader
         deckId={deckId}
@@ -830,10 +1196,12 @@ export default function DeckWorkspaceClient({
         onSearchFocus={() => setSearchFocused(true)}
         onSearchKeyDown={handleSearchKeyDown}
         onSearchResultHover={setSelectedResultIdx}
+        onSearchResultRulesHover={onSearchResultRulesHover}
         onAddCard={handleAddCard}
         onOpenSettings={() => setSettingsOpen(true)}
         onImportClick={() => setImportOpen(true)}
         onVisibilityChange={(pub) => deck && setDeck({ ...deck, is_public: pub })}
+        collapsedChrome={deckChromeCollapsed}
       />
 
       <DeckTabs
@@ -855,19 +1223,47 @@ export default function DeckWorkspaceClient({
           <div className="p-6 max-w-7xl mx-auto space-y-8">
         {tab === "decklist" && (
           <>
-            <DeckWorkspaceDecklistToolbar
-              cardSize={cardSize}
-              grouping={grouping}
-              sorting={sorting}
-              viewMode={viewMode}
-              displayedFormat={displayedFormat}
-              formatViolationCount={formatViolationMap.size}
-              onCardSizeChange={setCardSize}
-              onGroupingChange={(g) => setGrouping(g)}
-              onSortingChange={(s) => setSorting(s)}
-              onViewModeChange={(v) => setViewMode(v)}
-              onOpenFormatHints={() => setFormatHintsListOpen(true)}
-            />
+            <div className="relative z-20 overflow-visible">
+              <div className="flex flex-col gap-4 min-[1180px]:flex-row min-[1180px]:items-start min-[1180px]:justify-between min-[1180px]:gap-6 min-[1180px]:-mb-12 min-[1180px]:pb-3">
+                <div className="min-w-0 min-[1180px]:flex-1">
+                  <DeckWorkspaceDecklistToolbar
+                    cardSize={cardSize}
+                    grouping={grouping}
+                    sorting={sorting}
+                    viewMode={viewMode}
+                    displayedFormat={displayedFormat}
+                    formatValidationStatus={formatValidation.status}
+                    formatDeckViolations={formatValidation.deckViolations}
+                    formatViolationCount={formatViolationMap.size}
+                    activeZone={activeZone}
+                    customZoneIds={customZoneIds}
+                    onCardSizeChange={(n) => {
+                      setCardSize(n)
+                      saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting, cardSize: n })
+                    }}
+                    onGroupingChange={(g) => {
+                      setGrouping(g)
+                      saveDeckWorkspaceDisplayPrefs({ viewMode, grouping: g, sorting, cardSize })
+                    }}
+                    onSortingChange={(s) => {
+                      setSorting(s)
+                      saveDeckWorkspaceDisplayPrefs({ viewMode, grouping, sorting: s, cardSize })
+                    }}
+                    onViewModeChange={(v) => {
+                      setViewMode(v)
+                      saveDeckWorkspaceDisplayPrefs({ viewMode: v, grouping, sorting, cardSize })
+                    }}
+                    onOpenFormatHints={() => setFormatHintsListOpen(true)}
+                    onZoneChange={setActiveZone}
+                  />
+                </div>
+                <DeckWorkspaceCommanderRail
+                  commanderCards={commanderCards}
+                  showClickedPreview={showClickedPreview}
+                  onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
+                />
+              </div>
+            </div>
             <DeckWorkspaceGroupedDecklist
               groupedCards={groupedCards}
               grouping={grouping}
@@ -878,8 +1274,7 @@ export default function DeckWorkspaceClient({
               toggleAllSections={toggleAllSections}
               cardDragDisabled={cardDragDisabled}
               deckLandQtyIncludingMdfc={deckLandQtyIncludingMdfc}
-              commanderCards={commanderCards}
-              displayedCards={displayedCards}
+              displayedCards={zoneFilteredCards}
               displayedCommanderIds={displayedCommanderIds}
               displayedCoverImageId={displayedCoverImageId}
               formatViolationMap={formatViolationMap}
@@ -894,12 +1289,43 @@ export default function DeckWorkspaceClient({
               stackCardHeight={stackCardHeight}
               stackHoverShift={stackHoverShift}
               cardsLoading={cardsLoading}
-              liveCardCount={cards.length}
+              liveCardCount={zoneFilteredCards.length}
               sensors={dndSensors}
               onTagDragEnd={handleTagDragEnd}
               overflowMenus={overflowMenus}
+              rulesHover={rulesHover}
+              onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
+              dockRightInsetPx={dockRightInsetPx}
             />
           </>
+        )}
+
+        {tab === "boards" && (
+          <DeckWorkspaceBoardsTab
+            cards={displayedCards}
+            format={displayedFormat}
+            isOwner={isOwner}
+            viewing={!!viewing}
+            activeZone={activeZone}
+            onZoneChange={setActiveZone}
+            onZoneOpenInDecklist={(zone) => {
+              setActiveZone(zone)
+              setTab("decklist")
+            }}
+            onMoveCardsToZone={(cardIds, zone) => void moveCardsToZone(cardIds, zone)}
+            onOpenCustomBoardForCards={(cardIds) => {
+              setActiveCardIdsForBoard(cardIds)
+              setCustomBoardDialogTargetCount(Math.max(1, cardIds.length))
+              setCustomBoardInput("")
+              setCustomBoardError(null)
+              handleBoardDialogOpenChange(true)
+            }}
+            onRemoveBoard={(zoneId) => {
+              void moveAllCardsInZone(zoneId, MAINBOARD_ZONE_ID).then(() => {
+                toast.success(`Moved all cards from board to mainboard.`)
+              })
+            }}
+          />
         )}
 
 
@@ -943,6 +1369,7 @@ export default function DeckWorkspaceClient({
           onClose={() => setAgentOpen(false)}
           onOpen={() => setAgentOpen(true)}
           onAssistantResponseFinished={fetchDeck}
+          onRailInsetChange={setAgentRailInsetPx}
         />
       )}
       </div>
@@ -981,6 +1408,7 @@ export default function DeckWorkspaceClient({
         formatHintsListOpen={formatHintsListOpen}
         setFormatHintsListOpen={setFormatHintsListOpen}
         formatHintCardList={formatHintCardList}
+        formatDeckViolations={formatValidation.deckViolations}
         formatViolationMap={formatViolationMap}
         formatHintsMenuClosedAtRef={formatHintsMenuClosedAtRef}
         showClickedPreview={showClickedPreview}
@@ -1006,6 +1434,19 @@ export default function DeckWorkspaceClient({
         customTagInput={customTagInput}
         setCustomTagInput={setCustomTagInput}
         handleCustomTagSubmit={handleCustomTagSubmit}
+        cardQtyDialog={cardQtyDialog}
+        setCardQtyDialog={setCardQtyDialog}
+        cardQtyDialogInput={cardQtyDialogInput}
+        setCardQtyDialogInput={setCardQtyDialogInput}
+        handleCardQtyDialogSubmit={handleCardQtyDialogSubmit}
+        maxCopiesPerLine={MAX_COPIES_PER_LINE}
+        boardDialogOpen={boardDialogOpen}
+        setBoardDialogOpen={handleBoardDialogOpenChange}
+        customBoardTargetCount={customBoardDialogTargetCount}
+        customBoardInput={customBoardInput}
+        setCustomBoardInput={setCustomBoardInput}
+        customBoardError={customBoardError}
+        handleCustomBoardSubmit={handleCustomBoardSubmit}
       />
     </div>
   )

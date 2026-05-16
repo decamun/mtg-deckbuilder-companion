@@ -40,6 +40,8 @@ interface Props {
    * Called after each mutating tool completes (debounced) and once when the assistant stream ends (immediate).
    */
   onAssistantResponseFinished?: () => void | Promise<void>
+  /** Width in px of this rail (collapsed strip or open panel). Deck workspace uses this to inset fixed UI. */
+  onRailInsetChange?: (widthPx: number) => void
 }
 
 interface LimitsResponse {
@@ -100,7 +102,14 @@ const MIN_WIDTH = 240
 const MAX_WIDTH = 720
 const DEFAULT_WIDTH = 320
 
-export function DeckAgentSidebar({ deckId, open, onClose, onOpen, onAssistantResponseFinished }: Props) {
+export function DeckAgentSidebar({
+  deckId,
+  open,
+  onClose,
+  onOpen,
+  onAssistantResponseFinished,
+  onRailInsetChange,
+}: Props) {
   const refreshDeckRef = useRef(onAssistantResponseFinished)
 
   const syncedMutatingToolCallIdsRef = useRef<Set<string>>(new Set())
@@ -141,6 +150,10 @@ export function DeckAgentSidebar({ deckId, open, onClose, onOpen, onAssistantRes
   const [limits, setLimits] = useState<LimitsResponse | null>(null)
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [subscribeOpen, setSubscribeOpen] = useState(false)
+
+  useLayoutEffect(() => {
+    onRailInsetChange?.(open ? width : 40)
+  }, [open, width, onRailInsetChange])
   const [savingNotify, setSavingNotify] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const isResizing = useRef(false)

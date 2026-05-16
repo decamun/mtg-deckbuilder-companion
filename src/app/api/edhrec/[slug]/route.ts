@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { isValidEdhrecSlug } from "@/lib/edhrec"
+import { logger } from "@/lib/logger"
 
 const BROWSER_HEADERS = {
   "User-Agent":
@@ -94,15 +95,15 @@ export async function GET(
             headers: { "Cache-Control": SUCCESS_CACHE },
           })
         }
-        console.warn("[edhrec] average-decks unknown shape for", slug, Object.keys(data))
+        logger.warn("[edhrec] average-decks unknown shape", { slug, keys: Object.keys(data) })
       } else {
-        console.warn(`[edhrec] average-decks error body for ${slug}:`, data.error)
+        logger.warn("[edhrec] average-decks error body", { slug, edhrecError: data.error })
       }
     } else {
-      console.warn(`[edhrec] average-decks returned ${res.status} for ${slug}`)
+      logger.warn("[edhrec] average-decks non-ok response", { slug, status: res.status })
     }
   } catch (e) {
-    console.warn("[edhrec] average-decks fetch error:", e)
+    logger.warn("[edhrec] average-decks fetch error", { slug, error: String(e) })
   }
 
   // Fallback: pages/commanders endpoint (different CF policy, has cardlists)
@@ -138,9 +139,9 @@ export async function GET(
       }
     }
 
-    console.warn(`[edhrec] pages/commanders returned ${res.status} for ${slug}`)
+    logger.warn("[edhrec] pages/commanders non-ok response", { slug, status: res.status })
   } catch (e) {
-    console.warn("[edhrec] pages/commanders fetch error:", e)
+    logger.warn("[edhrec] pages/commanders fetch error", { slug, error: String(e) })
   }
 
   return NextResponse.json(

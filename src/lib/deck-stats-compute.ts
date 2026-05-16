@@ -6,11 +6,13 @@
 import { primaryTypeLine } from '@/lib/card-types'
 import type { DeckRow } from '@/lib/deck-service'
 import {
-  isFormatValidationImplemented,
+  getFormatValidationDataVersion,
+  type DeckFormatValidationStatus,
   normalizeFormatForValidation,
   validateDeckForFormat,
   type FormatValidationCard,
 } from '@/lib/deck-format-validation'
+import { DEFAULT_CARD_ZONE_ID, zoneCountsTowardMainDeck } from '@/lib/zones'
 
 /** Card shape for analytics + Commander format hints (matches hydrated deck rows). */
 export interface DeckStatsCard {
@@ -68,12 +70,12 @@ export function isLandTypeLine(typeLine: string | undefined): boolean {
   return !!typeLine && primaryTypeLine(typeLine).includes('Land')
 }
 
-function isBasicLand(typeLine: string | undefined): boolean {
+export function isBasicLand(typeLine: string | undefined): boolean {
   return !!typeLine && primaryTypeLine(typeLine).includes('Basic') && primaryTypeLine(typeLine).includes('Land')
 }
 
 /** MDFCs where the front face is NOT a land but the back face IS (e.g. "Sorcery // Land") */
-function isMdfcWithLandBack(typeLine: string | undefined): boolean {
+export function isMdfcWithLandBack(typeLine: string | undefined): boolean {
   if (!typeLine) return false
   const sep = typeLine.indexOf(' // ')
   if (sep === -1) return false
@@ -590,7 +592,7 @@ function asValidationCards(cards: DeckStatsCard[]): FormatValidationCard[] {
     oracle_id: c.oracle_id ?? null,
     name: c.name,
     quantity: c.quantity,
-    zone: c.zone ?? 'mainboard',
+    zone: c.zone ?? DEFAULT_CARD_ZONE_ID,
     type_line: c.type_line,
     oracle_text: c.oracle_text,
     color_identity: c.color_identity,
@@ -618,7 +620,10 @@ export interface DeckStatsReport {
     rows_missing_price: number
   }
   format_validation: {
+    validation_status: DeckFormatValidationStatus
     validation_implemented: boolean
+    data_version: string | null
+    deck_violations: readonly string[]
     violation_card_count: number
     violations: Array<{
       deck_card_id: string
@@ -638,7 +643,9 @@ export interface DeckStatsReport {
 
 export function computeDeckStatsReport(deck: DeckRow, allCards: DeckStatsCard[]): DeckStatsReport {
   const commanderIds = deck.commander_scryfall_ids ?? []
-  const mainboard = allCards.filter(c => !commanderIds.includes(c.scryfall_id))
+  const mainboard = allCards.filter(
+    c => !commanderIds.includes(c.scryfall_id) && zoneCountsTowardMainDeck(c.zone)
+  )
   const commanders = allCards.filter(c => commanderIds.includes(c.scryfall_id))
 
   let sumPrice = 0
@@ -650,13 +657,14 @@ export function computeDeckStatsReport(deck: DeckRow, allCards: DeckStatsCard[])
 
   const totalQty = allCards.reduce((s, c) => s + c.quantity, 0)
 
-  const { violationsByCardId } = validateDeckForFormat(deck.format, {
+  const formatValidation = validateDeckForFormat(deck.format, {
     cards: asValidationCards(allCards),
     commanderScryfallIds: commanderIds,
     bracket: deck.bracket ?? null,
+    dataVersion: getFormatValidationDataVersion(deck.format),
   })
 
-  const violations = [...violationsByCardId.entries()]
+  const violations = [...formatValidation.violationsByCardId.entries()]
     .filter(([, reasons]) => reasons.length > 0)
     .map(([id, reasons]) => {
       const row = allCards.find(x => x.id === id)
@@ -689,7 +697,10 @@ export function computeDeckStatsReport(deck: DeckRow, allCards: DeckStatsCard[])
       rows_missing_price: rowsMissingPrice,
     },
     format_validation: {
-      validation_implemented: isFormatValidationImplemented(deck.format),
+      validation_status: formatValidation.status,
+      validation_implemented: formatValidation.status === 'implemented',
+      data_version: formatValidation.dataVersion,
+      deck_violations: formatValidation.deckViolations,
       violation_card_count: violations.length,
       violations,
     },

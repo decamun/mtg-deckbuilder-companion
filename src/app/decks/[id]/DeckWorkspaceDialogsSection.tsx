@@ -25,6 +25,8 @@ export type DeckWorkspaceDialogsSectionProps = {
   formatHintsListOpen: boolean
   setFormatHintsListOpen: (v: boolean) => void
   formatHintCardList: DeckCard[]
+  /** Deck-wide messages (e.g. 60-card main, points cap) from the same pass as {@link formatViolationMap}. */
+  formatDeckViolations: readonly string[]
   formatViolationMap: ReadonlyMap<string, readonly string[]>
   formatHintsMenuClosedAtRef: MutableRefObject<number>
   showClickedPreview: (c: DeckCard, groupName: string) => void
@@ -50,6 +52,20 @@ export type DeckWorkspaceDialogsSectionProps = {
   customTagInput: string
   setCustomTagInput: (v: string) => void
   handleCustomTagSubmit: () => void
+  cardQtyDialog: null | { mode: "add" | "remove"; cardId: string }
+  setCardQtyDialog: (v: null | { mode: "add" | "remove"; cardId: string }) => void
+  cardQtyDialogInput: string
+  setCardQtyDialogInput: React.Dispatch<React.SetStateAction<string>>
+  handleCardQtyDialogSubmit: () => void
+  maxCopiesPerLine: number
+  boardDialogOpen: boolean
+  setBoardDialogOpen: (v: boolean) => void
+  /** Number of deck rows being moved (for plural dialog copy). */
+  customBoardTargetCount: number
+  customBoardInput: string
+  setCustomBoardInput: (v: string) => void
+  customBoardError: string | null
+  handleCustomBoardSubmit: () => void
 }
 
 export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionProps) {
@@ -60,13 +76,32 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
           <DialogHeader>
             <DialogTitle>Format hints</DialogTitle>
             <DialogDescription>
-              {props.formatHintCardList.length} card{props.formatHintCardList.length === 1 ? "" : "s"} that do not match{" "}
-              {props.displayedFormat === "edh" ? "EDH" : "the selected"} construction hints.
+              {props.formatHintCardList.length > 0 ? (
+                <>
+                  {props.formatHintCardList.length} card{props.formatHintCardList.length === 1 ? "" : "s"} that do not
+                  match {props.displayedFormat === "edh" ? "EDH" : "the selected"} construction hints.
+                </>
+              ) : props.formatDeckViolations.length > 0 ? (
+                <>Deck-level construction messages for {props.displayedFormat === "edh" ? "EDH" : "the selected format"}.</>
+              ) : (
+                <>No format hints to show.</>
+              )}
             </DialogDescription>
           </DialogHeader>
+          {props.formatDeckViolations.length > 0 && (
+            <div className="mb-3 rounded-md border border-red-500/35 bg-red-950/25 px-3 py-2 text-xs leading-snug text-red-200/95">
+              {props.formatDeckViolations.map((msg, i) => (
+                <p key={i}>{msg}</p>
+              ))}
+            </div>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-card/50">
             {props.formatHintCardList.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">No cards to show.</p>
+              <p className="p-4 text-sm text-muted-foreground">
+                {props.formatDeckViolations.length > 0
+                  ? "No individual cards flagged; see deck messages above."
+                  : "No cards to show."}
+              </p>
             ) : (
               props.formatHintCardList.map((c) => {
                 const hintLines = props.formatViolationMap.get(c.id) ?? []
@@ -101,7 +136,7 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <span className="w-16 text-right font-mono text-xs text-muted-foreground tabular-nums">{formatPrice(c.price_usd)}</span>
-                      <DeckWorkspaceThreeDotMenu {...props.overflowMenus} c={c} groupName={gn} align="end" fromFormatHintsDialog />
+                      <DeckWorkspaceThreeDotMenu {...props.overflowMenus} c={c} groupName={gn} align="end" />
                     </div>
                   </div>
                 )
@@ -229,6 +264,114 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
             </Button>
             <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={props.handleCustomTagSubmit}>
               Add Tag
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!props.cardQtyDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            props.setCardQtyDialog(null)
+            props.setCardQtyDialogInput("")
+          }
+        }}
+      >
+        <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
+          {props.cardQtyDialog && (() => {
+            const d = props.cardQtyDialog
+            const card = props.cards.find((c) => c.id === d.cardId)
+            const isAdd = d.mode === "add"
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{isAdd ? "Add copies" : "Remove copies"}</DialogTitle>
+                  <DialogDescription>
+                    {card ? (
+                      <>
+                        <span className="font-medium text-foreground">{card.name}</span>
+                        {" "}
+                        — currently {card.quantity} in this deck
+                        {isAdd ? ` (max ${props.maxCopiesPerLine} per line).` : "."}
+                      </>
+                    ) : (
+                      "This card is no longer in the deck."
+                    )}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                  <Input
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    value={props.cardQtyDialogInput}
+                    onChange={(e) => props.setCardQtyDialogInput(e.target.value)}
+                    placeholder={isAdd ? "Number to add" : "Number to remove"}
+                    className="bg-background border-border text-foreground placeholder:text-muted-foreground"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") props.handleCardQtyDialogSubmit()
+                    }}
+                    autoFocus
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      props.setCardQtyDialog(null)
+                      props.setCardQtyDialogInput("")
+                    }}
+                    className="hover:bg-accent hover:text-accent-foreground"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className={isAdd ? "bg-primary hover:bg-primary/90 text-primary-foreground" : "bg-destructive hover:bg-destructive/90 text-destructive-foreground"}
+                    onClick={props.handleCardQtyDialogSubmit}
+                    disabled={!card}
+                  >
+                    {isAdd ? "Add" : "Remove"}
+                  </Button>
+                </DialogFooter>
+              </>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={props.boardDialogOpen} onOpenChange={props.setBoardDialogOpen}>
+        <DialogContent className="bg-card border border-border text-foreground sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Move to Custom Board</DialogTitle>
+            <DialogDescription>
+              Enter a name for the new board.{" "}
+              {props.customBoardTargetCount <= 1
+                ? "The card will be moved to it immediately."
+                : `All ${props.customBoardTargetCount} selected cards will be moved to it immediately.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Input
+              value={props.customBoardInput}
+              onChange={(e) => props.setCustomBoardInput(e.target.value)}
+              placeholder="e.g. Wishboard"
+              className="bg-background border-border text-foreground placeholder:text-muted-foreground"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") props.handleCustomBoardSubmit()
+              }}
+              autoFocus
+            />
+            {props.customBoardError && (
+              <p className="text-xs text-destructive">{props.customBoardError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => props.setBoardDialogOpen(false)} className="hover:bg-accent hover:text-accent-foreground">
+              Cancel
+            </Button>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={props.handleCustomBoardSubmit} disabled={!props.customBoardInput.trim()}>
+              {props.customBoardTargetCount <= 1 ? "Move card" : "Move cards"}
             </Button>
           </DialogFooter>
         </DialogContent>

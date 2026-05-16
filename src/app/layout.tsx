@@ -3,6 +3,7 @@ import { Armata, Audiowide } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { TopNav } from "@/components/TopNav";
+import { TopNavDeckGuestProvider } from "@/components/TopNavDeckGuestContext";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from '@vercel/analytics/next';
 
@@ -34,8 +35,10 @@ export default function RootLayout({
       className={`${armata.variable} ${audiowide.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col">
-        <TopNav />
-        {children}
+        <TopNavDeckGuestProvider>
+          <TopNav />
+          {children}
+        </TopNavDeckGuestProvider>
         <Toaster theme="dark" />
         <SpeedInsights />
         <footer className="mt-auto border-t border-border py-4 px-6">

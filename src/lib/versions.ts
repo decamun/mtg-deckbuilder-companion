@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client"
+import { DEFAULT_CARD_ZONE_ID } from "@/lib/zones"
 
 export interface VersionSnapshotCard {
   scryfall_id: string
@@ -73,7 +74,7 @@ async function buildSnapshot(deckId: string): Promise<VersionSnapshot | null> {
       oracle_id: c.oracle_id ?? null,
       name: c.name,
       quantity: c.quantity,
-      zone: c.zone ?? "mainboard",
+      zone: c.zone ?? DEFAULT_CARD_ZONE_ID,
       tags: c.tags ?? [],
     })),
     primer_markdown: deck.primer_markdown ?? "",

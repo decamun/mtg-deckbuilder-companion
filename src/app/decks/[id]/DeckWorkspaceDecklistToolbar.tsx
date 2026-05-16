@@ -4,8 +4,9 @@ import { LayoutGrid, List, Layers as StackIcon } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { GroupingMode, SortingMode, ViewMode } from "@/lib/types"
-import { isFormatValidationImplemented } from "@/lib/deck-format-validation"
+import type { DeckFormatValidationStatus } from "@/lib/deck-format-validation"
 import { MIN_CARD_SIZE, MAX_CARD_SIZE } from "./deck-workspace-constants"
+import { getZonesForFormat } from "@/lib/zones"
 
 export type DeckWorkspaceDecklistToolbarProps = {
   cardSize: number
@@ -13,17 +14,37 @@ export type DeckWorkspaceDecklistToolbarProps = {
   sorting: SortingMode
   viewMode: ViewMode
   displayedFormat: string | null
+  formatValidationStatus: DeckFormatValidationStatus
+  formatDeckViolations: readonly string[]
   formatViolationCount: number
+  activeZone: string
+  customZoneIds: string[]
   onCardSizeChange: (n: number) => void
   onGroupingChange: (g: GroupingMode) => void
   onSortingChange: (s: SortingMode) => void
   onViewModeChange: (v: ViewMode) => void
   onOpenFormatHints: () => void
+  onZoneChange: (zone: string) => void
 }
 
 export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbarProps) {
+  const zones = getZonesForFormat(props.displayedFormat, props.customZoneIds)
+
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <Tabs value={props.viewMode} onValueChange={(v) => props.onViewModeChange(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
+        <TabsList className="h-7 bg-transparent">
+          <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
+            <LayoutGrid className="w-3.5 h-3.5" />
+          </TabsTrigger>
+          <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
+            <StackIcon className="w-3.5 h-3.5" />
+          </TabsTrigger>
+          <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
+            <List className="w-3.5 h-3.5" />
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
       <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">
         Card size
         <input
@@ -59,30 +80,59 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
           <SelectItem value="rarity">Rarity</SelectItem>
         </SelectContent>
       </Select>
-      <Tabs value={props.viewMode} onValueChange={(v) => props.onViewModeChange(v as ViewMode)} className="bg-card rounded-md p-0.5 border border-border">
-        <TabsList className="h-7 bg-transparent">
-          <TabsTrigger value="visual" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
-            <LayoutGrid className="w-3.5 h-3.5" />
-          </TabsTrigger>
-          <TabsTrigger value="stack" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
-            <StackIcon className="w-3.5 h-3.5" />
-          </TabsTrigger>
-          <TabsTrigger value="list" className="px-2 h-6 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
-            <List className="w-3.5 h-3.5" />
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-      {props.formatViolationCount > 0 && isFormatValidationImplemented(props.displayedFormat) && (
-        <button
-          type="button"
-          onClick={() => props.onOpenFormatHints()}
-          className="max-w-[14rem] cursor-pointer rounded px-0.5 text-left text-xs leading-snug text-red-400/90 hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
-          title="Show cards with format hints"
-        >
-          Format hints · {props.formatViolationCount} card{props.formatViolationCount === 1 ? "" : "s"} (
-          {props.displayedFormat === "edh" ? "EDH" : props.displayedFormat ?? "format"})
-        </button>
+      {zones.length > 1 && (
+        <Select value={props.activeZone} onValueChange={(v) => v && props.onZoneChange(v)}>
+          <SelectTrigger className="w-36 bg-card border-border h-8 text-foreground">
+            <SelectValue placeholder="Board" />
+          </SelectTrigger>
+          <SelectContent className="bg-card border-border text-foreground">
+            {zones.map((z) => (
+              <SelectItem key={z.id} value={z.id}>
+                {z.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
+      {props.formatDeckViolations.length > 0 && (
+        <div
+          className={
+            props.formatValidationStatus === "implemented"
+              ? "max-w-[22rem] text-xs leading-snug text-red-400/90"
+              : "max-w-[22rem] text-xs leading-snug text-muted-foreground"
+          }
+        >
+          {props.formatDeckViolations.map((msg, index) => (
+            <p key={index}>{msg}</p>
+          ))}
+        </div>
+      )}
+      {props.formatValidationStatus === "implemented" &&
+        (props.formatViolationCount > 0 || props.formatDeckViolations.length > 0) && (
+          <button
+            type="button"
+            onClick={() => props.onOpenFormatHints()}
+            className="max-w-[16rem] cursor-pointer rounded px-0.5 text-left text-xs leading-snug text-red-400/90 hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
+            title={
+              props.formatViolationCount > 0
+                ? "Show cards with format hints and deck-level messages"
+                : "Show deck-level format messages"
+            }
+          >
+            {(() => {
+              const parts: string[] = []
+              if (props.formatViolationCount > 0) {
+                parts.push(
+                  `${props.formatViolationCount} card${props.formatViolationCount === 1 ? "" : "s"}`
+                )
+              }
+              if (props.formatDeckViolations.length > 0) {
+                parts.push("deck rules")
+              }
+              return `Format hints · ${parts.join(" · ")} (${props.displayedFormat === "edh" ? "EDH" : props.displayedFormat ?? "format"})`
+            })()}
+          </button>
+        )}
     </div>
   )
 }

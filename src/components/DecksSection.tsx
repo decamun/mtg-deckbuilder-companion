@@ -73,7 +73,7 @@ function DecksSectionContent() {
 
     const { data, error } = await supabase
       .from("decks")
-      .select("*")
+      .select("id, name, format, budget_usd, bracket, cover_image_scryfall_id, commander_scryfall_ids, description, is_public, primer_markdown, user_id, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
@@ -368,6 +368,7 @@ function DecksSectionContent() {
                     <SelectItem value="legacy">Legacy</SelectItem>
                     <SelectItem value="vintage">Vintage</SelectItem>
                     <SelectItem value="pauper">Pauper</SelectItem>
+                    <SelectItem value="canlander">Canadian Highlander</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>

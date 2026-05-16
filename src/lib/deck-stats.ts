@@ -6,6 +6,7 @@ import {
   type DeckStatsCard,
   type DeckStatsReport,
 } from '@/lib/deck-stats-compute'
+import { DEFAULT_CARD_ZONE_ID } from '@/lib/zones'
 
 export type { DeckStatsCard, DeckStatsReport } from '@/lib/deck-stats-compute'
 
@@ -30,7 +31,7 @@ export async function hydrateDeckStatsCards(rows: DeckCardRow[]): Promise<DeckSt
       oracle_id: oracleId,
       name: c.name,
       quantity: c.quantity,
-      zone: c.zone ?? 'mainboard',
+      zone: c.zone ?? DEFAULT_CARD_ZONE_ID,
       tags: c.tags,
       type_line: effSf?.type_line || '',
       mana_cost: effSf?.mana_cost || '',

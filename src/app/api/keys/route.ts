@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateApiKey } from '@/lib/mcp-auth'
 import { getRequestId } from '@/lib/request-id'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
   if (error) {
-    console.error('[api-keys] list failed', { userId: user.id, requestId, error: error.message })
+    logger.error('[api-keys] list failed', { userId: user.id, requestId, error: error.message })
     return NextResponse.json(
       { message: 'Unable to list API keys.', requestId },
       { status: 500, headers: { 'x-request-id': requestId } }
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
     .select('id, name, key_prefix, created_at')
     .single()
   if (error) {
-    console.error('[api-keys] create failed', { userId: user.id, requestId, error: error.message })
+    logger.error('[api-keys] create failed', { userId: user.id, requestId, error: error.message })
     return NextResponse.json(
       { message: 'Unable to create API key.', requestId },
       { status: 500, headers: { 'x-request-id': requestId } }

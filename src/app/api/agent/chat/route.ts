@@ -15,6 +15,7 @@ import { buildDeckAgentTools } from '@/lib/agent-tools'
 import * as deckService from '@/lib/deck-service'
 import { getCardsByIds, type ScryfallCard } from '@/lib/scryfall'
 import { getRequestId } from '@/lib/request-id'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -233,7 +234,7 @@ export async function POST(request: Request) {
   const requestId = getRequestId(request)
   const quotaLog = await recordCall(supabase, user.id, modelId)
   if (!quotaLog.ok) {
-    console.error('[agent-chat] quota logging failed (fail closed)', {
+    logger.error('[agent-chat] quota logging failed (fail closed)', {
       userId: user.id,
       modelId,
       error: quotaLog.error,
@@ -259,16 +260,21 @@ export async function POST(request: Request) {
     : []
 
   const tools = buildDeckAgentTools(supabase, user.id, body.deckId)
-  const isHaiku = modelId === 'anthropic/claude-haiku-4.5'
+  const useTerseAssistantStyle =
+    modelId === 'anthropic/claude-haiku-4.5' ||
+    modelId === 'deepseek/deepseek-v4-flash'
   const deckContext = buildDeckContext(deck.format, commanderCards)
 
   const result = streamText({
     model: resolveModel(modelId),
-    system: SYSTEM_PROMPT(deck.name, deck.id, isHaiku, deckContext),
+    system: SYSTEM_PROMPT(deck.name, deck.id, useTerseAssistantStyle, deckContext),
     messages: await convertToModelMessages(body.messages),
     tools,
     stopWhen: stepCountIs(tier.maxStepsPerCall),
-    providerOptions: reasoningProviderOptions(modelId, body.enableReasoning ?? !isHaiku),
+    providerOptions: reasoningProviderOptions(
+      modelId,
+      body.enableReasoning ?? !useTerseAssistantStyle
+    ),
   })
 
   return result.toUIMessageStreamResponse({

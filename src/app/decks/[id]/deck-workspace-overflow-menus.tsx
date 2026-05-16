@@ -11,6 +11,10 @@ import type { ScryfallPrinting } from "@/lib/scryfall"
 import type { MutableRefObject } from "react"
 import { DeckWorkspaceCardActionMenuItems } from "./deck-workspace-card-action-menu-items"
 
+function stampPortaledMenuCloseGuard(ref: MutableRefObject<number>) {
+  ref.current = performance.now()
+}
+
 export type DeckWorkspaceOverflowMenusProps = {
   isOwner: boolean
   viewing: boolean
@@ -20,6 +24,8 @@ export type DeckWorkspaceOverflowMenusProps = {
   allUniqueTags: string[]
   printingsByCard: Record<string, ScryfallPrinting[]>
   formatHintsMenuClosedAtRef: MutableRefObject<number>
+  displayedFormat: string | null
+  customZoneIds: string[]
   ensurePrintingsLoaded: (card: DeckCard) => void
   onSetCommander: (scryfallId: string) => void
   onSetCoverImage: (scryfallId: string) => void
@@ -28,8 +34,13 @@ export type DeckWorkspaceOverflowMenusProps = {
   onAddTag: (cardId: string, tag: string) => void
   onRemoveTag: (cardId: string, tag: string) => void
   onOpenCustomTagDialog: (cardId: string) => void
+  onMoveToZone: (cardId: string, zone: string) => void
+  onOpenCustomBoardDialog: (cardId: string) => void
   onDeleteCard: (cardId: string) => void
-  onClosePreview: () => void
+  onAddOneToCard: (cardId: string) => void
+  onOpenAddQuantityDialog: (cardId: string) => void
+  onRemoveOneFromCard: (cardId: string) => void
+  onOpenRemoveQuantityDialog: (cardId: string) => void
 }
 
 /** Overflow menu fields used to build card action rows (excludes ghost-click ref only needed by ⋮ triggers). */
@@ -48,6 +59,8 @@ export function buildDeckWorkspaceMenuItemProps(
     coverImageId: menus.coverImageId,
     allUniqueTags: menus.allUniqueTags,
     printings: menus.printingsByCard[c.id] ?? [],
+    displayedFormat: menus.displayedFormat,
+    customZoneIds: menus.customZoneIds,
     onEnsurePrintingsLoaded: menus.ensurePrintingsLoaded,
     onSetCommander: menus.onSetCommander,
     onSetCoverImage: menus.onSetCoverImage,
@@ -56,7 +69,13 @@ export function buildDeckWorkspaceMenuItemProps(
     onAddTag: menus.onAddTag,
     onRemoveTag: menus.onRemoveTag,
     onOpenCustomTagDialog: menus.onOpenCustomTagDialog,
+    onMoveToZone: menus.onMoveToZone,
+    onOpenCustomBoardDialog: menus.onOpenCustomBoardDialog,
     onDeleteCard: menus.onDeleteCard,
+    onAddOneToCard: menus.onAddOneToCard,
+    onOpenAddQuantityDialog: menus.onOpenAddQuantityDialog,
+    onRemoveOneFromCard: menus.onRemoveOneFromCard,
+    onOpenRemoveQuantityDialog: menus.onOpenRemoveQuantityDialog,
   }
 }
 
@@ -65,14 +84,12 @@ export function DeckWorkspaceThreeDotMenu(
     c: DeckCard
     groupName: string
     align?: "start" | "end"
-    fromFormatHintsDialog?: boolean
   }
 ) {
   const {
     c,
     groupName,
     align = "end",
-    fromFormatHintsDialog = false,
     formatHintsMenuClosedAtRef,
     ...menus
   } = props
@@ -81,10 +98,10 @@ export function DeckWorkspaceThreeDotMenu(
     <DropdownMenu
       onOpenChange={(open) => {
         if (open) void menus.ensurePrintingsLoaded(c)
-        else if (fromFormatHintsDialog) {
-          queueMicrotask(() => {
-            formatHintsMenuClosedAtRef.current = performance.now()
-          })
+        else {
+          // Synchronous stamp so a portaled-menu "click-through" on the same frame
+          // still sees a fresh window (queueMicrotask ran too late for list rows).
+          stampPortaledMenuCloseGuard(formatHintsMenuClosedAtRef)
         }
       }}
     >
@@ -97,7 +114,14 @@ export function DeckWorkspaceThreeDotMenu(
       >
         <MoreVertical className="h-4 w-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align={align} className="w-56 bg-white border-border text-foreground">
+      <DropdownMenuContent
+        align={align}
+        finalFocus={false}
+        className="w-56 bg-white border-border text-foreground"
+        onPointerDownCapture={() => {
+          stampPortaledMenuCloseGuard(formatHintsMenuClosedAtRef)
+        }}
+      >
         <DeckWorkspaceCardActionMenuItems variant="dropdown" {...buildDeckWorkspaceMenuItemProps(menus, c, groupName)} />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -116,7 +140,6 @@ export function DeckWorkspacePreviewDropdownMenu(
         open
         onOpenChange={(next) => {
           if (next) void menus.ensurePrintingsLoaded(c)
-          else menus.onClosePreview()
         }}
       >
         <DropdownMenuTrigger
