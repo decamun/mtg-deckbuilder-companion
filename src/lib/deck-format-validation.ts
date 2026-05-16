@@ -234,9 +234,9 @@ type DeckFormatValidatorDefinition = {
   validate?: (ctx: DeckFormatValidationContext) => ValidatedFormatViolationBundle
 }
 
-const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern', 'pauper'])
+const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern', 'legacy', 'pauper'])
 
-type SixtyCardConstructedFormat = 'standard' | 'pioneer' | 'modern' | 'pauper'
+type SixtyCardConstructedFormat = 'standard' | 'pioneer' | 'modern' | 'legacy' | 'pauper'
 
 const CANADIAN_HIGHLANDER_FORMAT = 'canlander' as const
 
@@ -365,7 +365,11 @@ const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> =
     status: 'implemented',
     validate: ({ cards }) => computeCanadianHighlanderViolations(cards),
   },
-  legacy: { label: 'Legacy', status: 'not_yet_implemented' },
+  legacy: {
+    label: 'Legacy',
+    status: 'implemented',
+    validate: ({ cards }) => validateSixtyCardConstructed('legacy', cards),
+  },
   vintage: { label: 'Vintage', status: 'not_yet_implemented' },
   pauper: {
     label: 'Pauper',

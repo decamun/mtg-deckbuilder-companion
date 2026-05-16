@@ -37,7 +37,7 @@ describe('validateDeckForFormat', () => {
     expect(getFormatValidationStatus('standard')).toBe('implemented')
     expect(getFormatValidationStatus('modern')).toBe('implemented')
     expect(getFormatValidationStatus('pioneer')).toBe('implemented')
-    expect(getFormatValidationStatus('legacy')).toBe('not_yet_implemented')
+    expect(getFormatValidationStatus('legacy')).toBe('implemented')
     expect(getFormatValidationStatus('vintage')).toBe('not_yet_implemented')
     expect(getFormatValidationStatus('pauper')).toBe('implemented')
     expect(getFormatValidationStatus('canlander')).toBe('implemented')
@@ -47,6 +47,7 @@ describe('validateDeckForFormat', () => {
     expect(isFormatValidationImplemented('standard')).toBe(true)
     expect(getFormatValidationDataVersion('edh')).toContain('game-changers:')
     expect(getFormatValidationDataVersion('standard')).toBe('standard-live-legalities+scryfall')
+    expect(getFormatValidationDataVersion('legacy')).toBe('legacy-live-legalities+scryfall')
     expect(getFormatValidationDataVersion('pauper')).toBe('pauper-live-legalities+scryfall')
     expect(getFormatValidationDataVersion('canlander')).toContain('canlander-artifacts:')
   })
@@ -547,6 +548,92 @@ describe('validateDeckForFormat', () => {
     expect(result.violationsByCardId.get('dup-maybe')).toBeUndefined()
   })
 
+  it('validates legacy legality and copy limits while ignoring commander/bracket fields', () => {
+    const cards = [
+      {
+        id: 'main-filler',
+        scryfall_id: 'main-filler-id',
+        oracle_id: 'main-filler-oracle',
+        name: 'Main Filler',
+        quantity: 56,
+        zone: MAINBOARD_ZONE_ID,
+        type_line: 'Basic Land — Forest',
+        color_identity: ['G'],
+        legalities: { legacy: 'legal', commander: 'banned' },
+      },
+      {
+        id: 'banned-main',
+        scryfall_id: 'banned-main-id',
+        oracle_id: 'banned-main-oracle',
+        name: 'Banned Main',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { legacy: 'banned', commander: 'legal' },
+      },
+      {
+        id: 'not-legal-side',
+        scryfall_id: 'not-legal-side-id',
+        oracle_id: 'not-legal-side-oracle',
+        name: 'Not Legal Side',
+        quantity: 1,
+        zone: SIDEBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { legacy: 'not_legal', commander: 'legal' },
+      },
+      {
+        id: 'dup-main',
+        scryfall_id: 'dup-main-id',
+        oracle_id: 'dup-oracle',
+        name: 'Duplicate Main',
+        quantity: 3,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { legacy: 'legal', commander: 'legal' },
+      },
+      {
+        id: 'dup-side',
+        scryfall_id: 'dup-side-id',
+        oracle_id: 'dup-oracle',
+        name: 'Duplicate Side',
+        quantity: 2,
+        zone: SIDEBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { legacy: 'legal', commander: 'legal' },
+      },
+      {
+        id: 'dup-maybe',
+        scryfall_id: 'dup-maybe-id',
+        oracle_id: 'dup-oracle',
+        name: 'Duplicate Maybe',
+        quantity: 99,
+        zone: MAYBEBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { legacy: 'legal', commander: 'legal' },
+      },
+    ]
+
+    const result = validateDeckForFormat('legacy', {
+      cards,
+      commanderScryfallIds: ['banned-main-id'],
+      bracket: 1,
+    })
+
+    expect(result.status).toBe('implemented')
+    expect(result.deckViolations).toEqual([])
+    expect(result.violationsByCardId.get('main-filler')).toBeUndefined()
+    expect(result.violationsByCardId.get('banned-main')).toContain('Banned in Legacy')
+    expect(result.violationsByCardId.get('banned-main')).not.toContain('Banned in Commander')
+    expect(result.violationsByCardId.get('not-legal-side')).toContain('Not legal in Legacy')
+    expect(result.violationsByCardId.get('dup-main')).toContain(
+      'More than 4 copies in validated deck zones',
+    )
+    expect(result.violationsByCardId.get('dup-side')).toContain(
+      'More than 4 copies in validated deck zones',
+    )
+    expect(result.violationsByCardId.get('dup-maybe')).toBeUndefined()
+  })
+
   it('requires at least 60 mainboard cards in pauper', () => {
     const cards = [
       {
@@ -565,7 +652,7 @@ describe('validateDeckForFormat', () => {
     expect(result.deckViolations).toContain('Mainboard must contain exactly 60 cards (has 59).')
   })
 
-  it('does not apply 60-card mainboard rule to non-constructed formats', () => {
+  it('requires exactly 60 mainboard cards in legacy', () => {
     const cards = [
       {
         id: 'short-mainboard-legacy',
@@ -580,6 +667,24 @@ describe('validateDeckForFormat', () => {
     ]
 
     const result = validateDeckForFormat('legacy', { cards, commanderScryfallIds: [] })
+    expect(result.deckViolations).toContain('Mainboard must contain exactly 60 cards (has 1).')
+  })
+
+  it('does not apply 60-card mainboard rule to non-constructed formats', () => {
+    const cards = [
+      {
+        id: 'short-mainboard-vintage',
+        scryfall_id: 'short-mainboard-vintage-id',
+        oracle_id: 'short-mainboard-vintage-oracle',
+        name: 'Short Mainboard Vintage',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { vintage: 'legal' },
+      },
+    ]
+
+    const result = validateDeckForFormat('vintage', { cards, commanderScryfallIds: [] })
     expect(result.deckViolations).not.toContain('Mainboard must contain exactly 60 cards (has 1).')
   })
 })
