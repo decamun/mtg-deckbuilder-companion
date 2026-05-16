@@ -22,6 +22,9 @@ export const SIDEBOARD_ZONE_ID = 'sideboard' as const
 /** Canonical zone id for cards under consideration (excluded from legality counts). */
 export const MAYBEBOARD_ZONE_ID = 'maybeboard' as const
 
+/** Commander / partner cards (Commander-format decks). Excluded from main-deck totals. */
+export const COMMANDER_ZONE_ID = 'commander' as const
+
 /**
  * Fallback when `zone` is null, undefined, or blank — matches the DB default
  * on `deck_cards.zone`.
@@ -88,11 +91,22 @@ export const ZONE_REGISTRY: ZoneDefinition[] = [
     maxCards: null,
   },
   {
+    id: COMMANDER_ZONE_ID,
+    label: 'Commander',
+    countsTowardMainDeck: false,
+    isFormatValidated: false,
+    sortOrder: 1,
+    formatIds: ['edh', 'commander'],
+    locked: true,
+    isDefault: false,
+    maxCards: 2,
+  },
+  {
     id: SIDEBOARD_ZONE_ID,
     label: 'Sideboard',
     countsTowardMainDeck: false,
     isFormatValidated: true,
-    sortOrder: 1,
+    sortOrder: 2,
     formatIds: SIDEBOARD_FORMATS,
     /**
      * `locked: false` means the sideboard is user-removable in formats that do NOT
@@ -108,7 +122,7 @@ export const ZONE_REGISTRY: ZoneDefinition[] = [
     label: 'Maybeboard',
     countsTowardMainDeck: false,
     isFormatValidated: false,
-    sortOrder: 2,
+    sortOrder: 3,
     formatIds: null,
     locked: false,
     isDefault: true,
@@ -134,7 +148,7 @@ function capitalize(s: string): string {
 /**
  * Return the ordered list of zones that should be shown for a given format.
  * Always includes: mainboard + maybeboard (default zones).
- * Includes sideboard if the format is sideboard-eligible.
+ * Includes commander (EDH) and sideboard when the format calls for them.
  * Custom zones (ids not in the registry) are appended at the end.
  */
 export function getZonesForFormat(
@@ -207,6 +221,10 @@ export function isSideboardZone(zone: string | null | undefined): boolean {
 
 export function isMaybeboardZone(zone: string | null | undefined): boolean {
   return normalizeCardZone(zone) === MAYBEBOARD_ZONE_ID
+}
+
+export function isCommanderZone(zone: string | null | undefined): boolean {
+  return normalizeCardZone(zone) === COMMANDER_ZONE_ID
 }
 
 /**
