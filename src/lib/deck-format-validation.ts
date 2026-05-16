@@ -217,17 +217,19 @@ export type DeckFormatValidationResult = {
   dataVersion: string | null
 }
 
-type ValidatedFormatLike =
-  | ReadonlyMap<string, readonly string[]>
-  | {
-      violationsByCardId: ReadonlyMap<string, readonly string[]>
-      deckViolations?: readonly string[]
-    }
+type ValidatedFormatBundle = {
+  violationsByCardId: ReadonlyMap<string, readonly string[]>
+  deckViolations?: readonly string[]
+}
 
 function isValidatedFormatBundle(
-  validated: ValidatedFormatLike
-): validated is Extract<ValidatedFormatLike, { violationsByCardId: ReadonlyMap<string, readonly string[]> }> {
-  return typeof validated === 'object' && validated != null && 'violationsByCardId' in validated
+  validated: unknown
+): validated is ValidatedFormatBundle {
+  if (typeof validated !== 'object' || validated == null) return false
+  if (!('violationsByCardId' in validated)) return false
+  const candidate = validated as { violationsByCardId?: unknown; deckViolations?: unknown }
+  if (!(candidate.violationsByCardId instanceof Map)) return false
+  return candidate.deckViolations === undefined || Array.isArray(candidate.deckViolations)
 }
 
 type DeckFormatValidationContext = {
@@ -440,14 +442,17 @@ export function validateDeckForFormat(
   const deckZoneViolations = getDeckZoneViolations(normalized, ctx.cards)
 
   if (status === 'implemented' && definition?.validate) {
-    const validated = definition.validate({
+    const validated: unknown = definition.validate({
       cards: ctx.cards,
       commanderScryfallIds: ctx.commanderScryfallIds,
       bracket: ctx.bracket ?? null,
-    }) as ValidatedFormatLike
-    const violationsByCardId = isValidatedFormatBundle(validated)
-      ? validated.violationsByCardId
-      : validated
+    })
+    const violationsByCardId =
+      validated instanceof Map
+        ? validated
+        : isValidatedFormatBundle(validated)
+          ? validated.violationsByCardId
+          : new Map()
     const extraDeck = isValidatedFormatBundle(validated) ? (validated.deckViolations ?? []) : []
 
     return {
