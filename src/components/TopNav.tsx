@@ -1,8 +1,8 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { IdlebrewLogo } from "@/components/IdlebrewLogo"
 import { supabase } from "@/lib/supabase/client"
 import {
@@ -53,31 +53,6 @@ function navLinkIsActive(
     return false
   }
   return activePath === href || (href !== "/" && activePath.startsWith(href + "/"))
-}
-
-/**
- * Inner component that uses useSearchParams to detect whether the "boards" tab
- * is active. Must be wrapped in Suspense so that pages without search params
- * (e.g. /404) can still prerender.
- */
-function BoardsNavLink({ currentPath, user }: { currentPath: string; user: SupabaseUser | null }) {
-  const searchParams = useSearchParams()
-  const isDeckWs = isDeckWorkspacePath(currentPath)
-  if (!user || !isDeckWs) return null
-  const boardsHref = `${currentPath}?tab=boards`
-  const boardsActive = searchParams?.get("tab") === "boards"
-  return (
-    <Link
-      href={boardsHref}
-      className={`rounded-md px-2 sm:px-4 py-1.5 text-sm font-medium transition-colors ${
-        boardsActive
-          ? "border border-primary/20 bg-primary/10 text-primary"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-      }`}
-    >
-      Boards
-    </Link>
-  )
 }
 
 export function TopNav() {
@@ -217,12 +192,6 @@ export function TopNav() {
               )
             },
           )}
-          {/* Boards nav entry — visible on authenticated deck workspace pages.
-              Wrapped in Suspense because BoardsNavLink calls useSearchParams(),
-              which requires a Suspense boundary to avoid prerender errors. */}
-          <Suspense fallback={null}>
-            <BoardsNavLink currentPath={currentPath} user={user} />
-          </Suspense>
         </nav>
 
         {/* Spacer pushes dropdown to the far right */}

@@ -1,0 +1,12 @@
+{
+  "versionId": "canlander-artifacts-2026-03-02-partial-v1",
+  "pointsCap": 10,
+  "sourceNote": "Points cap and steward communication: https://canadianhighlander.ca/about/ and https://canadianhighlander.ca/points-list/ (March 2026 points update: https://canadianhighlander.ca/2026/03/02/march-2026-points-update/). pointsByOracleId is a partial snapshot (Scryfall oracle_id keys) maintained in-repo until the automated data-pipeline lands; bump versionId whenever this file changes.",
+  "pointsByOracleId": {
+    "1ed9e351-0000-4b75-8ecb-d15bd88df68a": 1,
+    "3aa83ed2-f48b-4ce6-a614-2c54ddf50538": 1,
+    "d0209d3f-3f7e-4fd5-bce5-10bce6f29c86": 5,
+    "1de1b591-a73f-4974-b507-8c63e07a0868": 5
+  },
+  "bannedOracleIds": []
+}

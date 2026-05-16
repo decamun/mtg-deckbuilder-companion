@@ -260,16 +260,21 @@ export async function POST(request: Request) {
     : []
 
   const tools = buildDeckAgentTools(supabase, user.id, body.deckId)
-  const isHaiku = modelId === 'anthropic/claude-haiku-4.5'
+  const useTerseAssistantStyle =
+    modelId === 'anthropic/claude-haiku-4.5' ||
+    modelId === 'deepseek/deepseek-v4-flash'
   const deckContext = buildDeckContext(deck.format, commanderCards)
 
   const result = streamText({
     model: resolveModel(modelId),
-    system: SYSTEM_PROMPT(deck.name, deck.id, isHaiku, deckContext),
+    system: SYSTEM_PROMPT(deck.name, deck.id, useTerseAssistantStyle, deckContext),
     messages: await convertToModelMessages(body.messages),
     tools,
     stopWhen: stepCountIs(tier.maxStepsPerCall),
-    providerOptions: reasoningProviderOptions(modelId, body.enableReasoning ?? !isHaiku),
+    providerOptions: reasoningProviderOptions(
+      modelId,
+      body.enableReasoning ?? !useTerseAssistantStyle
+    ),
   })
 
   return result.toUIMessageStreamResponse({

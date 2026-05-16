@@ -368,6 +368,7 @@ function DecksSectionContent() {
                     <SelectItem value="legacy">Legacy</SelectItem>
                     <SelectItem value="vintage">Vintage</SelectItem>
                     <SelectItem value="pauper">Pauper</SelectItem>
+                    <SelectItem value="canlander">Canadian Highlander</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>

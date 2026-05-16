@@ -94,24 +94,45 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
           </SelectContent>
         </Select>
       )}
-      {props.formatValidationStatus === 'not_yet_implemented' && props.formatDeckViolations.length > 0 && (
-        <div className="max-w-[18rem] text-xs leading-snug text-muted-foreground">
+      {props.formatDeckViolations.length > 0 && (
+        <div
+          className={
+            props.formatValidationStatus === "implemented"
+              ? "max-w-[22rem] text-xs leading-snug text-red-400/90"
+              : "max-w-[22rem] text-xs leading-snug text-muted-foreground"
+          }
+        >
           {props.formatDeckViolations.map((msg, index) => (
             <p key={index}>{msg}</p>
           ))}
         </div>
       )}
-      {props.formatViolationCount > 0 && props.formatValidationStatus === 'implemented' && (
-        <button
-          type="button"
-          onClick={() => props.onOpenFormatHints()}
-          className="max-w-[14rem] cursor-pointer rounded px-0.5 text-left text-xs leading-snug text-red-400/90 hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
-          title="Show cards with format hints"
-        >
-          Format hints · {props.formatViolationCount} card{props.formatViolationCount === 1 ? "" : "s"} (
-          {props.displayedFormat === "edh" ? "EDH" : props.displayedFormat ?? "format"})
-        </button>
-      )}
+      {props.formatValidationStatus === "implemented" &&
+        (props.formatViolationCount > 0 || props.formatDeckViolations.length > 0) && (
+          <button
+            type="button"
+            onClick={() => props.onOpenFormatHints()}
+            className="max-w-[16rem] cursor-pointer rounded px-0.5 text-left text-xs leading-snug text-red-400/90 hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
+            title={
+              props.formatViolationCount > 0
+                ? "Show cards with format hints and deck-level messages"
+                : "Show deck-level format messages"
+            }
+          >
+            {(() => {
+              const parts: string[] = []
+              if (props.formatViolationCount > 0) {
+                parts.push(
+                  `${props.formatViolationCount} card${props.formatViolationCount === 1 ? "" : "s"}`
+                )
+              }
+              if (props.formatDeckViolations.length > 0) {
+                parts.push("deck rules")
+              }
+              return `Format hints · ${parts.join(" · ")} (${props.displayedFormat === "edh" ? "EDH" : props.displayedFormat ?? "format"})`
+            })()}
+          </button>
+        )}
     </div>
   )
 }

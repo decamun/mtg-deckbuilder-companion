@@ -13,6 +13,10 @@ import {
   isGameChanger,
 } from '@/lib/game-changers'
 import {
+  computeCanadianHighlanderViolations,
+  getCanadianHighlanderFormatDataVersion,
+} from '@/lib/canadian-highlander-rules'
+import {
   getZonesForFormat,
   normalizeCardZone,
   SIDEBOARD_ZONE_ID,
@@ -39,6 +43,7 @@ export function normalizeFormatForValidation(format: string | null | undefined):
   if (format == null) return null
   const f = format.trim().toLowerCase()
   if (f === 'commander') return 'edh'
+  if (f === 'canadian highlander' || f === 'canadian-highlander') return 'canlander'
   return f || null
 }
 
@@ -138,7 +143,7 @@ function validateEdh(ctx: {
   cards: FormatValidationCard[]
   commanderScryfallIds: readonly string[]
   bracket: number | null | undefined
-}): Map<string, string[]> {
+}): ValidatedFormatViolationBundle {
   const bucket = new Map<string, Set<string>>()
   const add = (id: string, reason: string) => {
     let s = bucket.get(id)
@@ -207,7 +212,7 @@ function validateEdh(ctx: {
     }
   }
 
-  return new Map(Array.from(bucket, ([id, set]) => [id, [...set]]))
+  return asViolationBundle(new Map(Array.from(bucket, ([id, set]) => [id, [...set]])))
 }
 
 export type DeckFormatValidationResult = {
@@ -226,12 +231,25 @@ type DeckFormatValidationContext = {
 type DeckFormatValidatorDefinition = {
   label: string
   status: DeckFormatValidationStatus
-  validate?: (ctx: DeckFormatValidationContext) => ReadonlyMap<string, readonly string[]>
+  validate?: (ctx: DeckFormatValidationContext) => ValidatedFormatViolationBundle
 }
 
 const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern', 'legacy', 'pauper'])
 
 type SixtyCardConstructedFormat = 'standard' | 'pioneer' | 'modern' | 'legacy' | 'pauper'
+
+const CANADIAN_HIGHLANDER_FORMAT = 'canlander' as const
+
+export type ValidatedFormatViolationBundle = {
+  violationsByCardId: ReadonlyMap<string, readonly string[]>
+  deckViolations?: readonly string[]
+}
+
+function asViolationBundle(
+  violationsByCardId: ReadonlyMap<string, readonly string[]>
+): ValidatedFormatViolationBundle {
+  return { violationsByCardId }
+}
 
 function mergeViolationsInto(
   bucket: Map<string, Set<string>>,
@@ -262,7 +280,7 @@ function getOrCreateCardViolationSet(
 function validateSixtyCardConstructed(
   format: SixtyCardConstructedFormat,
   cards: FormatValidationCard[]
-): ReadonlyMap<string, readonly string[]> {
+): ValidatedFormatViolationBundle {
   const bucket = new Map<string, Set<string>>()
   const label = FORMAT_VALIDATOR_REGISTRY[format]?.label ?? format
   const validatingZones = new Set(
@@ -286,7 +304,7 @@ function validateSixtyCardConstructed(
   }
 
   mergeViolationsInto(bucket, getConstructedCopyLimitViolations(format, cards, 4))
-  return new Map(Array.from(bucket, ([id, set]) => [id, [...set]]))
+  return asViolationBundle(new Map(Array.from(bucket, ([id, set]) => [id, [...set]])))
 }
 
 function getDeckZoneViolations(
@@ -300,6 +318,15 @@ function getDeckZoneViolations(
       .reduce((sum, card) => sum + card.quantity, 0)
     if (mainboardQuantity !== 60) {
       violations.push(`Mainboard must contain exactly 60 cards (has ${mainboardQuantity}).`)
+    }
+  }
+
+  if (format === CANADIAN_HIGHLANDER_FORMAT) {
+    const mainboardQuantity = cards
+      .filter((card) => zoneCountsTowardMainDeck(card.zone))
+      .reduce((sum, card) => sum + card.quantity, 0)
+    if (mainboardQuantity !== 100) {
+      violations.push(`Mainboard must contain exactly 100 cards (has ${mainboardQuantity}).`)
     }
   }
 
@@ -333,6 +360,11 @@ const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> =
     status: 'implemented',
     validate: ({ cards }) => validateSixtyCardConstructed('pioneer', cards),
   },
+  canlander: {
+    label: 'Canadian Highlander',
+    status: 'implemented',
+    validate: ({ cards }) => computeCanadianHighlanderViolations(cards),
+  },
   legacy: {
     label: 'Legacy',
     status: 'implemented',
@@ -362,6 +394,9 @@ export function getFormatValidationDataVersion(format: string | null | undefined
   if (normalized && SIXTY_CARD_CONSTRUCTED_FORMATS.has(normalized)) {
     return `${normalized}-live-legalities+scryfall`
   }
+  if (normalized === CANADIAN_HIGHLANDER_FORMAT) {
+    return getCanadianHighlanderFormatDataVersion()
+  }
   return null
 }
 
@@ -381,14 +416,16 @@ export function validateDeckForFormat(
   const deckZoneViolations = getDeckZoneViolations(normalized, ctx.cards)
 
   if (status === 'implemented' && definition?.validate) {
+    const validated = definition.validate({
+      cards: ctx.cards,
+      commanderScryfallIds: ctx.commanderScryfallIds,
+      bracket: ctx.bracket ?? null,
+    })
+    const extraDeck = validated.deckViolations ?? []
     return {
       status,
-      violationsByCardId: definition.validate({
-        cards: ctx.cards,
-        commanderScryfallIds: ctx.commanderScryfallIds,
-        bracket: ctx.bracket ?? null,
-      }),
-      deckViolations: deckZoneViolations,
+      violationsByCardId: validated.violationsByCardId,
+      deckViolations: [...deckZoneViolations, ...extraDeck],
       dataVersion,
     }
   }
