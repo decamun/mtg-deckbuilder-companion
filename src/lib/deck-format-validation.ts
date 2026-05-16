@@ -222,7 +222,7 @@ type ValidatedFormatBundle = {
   deckViolations?: readonly string[]
 }
 
-function isValidatedFormatBundle(
+function isValidatorBundleResult(
   validated: unknown
 ): validated is ValidatedFormatBundle {
   if (typeof validated !== 'object' || validated === null) return false
@@ -454,15 +454,17 @@ export function validateDeckForFormat(
     const violationsByCardId =
       validated instanceof Map
         ? validated
-        : isValidatedFormatBundle(validated)
+        : isValidatorBundleResult(validated)
           ? validated.violationsByCardId
           : new Map()
-    const extraDeck = isValidatedFormatBundle(validated) ? (validated.deckViolations ?? []) : []
+    const validatorDeckViolations = isValidatorBundleResult(validated)
+      ? (validated.deckViolations ?? [])
+      : []
 
     return {
       status,
       violationsByCardId,
-      deckViolations: [...deckZoneViolations, ...extraDeck],
+      deckViolations: [...deckZoneViolations, ...validatorDeckViolations],
       dataVersion,
     }
   }
