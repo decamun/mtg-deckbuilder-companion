@@ -1,5 +1,21 @@
 name: Enforce main branch protection
 
+# Maintainer setup (one-time, required):
+# 1) Create a classic PAT for the maintainer account that is allowed to update
+#    repository branch protection:
+#      - scope: repo (private repos) OR public_repo (public repos)
+#      - scope: admin:repo_hook (recommended for repo admin operations)
+# 2) Save it in this repository as secret: ADMIN_GITHUB_TOKEN
+#    Settings -> Secrets and variables -> Actions -> New repository secret
+# 3) (Optional) Set repository variable MAIN_BRANCH_MAINTAINER if the maintainer
+#    username is not "decamun".
+#    Settings -> Secrets and variables -> Actions -> Variables
+# 4) Run this workflow once with workflow_dispatch after saving credentials.
+#
+# Security notes:
+# - Keep ADMIN_GITHUB_TOKEN limited to the maintainer account only.
+# - Rotate/revoke the token immediately if exposed.
+
 on:
   workflow_dispatch:
     inputs:
