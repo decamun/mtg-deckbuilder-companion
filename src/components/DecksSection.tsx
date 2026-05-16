@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { Plus, MoreVertical, Edit, Copy, Trash } from "lucide-react"
+import { Plus, MoreVertical, Edit, Copy, Trash, Link2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -42,6 +42,7 @@ import {
 } from "@/lib/deck-prefetch-cache"
 import type { Deck } from "@/lib/types"
 import Link from "next/link"
+import { EXTERNAL_DECK_PROVIDERS } from "@/lib/external-deck-providers"
 
 export function DecksSection() {
   return <DecksSectionContent />
@@ -56,9 +57,21 @@ function DecksSectionContent() {
   const [decklistText, setDecklistText] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [importUrl, setImportUrl] = useState("")
+  const [importStep, setImportStep] = useState<"url" | "confirm">("url")
+  const [importDecklistText, setImportDecklistText] = useState("")
+  const [importDeckName, setImportDeckName] = useState("")
+  const [importDeckFormat, setImportDeckFormat] = useState("edh")
+  const [importSourceLabel, setImportSourceLabel] = useState<string | null>(null)
+  const [importUrlError, setImportUrlError] = useState<string | null>(null)
+  const [isImportFetching, setIsImportFetching] = useState(false)
+  const [isImportCreating, setIsImportCreating] = useState(false)
   const [renameDeckId, setRenameDeckId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
   const router = useRouter()
+
+  const supportedImportHosts = EXTERNAL_DECK_PROVIDERS.map((p) => p.label).join(", ")
 
   async function fetchDecks() {
     const {
@@ -117,31 +130,38 @@ function DecksSectionContent() {
     })
   }, [])
 
-  const handleCreateDeck = async () => {
-    if (!newDeckName) return
-    setIsCreating(true)
+  async function persistNewDeckWithList(args: {
+    name: string
+    format: string
+    listText: string
+  }): Promise<{ ok: true; deckId: string } | { ok: false }> {
+    const trimmedName = args.name.trim()
+    if (!trimmedName) {
+      toast.error("Deck name is required")
+      return { ok: false }
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) {
-      setIsCreating(false)
-      return
+      toast.error("Log in to create decks")
+      return { ok: false }
     }
 
     const { data, error } = await supabase
       .from("decks")
-      .insert({ name: newDeckName, user_id: user.id, format: newDeckFormat })
+      .insert({ name: trimmedName, user_id: user.id, format: args.format })
       .select()
       .single()
 
     if (error) {
       toast.error(error.message)
-      setIsCreating(false)
-      return
+      return { ok: false }
     }
 
-    if (decklistText.trim()) {
-      const { cards: resolved, warnings } = await resolveDecklist(decklistText)
+    if (args.listText.trim()) {
+      const { cards: resolved, warnings } = await resolveDecklist(args.listText)
       for (const w of warnings) toast.warning(w)
 
       if (resolved.length > 0) {
@@ -153,6 +173,8 @@ function DecksSectionContent() {
           oracle_id: r.oracle_id,
           name: r.name,
           quantity: r.quantity,
+          zone: r.zone,
+          tags: [] as string[],
         }))
 
         const { error: insertError } = await supabase.from("deck_cards").insert(inserts)
@@ -166,12 +188,95 @@ function DecksSectionContent() {
       toast.success("Deck created!")
     }
 
-    setIsCreating(false)
-    setIsDialogOpen(false)
-    setNewDeckName("")
-    setNewDeckFormat("edh")
-    setDecklistText("")
-    router.push(`/decks/${data.id}`)
+    return { ok: true, deckId: data.id }
+  }
+
+  const handleCreateDeck = async () => {
+    if (!newDeckName.trim()) return
+    setIsCreating(true)
+    try {
+      const result = await persistNewDeckWithList({
+        name: newDeckName,
+        format: newDeckFormat,
+        listText: decklistText,
+      })
+      if (result.ok) {
+        setIsDialogOpen(false)
+        setNewDeckName("")
+        setNewDeckFormat("edh")
+        setDecklistText("")
+        router.push(`/decks/${result.deckId}`)
+      }
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const handleFetchDeckFromUrl = async () => {
+    const trimmed = importUrl.trim()
+    if (!trimmed) {
+      setImportUrlError("Paste a deck URL")
+      return
+    }
+    setImportUrlError(null)
+    setIsImportFetching(true)
+    try {
+      const res = await fetch("/api/deck-import/url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: trimmed }),
+      })
+      const body = (await res.json()) as {
+        message?: string
+        deckName?: string | null
+        decklistText?: string
+        source?: string
+      }
+      if (!res.ok) {
+        setImportUrlError(body.message ?? "Import failed")
+        return
+      }
+      if (!body.decklistText?.trim()) {
+        setImportUrlError("That link did not return a decklist")
+        return
+      }
+      const label =
+        EXTERNAL_DECK_PROVIDERS.find((p) => p.id === body.source)?.label ??
+        body.source ??
+        null
+      setImportDecklistText(body.decklistText)
+      setImportDeckName((body.deckName ?? "").trim() || "Imported deck")
+      setImportSourceLabel(label)
+      setImportStep("confirm")
+    } catch {
+      setImportUrlError("Network error while fetching the deck")
+    } finally {
+      setIsImportFetching(false)
+    }
+  }
+
+  const handleConfirmUrlImport = async () => {
+    setIsImportCreating(true)
+    try {
+      const result = await persistNewDeckWithList({
+        name: importDeckName,
+        format: importDeckFormat,
+        listText: importDecklistText,
+      })
+      if (result.ok) {
+        setImportDialogOpen(false)
+        setImportUrl("")
+        setImportStep("url")
+        setImportDecklistText("")
+        setImportDeckName("")
+        setImportDeckFormat("edh")
+        setImportSourceLabel(null)
+        setImportUrlError(null)
+        router.push(`/decks/${result.deckId}`)
+      }
+    } finally {
+      setIsImportCreating(false)
+    }
   }
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -326,8 +431,7 @@ function DecksSectionContent() {
 
   return (
     <div className="container mx-auto flex flex-1 flex-col px-4 py-8">
-      <div className="mb-8 flex items-end justify-between">
-        <div />
+      <div className="mb-8 flex flex-wrap items-center justify-end gap-2">
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger
             render={
@@ -391,6 +495,143 @@ function DecksSectionContent() {
                 {isCreating ? "Creating..." : "Create"}
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={importDialogOpen}
+          onOpenChange={(open) => {
+            setImportDialogOpen(open)
+            if (open) {
+              setImportStep("url")
+              setImportUrl("")
+              setImportDecklistText("")
+              setImportDeckName("")
+              setImportDeckFormat("edh")
+              setImportSourceLabel(null)
+              setImportUrlError(null)
+              setIsImportFetching(false)
+              setIsImportCreating(false)
+            } else {
+              setImportUrlError(null)
+              setIsImportFetching(false)
+              setIsImportCreating(false)
+            }
+          }}
+        >
+          <DialogTrigger
+            render={
+              <Button
+                variant="outline"
+                className="border-border text-foreground hover:bg-accent hover:text-accent-foreground"
+              />
+            }
+          >
+            <Link2 className="mr-2 h-4 w-4" /> Import from URL
+          </DialogTrigger>
+          <DialogContent className="bg-card border-border text-foreground max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Import deck from URL</DialogTitle>
+            </DialogHeader>
+
+            {importStep === "url" ? (
+              <div className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="import-deck-url">Deck link</Label>
+                  <Input
+                    id="import-deck-url"
+                    value={importUrl}
+                    onChange={(e) => setImportUrl(e.target.value)}
+                    className="bg-background/50 border-border"
+                    placeholder="https://archidekt.com/decks/…"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void handleFetchDeckFromUrl()
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Supported sources: {supportedImportHosts}. Additional deck sites can be wired in through
+                    the shared import registry without changing this dialog.
+                  </p>
+                </div>
+                {importUrlError ? (
+                  <p className="text-sm text-red-400">{importUrlError}</p>
+                ) : null}
+                <Button
+                  onClick={() => void handleFetchDeckFromUrl()}
+                  disabled={isImportFetching || !importUrl.trim()}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  {isImportFetching ? "Fetching…" : "Continue"}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-4">
+                {importSourceLabel ? (
+                  <p className="text-xs text-muted-foreground">Source: {importSourceLabel}</p>
+                ) : null}
+                <div className="space-y-2">
+                  <Label htmlFor="import-deck-name">Deck name</Label>
+                  <Input
+                    id="import-deck-name"
+                    value={importDeckName}
+                    onChange={(e) => setImportDeckName(e.target.value)}
+                    className="bg-background/50 border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Format</Label>
+                  <Select
+                    value={importDeckFormat}
+                    onValueChange={(v) => v && setImportDeckFormat(v)}
+                  >
+                    <SelectTrigger className="bg-background/50 border-border text-foreground">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border text-foreground">
+                      <SelectItem value="edh">EDH / Commander</SelectItem>
+                      <SelectItem value="standard">Standard</SelectItem>
+                      <SelectItem value="modern">Modern</SelectItem>
+                      <SelectItem value="pioneer">Pioneer</SelectItem>
+                      <SelectItem value="legacy">Legacy</SelectItem>
+                      <SelectItem value="vintage">Vintage</SelectItem>
+                      <SelectItem value="pauper">Pauper</SelectItem>
+                      <SelectItem value="canlander">Canadian Highlander</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Decklist preview</Label>
+                  <Textarea
+                    readOnly
+                    className="bg-background/50 border-border min-h-[140px] max-h-[40vh] resize-y font-mono text-xs"
+                    value={importDecklistText}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 border-border"
+                    onClick={() => {
+                      setImportStep("url")
+                      setImportUrlError(null)
+                    }}
+                    disabled={isImportCreating}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void handleConfirmUrlImport()}
+                    disabled={isImportCreating || !importDeckName.trim()}
+                    className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
+                    {isImportCreating ? "Creating…" : "Create deck"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
@@ -526,13 +767,22 @@ function DecksSectionContent() {
               <p className="mb-4 text-muted-foreground">
                 You don&apos;t have any decks yet.
               </p>
-              <Button
-                variant="outline"
-                className="border-border text-foreground hover:bg-accent hover:text-accent-foreground"
-                onClick={() => setIsDialogOpen(true)}
-              >
-                Create your first deck
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  variant="outline"
+                  className="border-border text-foreground hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => setIsDialogOpen(true)}
+                >
+                  Create your first deck
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-border text-foreground hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => setImportDialogOpen(true)}
+                >
+                  <Link2 className="mr-2 h-4 w-4" /> Import from URL
+                </Button>
+              </div>
             </div>
           )}
         </div>
