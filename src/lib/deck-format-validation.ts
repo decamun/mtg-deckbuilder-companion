@@ -225,11 +225,15 @@ type ValidatedFormatBundle = {
 function isValidatedFormatBundle(
   validated: unknown
 ): validated is ValidatedFormatBundle {
-  if (typeof validated !== 'object' || validated == null) return false
+  if (typeof validated !== 'object' || validated === null) return false
   if (!('violationsByCardId' in validated)) return false
   const candidate = validated as { violationsByCardId?: unknown; deckViolations?: unknown }
   if (!(candidate.violationsByCardId instanceof Map)) return false
-  return candidate.deckViolations === undefined || Array.isArray(candidate.deckViolations)
+  return (
+    candidate.deckViolations === undefined ||
+    (Array.isArray(candidate.deckViolations) &&
+      candidate.deckViolations.every((violation) => typeof violation === 'string'))
+  )
 }
 
 type DeckFormatValidationContext = {
