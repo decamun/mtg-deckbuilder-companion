@@ -12,11 +12,12 @@
 //   "// Deck" | "// Main" | "// Mainboard"       → mainboard (default)
 //   "// Sideboard" | "SB: 1 Card Name"            → sideboard
 //   "// Maybeboard" | "// Maybe" | "MB: 1 Card"  → maybeboard
-//   "// Commander"                                 → commander (mainboard zone, handled upstream)
+//   "// Commander" | "// Commanders"             → commander zone
 
 import { getCardsCollection, getCardBySetAndCN } from "@/lib/scryfall"
 import type { DeckCard } from "@/lib/types"
 import {
+  COMMANDER_ZONE_ID,
   DEFAULT_CARD_ZONE_ID,
   MAINBOARD_ZONE_ID,
   MAYBEBOARD_ZONE_ID,
@@ -55,7 +56,7 @@ function parseSectionMarkerZone(comment: string): string | null {
   if (markerText === "sideboard" || markerText === "side board" || markerText === "side") return SIDEBOARD_ZONE_ID
   if (markerText === "maybeboard" || markerText === "maybe board" || markerText === "maybe" || markerText === "considering")
     return MAYBEBOARD_ZONE_ID
-  if (markerText === "commander") return MAINBOARD_ZONE_ID
+  if (markerText === "commander" || markerText === "commanders") return COMMANDER_ZONE_ID
   return null
 }
 

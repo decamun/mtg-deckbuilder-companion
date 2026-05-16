@@ -9,6 +9,7 @@ export type ModelId =
   | 'anthropic/claude-haiku-4.5'
   | 'anthropic/claude-sonnet-4.6'
   | 'anthropic/claude-opus-4.7'
+  | 'deepseek/deepseek-v4-flash'
   | 'google/gemini-2.5-pro'
   | 'openai/gpt-5.1-thinking'
   | 'use-mcp'
@@ -23,6 +24,7 @@ export interface TierLimits {
 
 export const ALL_MODELS: ReadonlyArray<ModelId> = [
   'anthropic/claude-haiku-4.5',
+  'deepseek/deepseek-v4-flash',
   'anthropic/claude-sonnet-4.6',
   'anthropic/claude-opus-4.7',
   'google/gemini-2.5-pro',
@@ -38,7 +40,7 @@ export function isModelId(value: unknown): value is ModelId {
 export const TIER_LIMITS: Record<AgentTier, TierLimits> = {
   free: {
     callsPerHour: 30,
-    allowedModels: ['anthropic/claude-haiku-4.5'],
+    allowedModels: ['anthropic/claude-haiku-4.5', 'deepseek/deepseek-v4-flash'],
     maxStepsPerCall: 10,
   },
   pro: {

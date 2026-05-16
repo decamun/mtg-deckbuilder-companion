@@ -7,7 +7,7 @@ export interface ModelDescriptor {
   id: ModelId
   label: string
   /** Underlying provider key — used to namespace `providerOptions`. */
-  provider: 'anthropic' | 'google' | 'openai'
+  provider: 'anthropic' | 'deepseek' | 'google' | 'openai'
   /** Whether this model supports a "thinking" / reasoning budget. */
   reasoning: boolean
 }
@@ -23,6 +23,12 @@ export const MODEL_DESCRIPTORS: Record<ModelId, ModelDescriptor> = {
     id: 'anthropic/claude-haiku-4.5',
     label: 'Claude Haiku 4.5',
     provider: 'anthropic',
+    reasoning: false,
+  },
+  'deepseek/deepseek-v4-flash': {
+    id: 'deepseek/deepseek-v4-flash',
+    label: 'DeepSeek V4 Flash',
+    provider: 'deepseek',
     reasoning: false,
   },
   'anthropic/claude-sonnet-4.6': {
@@ -101,5 +107,7 @@ export function reasoningProviderOptions(
       }
     case 'openai':
       return { openai: { reasoningEffort: 'medium' } }
+    case 'deepseek':
+      return {}
   }
 }

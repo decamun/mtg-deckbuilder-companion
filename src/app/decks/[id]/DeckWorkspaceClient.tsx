@@ -1408,6 +1408,7 @@ export default function DeckWorkspaceClient({
         formatHintsListOpen={formatHintsListOpen}
         setFormatHintsListOpen={setFormatHintsListOpen}
         formatHintCardList={formatHintCardList}
+        formatDeckViolations={formatValidation.deckViolations}
         formatViolationMap={formatViolationMap}
         formatHintsMenuClosedAtRef={formatHintsMenuClosedAtRef}
         showClickedPreview={showClickedPreview}

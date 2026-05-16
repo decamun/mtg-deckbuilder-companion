@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DeckCard } from '@/lib/types'
-import { MAINBOARD_ZONE_ID, MAYBEBOARD_ZONE_ID, SIDEBOARD_ZONE_ID } from '@/lib/zones'
+import {
+  COMMANDER_ZONE_ID,
+  MAINBOARD_ZONE_ID,
+  MAYBEBOARD_ZONE_ID,
+  SIDEBOARD_ZONE_ID,
+} from '@/lib/zones'
 import { parseDecklist, parseDecklistLine, resolveDecklist } from '@/lib/decklist-import'
 import { getCardBySetAndCN, getCardsCollection } from '@/lib/scryfall'
 
@@ -41,6 +46,16 @@ describe('parseDecklistLine', () => {
     const result = parseDecklist('SB: 2 Tormod\'s Crypt')
     expect(result).toHaveLength(1)
     expect(result[0]?.zone).toBe(SIDEBOARD_ZONE_ID)
+  })
+
+  it('detects commander section markers', () => {
+    const result = parseDecklist(
+      '// Commander\n1 Thrasios, Triton Hero\n// Deck\n1 Sol Ring',
+    )
+    expect(result).toHaveLength(2)
+    expect(result[0]?.zone).toBe(COMMANDER_ZONE_ID)
+    expect(result[0]?.name).toBe('Thrasios, Triton Hero')
+    expect(result[1]?.zone).toBe(MAINBOARD_ZONE_ID)
   })
 })
 
