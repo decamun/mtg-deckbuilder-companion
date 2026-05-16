@@ -11,6 +11,12 @@ function getDeckCardFaces(card: DeckCard): DeckCardFace[] {
   return []
 }
 
+function activeDeckFaceAt(faces: DeckCardFace[], faceIndex: number): DeckCardFace | undefined {
+  if (!faces.length) return undefined
+  const i = ((faceIndex % faces.length) + faces.length) % faces.length
+  return faces[i]
+}
+
 export function CardThumbnail({
   card,
   className,
@@ -26,7 +32,7 @@ export function CardThumbnail({
   faceIndex?: number
 }) {
   const faces = getDeckCardFaces(card)
-  const activeFace = faces[faceIndex] ?? faces[0]
+  const activeFace = activeDeckFaceAt(faces, faceIndex)
   const imageUrl = activeFace?.normal ?? activeFace?.small ?? primaryDeckCardImage(card)
   if (!imageUrl) {
     return (
@@ -87,7 +93,7 @@ export function DeckBuilderVisualCardThumbnail({
           aria-label={`Flip to ${nextName}`}
           onClick={(e) => {
             e.stopPropagation()
-            setFaceIndex((i) => i + 1)
+            setFaceIndex((i) => (i + 1) % faces.length)
           }}
         >
           <FlipHorizontal2 className="h-4 w-4" aria-hidden />
@@ -111,7 +117,7 @@ export function CardArt({
   onFlip?: () => void
 }) {
   const faces = getDeckCardFaces(card)
-  const activeFace = faces[faceIndex] ?? faces[0]
+  const activeFace = activeDeckFaceAt(faces, faceIndex)
   const activeImage = activeFace?.normal ?? activeFace?.small
   const canFlip = faces.length > 1
 
@@ -119,7 +125,7 @@ export function CardArt({
     <div className={`relative ${className ?? ""}`}>
       {activeImage ? (
         <>
-          <img src={activeImage} alt={activeFace.name} className={imageClassName} draggable={false} />
+          <img src={activeImage} alt={activeFace?.name ?? card.name} className={imageClassName} draggable={false} />
           {(card.finish === "foil" || card.finish === "etched") && (
             <div className="absolute inset-0 pointer-events-none foil-overlay rounded-xl" />
           )}
