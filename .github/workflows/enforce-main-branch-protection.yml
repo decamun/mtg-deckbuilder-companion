@@ -5,11 +5,11 @@ name: Enforce main branch protection
 #    repository branch protection:
 #      - scope: public_repo (recommended for this public repository)
 #      - scope: repo (only if the repository is private)
-#      - scope: admin:repo_hook (recommended for repo admin operations)
+#      - no additional scopes are required for this workflow
 # 2) Save it in this repository as secret: ADMIN_GITHUB_TOKEN
 #    Settings -> Secrets and variables -> Actions -> New repository secret
 # 3) (Optional) Set repository variable MAIN_BRANCH_MAINTAINER if the maintainer
-#    username is not the repository default ("decamun").
+#    username should differ from the workflow default.
 #    Settings -> Secrets and variables -> Actions -> Variables
 # 4) Run this workflow once with workflow_dispatch after saving credentials.
 #
