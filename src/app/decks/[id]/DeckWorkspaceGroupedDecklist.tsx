@@ -1,6 +1,6 @@
 "use client"
 
-import type { CSSProperties } from "react"
+import { useMemo, type CSSProperties } from "react"
 import { motion } from "framer-motion"
 import { DndContext, type DragEndEvent, type SensorDescriptor, type SensorOptions } from "@dnd-kit/core"
 import { ChevronDown, Crown, Image as ImageIcon, Loader2 } from "lucide-react"
@@ -30,6 +30,7 @@ import {
   type DeckWorkspaceOverflowMenusProps,
 } from "./deck-workspace-overflow-menus"
 import { cn } from "@/lib/utils"
+import { isCommanderZone, zoneCountsTowardMainDeck } from "@/lib/zones"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
 import { DeckWorkspaceCardRulesPreview, rulesHoverPayloadToArtImageUrl, rulesHoverPayloadToFields } from "./DeckWorkspaceCardRulesPreview"
 import { DeckWorkspaceDockCardArtPreview } from "./DeckWorkspaceDockCardArtPreview"
@@ -44,7 +45,8 @@ export type DeckWorkspaceGroupedDecklistProps = {
   toggleAllSections: (allNames: string[], anchorEl: HTMLElement) => void
   cardDragDisabled: boolean
   deckLandQtyIncludingMdfc: number
-  displayedCards: DeckCard[]
+  /** Full deck across all zones; used for analytics + commander resolution. */
+  fullWorkspaceCards: DeckCard[]
   displayedCommanderIds: string[]
   displayedCoverImageId: string | null
   formatViolationMap: ReadonlyMap<string, readonly string[]>
@@ -80,7 +82,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
     toggleAllSections,
     cardDragDisabled,
     deckLandQtyIncludingMdfc,
-    displayedCards,
+    fullWorkspaceCards,
     displayedCommanderIds,
     displayedCoverImageId,
     formatViolationMap,
@@ -103,6 +105,29 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
     onDeckCardRulesPreviewHover,
     dockRightInsetPx,
   } = props
+
+  const analyticsLibraryCards = useMemo(
+    () =>
+      fullWorkspaceCards.filter(
+        (c) =>
+          !displayedCommanderIds.includes(c.scryfall_id) && zoneCountsTowardMainDeck(c.zone),
+      ),
+    [fullWorkspaceCards, displayedCommanderIds],
+  )
+
+  const analyticsCommanderCards = useMemo(
+    () =>
+      displayedCommanderIds
+        .map((id) => {
+          const inCommanderZone = fullWorkspaceCards.find(
+            (c) => c.scryfall_id === id && isCommanderZone(c.zone),
+          )
+          if (inCommanderZone) return inCommanderZone
+          return fullWorkspaceCards.find((c) => c.scryfall_id === id)
+        })
+        .filter((c): c is DeckCard => Boolean(c)),
+    [fullWorkspaceCards, displayedCommanderIds],
+  )
 
   const previewFields = rulesHoverPayloadToFields(rulesHover)
   const artImageUrl = rulesHoverPayloadToArtImageUrl(rulesHover)
@@ -519,8 +544,8 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
 
       <div className="border-t border-border pt-8 mt-4">
         <DeckAnalytics
-          cards={displayedCards.filter((c) => !displayedCommanderIds.includes(c.scryfall_id))}
-          commanders={displayedCards.filter((c) => displayedCommanderIds.includes(c.scryfall_id))}
+          cards={analyticsLibraryCards}
+          commanders={analyticsCommanderCards}
           onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
         />
       </div>

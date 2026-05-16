@@ -26,9 +26,11 @@ export type DeckWorkspaceHeaderProps = {
   displayedCoverImageUrl: string | null
   displayedDeckName: string
   displayedCards: DeckCard[]
+  /** Mainboard + sideboard + commander zone only (excludes maybeboard and custom boards). */
+  titleBarCardCount: number
+  titleBarTotalUsd: { sum: number; anyMissing: boolean }
   displayedCommanderIds: string[]
   exportPrimerMarkdown: string
-  totalUsd: { sum: number; anyMissing: boolean }
   deckTitleEditing: boolean
   deckTitleDraft: string
   deckTitleSaving: boolean
@@ -145,15 +147,15 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
               </div>
             )}
             <Badge variant="outline" className="shrink-0 border-border bg-background/40 text-muted-foreground backdrop-blur-sm">
-              {headerProps.displayedCards.reduce((a, c) => a + c.quantity, 0)}
+              {headerProps.titleBarCardCount}
             </Badge>
             <Badge
               variant="outline"
               className="shrink-0 border-border bg-background/40 font-mono text-muted-foreground backdrop-blur-sm"
-              title={headerProps.totalUsd.anyMissing ? "Some cards have no price data" : undefined}
+              title={headerProps.titleBarTotalUsd.anyMissing ? "Some cards have no price data" : undefined}
             >
-              {formatPrice(headerProps.totalUsd.sum)}
-              {headerProps.totalUsd.anyMissing ? "+" : ""}
+              {formatPrice(headerProps.titleBarTotalUsd.sum)}
+              {headerProps.titleBarTotalUsd.anyMissing ? "+" : ""}
             </Badge>
             {headerProps.deck && !headerProps.deck.is_public && <Badge className="shrink-0 border-border bg-muted text-muted-foreground">Private</Badge>}
           </div>
