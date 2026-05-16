@@ -34,6 +34,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { getCardsByIds, getCardImageUrl } from "@/lib/scryfall"
 import { resolveDecklist } from "@/lib/decklist-import"
+import { commanderIdsAndCoverFromResolvedCards } from "@/lib/deck-commander-meta"
 import {
   getPrefetchedDeckCards,
   storePrefetchedDeckCards,
@@ -149,9 +150,25 @@ function DecksSectionContent() {
       return { ok: false }
     }
 
+    let resolved: import("@/lib/decklist-import").ResolvedImportCard[] = []
+    if (args.listText.trim()) {
+      const { cards, warnings } = await resolveDecklist(args.listText)
+      for (const w of warnings) toast.warning(w)
+      resolved = cards
+    }
+
+    const { commander_scryfall_ids, cover_image_scryfall_id } =
+      commanderIdsAndCoverFromResolvedCards(resolved)
+
     const { data, error } = await supabase
       .from("decks")
-      .insert({ name: trimmedName, user_id: user.id, format: args.format })
+      .insert({
+        name: trimmedName,
+        user_id: user.id,
+        format: args.format,
+        commander_scryfall_ids,
+        cover_image_scryfall_id,
+      })
       .select()
       .single()
 
@@ -160,29 +177,26 @@ function DecksSectionContent() {
       return { ok: false }
     }
 
-    if (args.listText.trim()) {
-      const { cards: resolved, warnings } = await resolveDecklist(args.listText)
-      for (const w of warnings) toast.warning(w)
+    if (resolved.length > 0) {
+      const inserts = resolved.map((r) => ({
+        deck_id: data.id,
+        scryfall_id: r.scryfall_id,
+        printing_scryfall_id: r.printing_scryfall_id,
+        finish: r.finish,
+        oracle_id: r.oracle_id,
+        name: r.name,
+        quantity: r.quantity,
+        zone: r.zone,
+        tags: [] as string[],
+      }))
 
-      if (resolved.length > 0) {
-        const inserts = resolved.map((r) => ({
-          deck_id: data.id,
-          scryfall_id: r.scryfall_id,
-          printing_scryfall_id: r.printing_scryfall_id,
-          finish: r.finish,
-          oracle_id: r.oracle_id,
-          name: r.name,
-          quantity: r.quantity,
-          zone: r.zone,
-          tags: [] as string[],
-        }))
-
-        const { error: insertError } = await supabase.from("deck_cards").insert(inserts)
-        if (insertError) {
-          toast.error(`Error saving cards: ${insertError.message}`)
-        }
+      const { error: insertError } = await supabase.from("deck_cards").insert(inserts)
+      if (insertError) {
+        toast.error(`Error saving cards: ${insertError.message}`)
       }
+    }
 
+    if (args.listText.trim()) {
       toast.success(`Deck created with ${resolved.length} unique cards!`)
     } else {
       toast.success("Deck created!")

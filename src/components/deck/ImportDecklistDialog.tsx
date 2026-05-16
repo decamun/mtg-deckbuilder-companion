@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabase/client"
 import { getCardsByIds, getCardImageUrl, getCardFaceImages, cmcOf } from "@/lib/scryfall"
 import { resolveDecklist } from "@/lib/decklist-import"
+import { commanderIdsAndCoverFromResolvedCards } from "@/lib/deck-commander-meta"
 import { DeckDiffView } from "@/components/deck/DeckDiffView"
 import { toast } from "sonner"
 import { pickPrice } from "@/lib/format"
@@ -152,6 +153,28 @@ export function ImportDecklistDialog({
       toast.error(`Failed to import cards: ${insertError.message}`)
       setApplying(false)
       return
+    }
+
+    const { commander_scryfall_ids, cover_image_scryfall_id } =
+      commanderIdsAndCoverFromResolvedCards(
+        proposedCards.map((c) => ({ zone: c.zone, scryfall_id: c.scryfall_id })),
+      )
+
+    const deckPatch: {
+      commander_scryfall_ids: string[]
+      cover_image_scryfall_id?: string | null
+    } = { commander_scryfall_ids }
+
+    if (commander_scryfall_ids.length > 0) {
+      deckPatch.cover_image_scryfall_id = cover_image_scryfall_id
+    }
+
+    const { error: deckUpdateError } = await supabase.from("decks").update(deckPatch).eq("id", deckId)
+
+    if (deckUpdateError) {
+      toast.warning(
+        `Cards imported, but commander settings could not be saved: ${deckUpdateError.message}`,
+      )
     }
 
     toast.success(`Imported ${proposedCards.length} unique cards`)
