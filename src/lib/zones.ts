@@ -215,6 +215,15 @@ export function zoneCountsTowardMainDeck(zone: string | null | undefined): boole
   return ZONE_BY_ID.get(z)?.countsTowardMainDeck === true
 }
 
+/**
+ * Zones included in the deck workspace title bar card count and USD total.
+ * Excludes maybeboard and user-created boards so scratch lists do not inflate totals.
+ */
+export function zoneCountsTowardDeckTitleBar(zone: string | null | undefined): boolean {
+  const z = normalizeCardZone(zone)
+  return z === MAINBOARD_ZONE_ID || z === SIDEBOARD_ZONE_ID || z === COMMANDER_ZONE_ID
+}
+
 export function isSideboardZone(zone: string | null | undefined): boolean {
   return normalizeCardZone(zone) === SIDEBOARD_ZONE_ID
 }

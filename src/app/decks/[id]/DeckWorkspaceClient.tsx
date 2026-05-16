@@ -67,6 +67,7 @@ import {
   normalizeCardZone,
   sanitizeCustomZoneId,
   validateCustomZoneName,
+  zoneCountsTowardDeckTitleBar,
 } from "@/lib/zones"
 
 const DeckWorkspaceBoardsTab = dynamic(
@@ -950,7 +951,7 @@ export default function DeckWorkspaceClient({
   }
 
   // Cards displayed in the workspace: live state by default, snapshot when viewing a version.
-  // Declared before getGroupedCards/totalUsd because both reference it.
+  // Declared before getGroupedCards/title bar totals because both reference it.
   const displayedCards = viewing ? viewing.cards : cards
   const displayedCommanderIds = viewing ? viewing.deckMeta.commanders : commanderIds
   const displayedCoverImageId = viewing ? viewing.deckMeta.cover_image_scryfall_id : coverImageId
@@ -983,15 +984,28 @@ export default function DeckWorkspaceClient({
       ? 'ready'
       : 'settling'
 
-  const totalUsd = useMemo(() => {
+  const titleBarCards = useMemo(
+    () => displayedCards.filter((c) => zoneCountsTowardDeckTitleBar(c.zone)),
+    [displayedCards]
+  )
+
+  const titleBarCardCount = useMemo(
+    () => titleBarCards.reduce((a, c) => a + c.quantity, 0),
+    [titleBarCards]
+  )
+
+  const titleBarTotalUsd = useMemo(() => {
     let sum = 0
     let anyMissing = false
-    for (const c of displayedCards) {
-      if (c.price_usd == null) { anyMissing = true; continue }
+    for (const c of titleBarCards) {
+      if (c.price_usd == null) {
+        anyMissing = true
+        continue
+      }
       sum += c.price_usd * c.quantity
     }
     return { sum, anyMissing }
-  }, [displayedCards])
+  }, [titleBarCards])
 
   const deckLandQtyIncludingMdfc = useMemo(
     () =>
@@ -1153,9 +1167,10 @@ export default function DeckWorkspaceClient({
         displayedCoverImageUrl={displayedCoverImageUrl}
         displayedDeckName={displayedDeckName}
         displayedCards={displayedCards}
+        titleBarCardCount={titleBarCardCount}
+        titleBarTotalUsd={titleBarTotalUsd}
         displayedCommanderIds={displayedCommanderIds}
         exportPrimerMarkdown={viewing ? viewing.primerMarkdown : primerMarkdown}
-        totalUsd={totalUsd}
         deckTitleEditing={deckTitleEditing}
         deckTitleDraft={deckTitleDraft}
         deckTitleSaving={deckTitleSaving}
@@ -1274,7 +1289,7 @@ export default function DeckWorkspaceClient({
               toggleAllSections={toggleAllSections}
               cardDragDisabled={cardDragDisabled}
               deckLandQtyIncludingMdfc={deckLandQtyIncludingMdfc}
-              displayedCards={zoneFilteredCards}
+              fullWorkspaceCards={displayedCards}
               displayedCommanderIds={displayedCommanderIds}
               displayedCoverImageId={displayedCoverImageId}
               formatViolationMap={formatViolationMap}
