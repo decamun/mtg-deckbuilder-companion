@@ -57,24 +57,55 @@ endpoint is hit.
 
 ---
 
-## 4. Smoke-test each rate-limited endpoint
+## 4. Handle Vercel Deployment Protection
 
-### 4a. `/oauth/token` — 60 req/min per IP
+> **Getting `401` on every request?** Vercel applies SSO-based *Deployment
+> Protection* to preview URLs before requests reach Next.js. All `curl` scripts
+> below will return `401` if this is active.
+>
+> **Fix — use a bypass secret:**
+> 1. In Vercel dashboard → your project → **Settings → Deployment Protection**.
+> 2. Under **Protection Bypass for Automation**, generate a secret (or copy the
+>    existing one) and save it as `VERCEL_BYPASS_SECRET` in your shell:
+>    ```bash
+>    export VERCEL_BYPASS_SECRET=<paste-secret-here>
+>    ```
+> 3. Add `-H "x-vercel-protection-bypass: $VERCEL_BYPASS_SECRET"` to every
+>    `curl` command, **or** set the convenience variable once and use it via
+>    `$BYPASS`:
+>    ```bash
+>    BYPASS="x-vercel-protection-bypass: $VERCEL_BYPASS_SECRET"
+>    ```
+>    Then add `-H "$BYPASS"` to each curl call in the scripts below.
+>
+> Alternatively, open the preview URL in a browser (Vercel will prompt for SSO
+> login), then export the `_vercel_jwt` cookie and add it as
+> `-H "Cookie: _vercel_jwt=<value>"` to curl.
+
+---
+
+## 5. Smoke-test each rate-limited endpoint
+
+### 5a. `/oauth/token` — 60 req/min per IP
 
 ```bash
 # Replace PREVIEW_URL with your Vercel preview URL
 PREVIEW_URL=https://<your-preview>.vercel.app
+# Bypass header (leave empty string if deployment protection is disabled):
+BYPASS="x-vercel-protection-bypass: $VERCEL_BYPASS_SECRET"
 
 # Hit the token endpoint 3 times (expect 400 — missing params — NOT 429)
 for i in 1 2 3; do
   curl -s -o /dev/null -w "%{http_code}\n" \
+    -H "$BYPASS" \
     -X POST "$PREVIEW_URL/oauth/token" \
     -H "Content-Type: application/json" \
     -d '{}'
 done
 ```
 
-Expected: `400` each time (bad request, not rate-limited).
+Expected: `400` each time (bad request — missing `grant_type` / `code` /
+`code_verifier` fields — not rate-limited).
 
 To trigger a 429 you would need 60 requests in under 60 seconds from the same
 IP. You can do this with a loop:
@@ -82,6 +113,7 @@ IP. You can do this with a loop:
 ```bash
 for i in $(seq 1 65); do
   curl -s -o /dev/null -w "$i: %{http_code}\n" \
+    -H "$BYPASS" \
     -X POST "$PREVIEW_URL/oauth/token" \
     -H "Content-Type: application/json" \
     -d '{}'
@@ -92,11 +124,12 @@ After the 60th request you should see `429` responses. The response body will
 contain `"error": "rate_limited"` and the response headers will include
 `Retry-After`.
 
-### 4b. `/oauth/register` — 30 req/min per IP
+### 5b. `/oauth/register` — 30 req/min per IP
 
 ```bash
 for i in $(seq 1 35); do
   curl -s -o /dev/null -w "$i: %{http_code}\n" \
+    -H "$BYPASS" \
     -X POST "$PREVIEW_URL/oauth/register" \
     -H "Content-Type: application/json" \
     -d '{"redirect_uris":["https://example.com/callback"],"client_name":"test"}'
@@ -105,7 +138,7 @@ done
 
 Expected: first 30 succeed (`201`), subsequent requests return `429`.
 
-### 4c. EDHREC proxy — 30 req/min per authenticated user
+### 5c. EDHREC proxy — 30 req/min per authenticated user
 
 The EDHREC endpoint (`/api/edhrec/[slug]`) requires auth. Log in to the app
 via the browser, then grab your session cookie or Bearer token from the browser
@@ -115,6 +148,7 @@ DevTools (Network tab → any API request → `Authorization` header or `Cookie`
 # With a Bearer token:
 for i in $(seq 1 35); do
   curl -s -o /dev/null -w "$i: %{http_code}\n" \
+    -H "$BYPASS" \
     -H "Authorization: Bearer <your-token>" \
     "$PREVIEW_URL/api/edhrec/commanders"
 done
@@ -124,7 +158,7 @@ Expected: first 30 succeed (`200`), subsequent requests return `429`.
 
 ---
 
-## 5. Verify cross-instance sharing (optional but recommended)
+## 6. Verify cross-instance sharing (optional but recommended)
 
 By default Vercel scales serverless functions across multiple instances. To
 confirm rate limits are truly shared:
@@ -141,13 +175,14 @@ confirm rate limits are truly shared:
 
 ---
 
-## 6. Test fail-open behavior (optional)
+## 7. Test fail-open behavior (optional)
 
 To verify that the app continues to work if Redis is unavailable:
 
 1. Temporarily change `UPSTASH_REDIS_REST_TOKEN` to an invalid value in
    Vercel's env vars (e.g. append `_BAD`).
-2. Redeploy and make requests to any rate-limited endpoint.
+2. Redeploy and make requests to any rate-limited endpoint (remember to include
+   the `$BYPASS` header if deployment protection is enabled).
 3. All requests should succeed (`200`/`400` as normal, not `500` or `429`).
 4. If `DEBUG_RATE_LIMIT=1`, the Vercel logs should show:
    ```
@@ -157,7 +192,7 @@ To verify that the app continues to work if Redis is unavailable:
 
 ---
 
-## 7. Clean up
+## 8. Clean up
 
 - After testing, you can remove `DEBUG_RATE_LIMIT=1` from the Vercel env vars.
 - Keep `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` for the
