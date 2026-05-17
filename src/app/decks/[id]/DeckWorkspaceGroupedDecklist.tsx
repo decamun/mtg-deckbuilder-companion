@@ -569,7 +569,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                   disabled={cardDragDisabled}
                                   onMouseEnter={() => {
                                     if (listV && listV.length > 0) setDeckFormatHintHoverId(c.id)
-                                    onDeckCardRulesPreviewHover(c, 0)
+                                    onDeckCardRulesPreviewHover(c, deckCardFaceIndexById[c.id] ?? 0)
                                   }}
                                   onMouseLeave={() => {
                                     if (listV && listV.length > 0) {
