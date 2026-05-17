@@ -88,16 +88,18 @@ export function DeckWorkspaceCardRulesPreview({
 
   return (
     <div className={cn("flex min-h-0 flex-col gap-2 text-sm", className)}>
-      <div className="flex shrink-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <ManaText text={fields.name} className="text-base font-semibold text-foreground" />
-        {fields.mana_cost ? <ManaText text={fields.mana_cost} className="text-sm text-muted-foreground" /> : null}
-      </div>
-      {fields.type_line ? (
-        <div className="shrink-0 border-b border-border pb-1.5 text-xs text-muted-foreground">
-          <ManaText text={fields.type_line} />
+      <div className="flex w-full min-w-0 shrink-0 items-baseline justify-between gap-x-2 gap-y-0.5 border-b border-border pb-1.5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <ManaText text={fields.name} className="text-base font-semibold text-foreground" />
+          {fields.type_line ? (
+            <ManaText text={fields.type_line} className="text-xs text-muted-foreground" />
+          ) : null}
         </div>
-      ) : null}
-      <div className="shrink-0 text-[13px] leading-relaxed text-foreground">
+        {fields.mana_cost ? (
+          <ManaText text={fields.mana_cost} className="shrink-0 text-sm text-muted-foreground" />
+        ) : null}
+      </div>
+      <div className="min-h-0 max-h-[calc(1.625*13px*12)] shrink-0 overflow-hidden text-[13px] leading-relaxed text-foreground">
         {fields.oracle_text?.trim() ? (
           <ManaText text={fields.oracle_text} className="whitespace-pre-wrap" />
         ) : (
