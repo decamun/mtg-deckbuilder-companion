@@ -12,6 +12,7 @@ import {
   getPrintingsByOracleId,
   cmcOf,
   getCardFaceImages,
+  getCardFaceRulesFields,
   getCardImageUrl,
   rulesTextForDisplay,
   type ScryfallCard,
@@ -211,6 +212,8 @@ export default function DeckWorkspaceClient({
   const [deckFormatHintHoverId, setDeckFormatHintHoverId] = useState<string | null>(null)
   const [previewFormatHintsHovered, setPreviewFormatHintsHovered] = useState(false)
   const [rulesHover, setRulesHover] = useState<DeckRulesHoverPayload>(null)
+  /** Per deck row: which face is shown on MDFC / transform thumbnails (drives dock hover preview). */
+  const [deckCardFaceIndexById, setDeckCardFaceIndexById] = useState<Record<string, number>>({})
 
   // Active board/zone selector (for decklist view filtering)
   const [activeZone, setActiveZone] = useState<string>(DEFAULT_CARD_ZONE_ID)
@@ -226,12 +229,22 @@ export default function DeckWorkspaceClient({
   const [agentRailInsetPx, setAgentRailInsetPx] = useState(0)
   const dockRightInsetPx = isOwner && !viewing ? agentRailInsetPx : 0
 
-  const onDeckCardRulesPreviewHover = useCallback((card: DeckCard | null) => {
+  const onDeckCardDisplayFaceChange = useCallback((cardId: string, nextFaceIndex: number) => {
+    setDeckCardFaceIndexById((prev) => ({ ...prev, [cardId]: nextFaceIndex }))
+    setRulesHover((prev) =>
+      prev?.kind === "deck" && prev.card.id === cardId ? { ...prev, faceIndex: nextFaceIndex } : prev,
+    )
+  }, [])
+
+  const onDeckCardRulesPreviewHover = useCallback((card: DeckCard | null, faceIndex?: number) => {
     setRulesHover((prev) => {
-      if (card) return { kind: "deck", card }
+      if (card) {
+        const fi = faceIndex ?? deckCardFaceIndexById[card.id] ?? 0
+        return { kind: "deck", card, faceIndex: fi }
+      }
       return prev?.kind === "deck" ? null : prev
     })
-  }, [])
+  }, [deckCardFaceIndexById])
 
   const onSearchResultRulesHover = useCallback((card: ScryfallCard | null) => {
     setRulesHover((prev) => {
@@ -382,6 +395,7 @@ export default function DeckWorkspaceClient({
         tags: [],
         image_url: getCardImageUrl(card),
         face_images: getCardFaceImages(card),
+        face_rules: getCardFaceRulesFields(card),
         type_line: card.type_line || '',
         mana_cost: card.mana_cost || '',
         cmc: cmcOf(card),
@@ -667,6 +681,7 @@ export default function DeckWorkspaceClient({
       printing_scryfall_id: printingId,
       image_url: getCardImageUrl(nextPrinting),
       face_images: getCardFaceImages(nextPrinting),
+      face_rules: getCardFaceRulesFields(nextPrinting),
       set_code: nextPrinting.set,
       collector_number: nextPrinting.collector_number,
       available_finishes: nextPrinting.finishes,
@@ -678,6 +693,7 @@ export default function DeckWorkspaceClient({
       printing_scryfall_id: null,
       image_url: getCardImageUrl(defaultPrinting),
       face_images: getCardFaceImages(defaultPrinting),
+      face_rules: getCardFaceRulesFields(defaultPrinting),
       set_code: defaultPrinting.set,
       collector_number: defaultPrinting.collector_number,
       available_finishes: defaultPrinting.finishes,
@@ -1234,7 +1250,7 @@ export default function DeckWorkspaceClient({
                 <DeckWorkspaceCommanderRail
                   commanderCards={commanderCards}
                   showClickedPreview={showClickedPreview}
-                  onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
+                  onDeckCardRulesPreviewHover={(c) => onDeckCardRulesPreviewHover(c, 0)}
                 />
               </div>
             </div>
@@ -1273,6 +1289,8 @@ export default function DeckWorkspaceClient({
               overflowMenus={overflowMenus}
               rulesHover={rulesHover}
               onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
+              deckCardFaceIndexById={deckCardFaceIndexById}
+              onDeckCardDisplayFaceChange={onDeckCardDisplayFaceChange}
               dockRightInsetPx={dockRightInsetPx}
             />
           </>

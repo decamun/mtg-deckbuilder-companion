@@ -1,3 +1,5 @@
+import type { DeckCardFaceRules } from "@/lib/types"
+
 export interface ScryfallImageUris {
   normal?: string
   small?: string
@@ -91,6 +93,42 @@ export function rulesTextForDisplay(
     })
     .filter(Boolean)
     .join("\n\n—\n\n")
+}
+
+/**
+ * Per-face name / type / oracle text aligned with {@link getCardFaceImages} face ordering
+ * (double-faced layouts only include faces that have their own image URIs, then root fallback).
+ */
+export function getCardFaceRulesFields(
+  card: Pick<ScryfallCard, "name" | "layout" | "card_faces" | "type_line" | "mana_cost" | "oracle_text" | "image_uris"> | null | undefined,
+): DeckCardFaceRules[] {
+  if (!card) return []
+
+  if (card.layout && DOUBLE_FACED_LAYOUTS.has(card.layout)) {
+    const faces = card.card_faces
+      ?.filter((face) => Boolean(face.image_uris?.normal ?? face.image_uris?.small))
+      .map((face) => ({
+        name: face.name ?? card.name,
+        mana_cost: face.mana_cost,
+        type_line: face.type_line,
+        oracle_text: face.oracle_text,
+      }))
+
+    if (faces?.length) return faces
+  }
+
+  if (card.image_uris?.normal || card.image_uris?.small) {
+    return [
+      {
+        name: card.name,
+        mana_cost: card.mana_cost,
+        type_line: card.type_line,
+        oracle_text: rulesTextForDisplay(card),
+      },
+    ]
+  }
+
+  return []
 }
 
 export function getCardFaceImages(card: Pick<ScryfallCard, "name" | "layout" | "image_uris" | "card_faces"> | null | undefined): CardFaceImage[] {

@@ -1,5 +1,5 @@
 import { pickPrice } from "@/lib/format"
-import { getCardsByIds, getCardFaceImages, getCardImageUrl, cmcOf } from "@/lib/scryfall"
+import { getCardsByIds, getCardFaceImages, getCardFaceRulesFields, getCardImageUrl, cmcOf } from "@/lib/scryfall"
 import type { DeckCard } from "@/lib/types"
 import type { DeckVersionRow } from "@/lib/versions"
 import type { ViewingSnapshotState } from "./deck-workspace-types"
@@ -22,6 +22,7 @@ export async function hydrateVersionSnapshot(
     const effectiveId = c.printing_scryfall_id || c.scryfall_id
     const effSf = sfMap.get(effectiveId) ?? baseSf
     const faceImages = getCardFaceImages(effSf)
+    const faceRules = getCardFaceRulesFields(effSf)
     return {
       id: `snap-${i}`,
       deck_id: deckId,
@@ -35,6 +36,7 @@ export async function hydrateVersionSnapshot(
       tags: c.tags,
       image_url: getCardImageUrl(effSf),
       face_images: faceImages,
+      face_rules: faceRules,
       type_line: effSf?.type_line || "",
       mana_cost: effSf?.mana_cost || "",
       cmc: cmcOf(effSf),

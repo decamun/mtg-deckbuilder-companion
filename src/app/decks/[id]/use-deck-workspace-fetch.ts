@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase/client"
 import { pickPrice } from "@/lib/format"
-import { getCardsByIds, getCard, getCardFaceImages, getCardImageUrl, cmcOf, rulesTextForDisplay } from "@/lib/scryfall"
+import { getCardsByIds, getCard, getCardFaceImages, getCardFaceRulesFields, getCardImageUrl, cmcOf, rulesTextForDisplay } from "@/lib/scryfall"
 import type { Deck, DeckCard } from "@/lib/types"
 import {
   getPrefetchedDeckCards,
@@ -100,6 +100,7 @@ export function useDeckWorkspaceFetch(deckId: string, setters: DeckWorkspaceFetc
         const effSf = sfMap.get(effectiveId) ?? baseSf
         const finish = (c.finish ?? "nonfoil") as "nonfoil" | "foil" | "etched"
         const faceImages = getCardFaceImages(effSf)
+        const faceRules = getCardFaceRulesFields(effSf)
         return {
           ...c,
           oracle_id: oracleId,
@@ -107,6 +108,7 @@ export function useDeckWorkspaceFetch(deckId: string, setters: DeckWorkspaceFetc
           printing_scryfall_id: c.printing_scryfall_id ?? null,
           image_url: getCardImageUrl(effSf),
           face_images: faceImages,
+          face_rules: faceRules,
           type_line: effSf?.type_line || "",
           mana_cost: effSf?.mana_cost || "",
           cmc: cmcOf(effSf),
