@@ -518,6 +518,81 @@ export function getFormatValidationDataVersion(format: string | null | undefined
   return null
 }
 
+/** Non-cryptographic FNV-1a 32-bit digest as hex (cache keys only). */
+function fnv1a32Hex(input: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(16).padStart(8, '0')
+}
+
+function stableLegalitiesFragment(legalities: Record<string, string> | undefined): string {
+  if (!legalities) return ''
+  const keys = Object.keys(legalities).sort()
+  return keys.map((k) => `${k}=${legalities[k]}`).join('&')
+}
+
+/**
+ * Stable fingerprint for format-validation inputs so callers can skip redundant
+ * `validateDeckForFormat` runs when deck rows are new references but logically
+ * unchanged (common in React + realtime merges).
+ *
+ * **Included (must stay aligned with `validateDeckForFormat` inputs):** normalized
+ * format id, resolved `dataVersion` (ban/points/game-changer artifacts), sorted
+ * commander Scryfall ids, bracket, and every card’s id, scryfall_id, oracle_id,
+ * name, quantity, zone, type_line, oracle_text, sorted color_identity, and
+ * sorted legality key/value pairs.
+ *
+ * **Invalidation:** any change to those fields or to bundled list versions
+ * (via `dataVersion`) changes the key. Unrelated card metadata (prices, tags,
+ * finishes) is intentionally ignored.
+ *
+ * **Collisions:** FNV-1a 32-bit is not collision-resistant; a collision would
+ * reuse a stale validation result until the next input change. Acceptable
+ * only for an in-memory UI cache — do not use for security or persistence.
+ *
+ * **Expected call sites:** deck editor (`DeckWorkspaceClient`), server-side
+ * `computeDeckStatsReport` in `deck-stats-compute.ts` (each request; optional
+ * memoization can key off this helper when batching).
+ */
+export function computeDeckFormatValidationInputKey(
+  format: string | null | undefined,
+  ctx: {
+    cards: readonly FormatValidationCard[]
+    commanderScryfallIds: readonly string[]
+    bracket?: number | null
+    dataVersion?: string | null
+  }
+): string {
+  const normalized = normalizeFormatForValidation(format) ?? ''
+  const dataVersion = ctx.dataVersion ?? getFormatValidationDataVersion(normalized)
+  const commanders = [...ctx.commanderScryfallIds].sort().join(',')
+  const bracket = ctx.bracket ?? null
+  const sortedCards = [...ctx.cards].sort((a, b) => a.id.localeCompare(b.id))
+  const cardPipe = sortedCards
+    .map((c) => {
+      const ci = [...(c.color_identity ?? [])].sort().join('')
+      const leg = stableLegalitiesFragment(c.legalities)
+      return [
+        c.id,
+        c.scryfall_id,
+        c.oracle_id ?? '',
+        c.name,
+        String(c.quantity),
+        c.zone,
+        c.type_line ?? '',
+        c.oracle_text ?? '',
+        ci,
+        leg,
+      ].join('\x1e')
+    })
+    .join('\x1f')
+  const canonical = `${normalized}\x02${dataVersion ?? ''}\x02${commanders}\x02${bracket}\x02${cardPipe}`
+  return fnv1a32Hex(canonical)
+}
+
 /**
  * Scryfall `f:` legality token for a normalized deck format. Commander/EDH maps
  * to `commander`. Canadian Highlander has no reliable single Scryfall filter

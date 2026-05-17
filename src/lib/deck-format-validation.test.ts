@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   colorIdentityScryfallClause,
+  computeDeckFormatValidationInputKey,
   formatValidationToolSummary,
   getConstructedCopyLimitViolations,
   getFormatValidationDataVersion,
@@ -296,6 +297,72 @@ describe('validateDeckForFormat', () => {
     const over = validateDeckForFormat('canlander', { cards: overPointsDeck, commanderScryfallIds: [] })
     expect(over.deckViolations.some((m) => m.includes('points'))).toBe(true)
     expect(over.violationsByCardId.get('tw')?.some((r) => r.includes('Contributes'))).toBe(true)
+  })
+
+  it('requires exactly 60 mainboard cards in modern', () => {
+    const cards = [
+      {
+        id: 'forest',
+        scryfall_id: 'forest-sf',
+        oracle_id: 'forest-oracle',
+        name: 'Forest',
+        quantity: 59,
+        zone: MAINBOARD_ZONE_ID,
+        type_line: 'Basic Land — Forest',
+        legalities: { modern: 'legal' },
+      },
+    ]
+    const result = validateDeckForFormat('modern', { cards, commanderScryfallIds: [] })
+    expect(result.deckViolations).toContain('Mainboard must contain exactly 60 cards (has 59).')
+  })
+
+  it('flags EDH singleton violations across MDFC printings sharing an oracle id', () => {
+    const sharedOracle = '11111111-2222-4333-8444-555555555555'
+    const cards = [
+      {
+        id: 'cmd',
+        scryfall_id: 'cmd-sf',
+        oracle_id: 'cmd-oracle',
+        name: 'Commander',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { commander: 'legal' },
+      },
+      {
+        id: 'mdfc-a',
+        scryfall_id: 'mdfc-print-a',
+        oracle_id: sharedOracle,
+        name: 'Bala Ged Recovery // Bala Ged Sanctuary',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        type_line: 'Sorcery // Land',
+        legalities: { commander: 'legal' },
+      },
+      {
+        id: 'mdfc-b',
+        scryfall_id: 'mdfc-print-b',
+        oracle_id: sharedOracle,
+        name: 'Bala Ged Recovery // Bala Ged Sanctuary',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        type_line: 'Sorcery // Land',
+        legalities: { commander: 'legal' },
+      },
+    ]
+    const result = validateDeckForFormat('edh', {
+      cards,
+      commanderScryfallIds: ['cmd-sf'],
+      bracket: null,
+    })
+    expect(result.violationsByCardId.get('mdfc-a')).toContain(
+      'More than one copy (Commander singleton rule)',
+    )
+    expect(result.violationsByCardId.get('mdfc-b')).toContain(
+      'More than one copy (Commander singleton rule)',
+    )
   })
 
   it('uses per-format Scryfall legality for Pioneer and Modern', () => {
@@ -869,6 +936,98 @@ describe('validateDeckForFormat', () => {
 
     const result = validateDeckForFormat('other', { cards, commanderScryfallIds: [] })
     expect(result.deckViolations).not.toContain('Mainboard must contain exactly 60 cards (has 1).')
+  })
+})
+
+describe('computeDeckFormatValidationInputKey', () => {
+  const sampleCardA = {
+    id: 'a',
+    scryfall_id: 'sf-a',
+    oracle_id: 'ora-a',
+    name: 'Card A',
+    quantity: 1,
+    zone: MAINBOARD_ZONE_ID,
+    type_line: 'Creature — A',
+    oracle_text: '',
+    color_identity: ['G', 'U'],
+    legalities: { standard: 'legal', modern: 'legal' },
+  }
+  const sampleCardB = {
+    id: 'b',
+    scryfall_id: 'sf-b',
+    oracle_id: 'ora-b',
+    name: 'Card B',
+    quantity: 2,
+    zone: SIDEBOARD_ZONE_ID,
+    legalities: { standard: 'legal' },
+  }
+
+  it('is stable when card rows are reordered', () => {
+    const k1 = computeDeckFormatValidationInputKey('standard', {
+      cards: [sampleCardA, sampleCardB],
+      commanderScryfallIds: [],
+    })
+    const k2 = computeDeckFormatValidationInputKey('standard', {
+      cards: [sampleCardB, sampleCardA],
+      commanderScryfallIds: [],
+    })
+    expect(k1).toBe(k2)
+  })
+
+  it('is stable when commander ids are reordered', () => {
+    const k1 = computeDeckFormatValidationInputKey('edh', {
+      cards: [sampleCardA],
+      commanderScryfallIds: ['zebra', 'alpha'],
+    })
+    const k2 = computeDeckFormatValidationInputKey('edh', {
+      cards: [sampleCardA],
+      commanderScryfallIds: ['alpha', 'zebra'],
+    })
+    expect(k1).toBe(k2)
+  })
+
+  it('changes when quantity changes', () => {
+    const k1 = computeDeckFormatValidationInputKey('standard', {
+      cards: [{ ...sampleCardA, quantity: 1 }],
+      commanderScryfallIds: [],
+    })
+    const k2 = computeDeckFormatValidationInputKey('standard', {
+      cards: [{ ...sampleCardA, quantity: 2 }],
+      commanderScryfallIds: [],
+    })
+    expect(k1).not.toBe(k2)
+  })
+
+  it('changes when dataVersion override changes', () => {
+    const cards = [sampleCardA]
+    const k1 = computeDeckFormatValidationInputKey('edh', {
+      cards,
+      commanderScryfallIds: [],
+      dataVersion: 'test-version-a',
+    })
+    const k2 = computeDeckFormatValidationInputKey('edh', {
+      cards,
+      commanderScryfallIds: [],
+      dataVersion: 'test-version-b',
+    })
+    expect(k1).not.toBe(k2)
+  })
+
+  it('normalizes commander format like validateDeckForFormat', () => {
+    const ctx = { cards: [sampleCardA], commanderScryfallIds: [] as const }
+    expect(computeDeckFormatValidationInputKey('commander', ctx)).toBe(
+      computeDeckFormatValidationInputKey('edh', ctx),
+    )
+  })
+
+  it('matches the default dataVersion implied by getFormatValidationDataVersion', () => {
+    const ctx = { cards: [sampleCardA], commanderScryfallIds: [] as const }
+    const implicit = computeDeckFormatValidationInputKey('standard', ctx)
+    const explicit = computeDeckFormatValidationInputKey('standard', {
+      ...ctx,
+      dataVersion: getFormatValidationDataVersion('standard'),
+    })
+    expect(implicit).toBe(explicit)
   })
 })
 
