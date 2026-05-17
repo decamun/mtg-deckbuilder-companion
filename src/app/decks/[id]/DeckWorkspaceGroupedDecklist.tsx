@@ -244,10 +244,10 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
   return (
     <>
       <div
-        className="pointer-events-none fixed bottom-0 left-0 z-[60] hidden justify-center px-4 pt-4 pb-safe deck-wide:flex"
+        className="pointer-events-none fixed bottom-0 left-0 z-[60] hidden justify-start px-4 pt-4 pb-safe deck-wide:flex"
         style={{ right: dockRightInsetPx }}
       >
-        <div className="pointer-events-none flex w-full max-w-7xl flex-col rounded-xl border border-border bg-background/80 p-3 text-foreground shadow-sm backdrop-blur-xl">
+        <div className="pointer-events-none flex w-1/2 max-w-[40rem] flex-col rounded-xl border border-border bg-background/80 p-3 text-foreground shadow-sm backdrop-blur-xl">
           <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row sm:items-stretch">
             <div
               className={cn(
