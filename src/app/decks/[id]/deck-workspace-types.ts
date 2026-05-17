@@ -5,6 +5,7 @@ export type DeckCardRow = Omit<
   DeckCard,
   | "image_url"
   | "face_images"
+  | "face_rules"
   | "type_line"
   | "mana_cost"
   | "cmc"

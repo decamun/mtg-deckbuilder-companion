@@ -71,7 +71,9 @@ export type DeckWorkspaceGroupedDecklistProps = {
   onTagDragEnd: (e: DragEndEvent) => void
   overflowMenus: DeckWorkspaceOverflowMenusProps
   rulesHover: DeckRulesHoverPayload
-  onDeckCardRulesPreviewHover: (card: DeckCard | null) => void
+  onDeckCardRulesPreviewHover: (card: DeckCard | null, faceIndex?: number) => void
+  deckCardFaceIndexById: Record<string, number>
+  onDeckCardDisplayFaceChange: (cardId: string, nextFaceIndex: number) => void
   /** Right inset in px so fixed dock clears the deck assistant rail. */
   dockRightInsetPx: number
 }
@@ -112,6 +114,8 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
     overflowMenus,
     rulesHover,
     onDeckCardRulesPreviewHover,
+    deckCardFaceIndexById,
+    onDeckCardDisplayFaceChange,
     dockRightInsetPx,
   } = props
 
@@ -235,7 +239,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                   disabled={cardDragDisabled}
                                   onMouseEnter={() => {
                                     if (vlist && vlist.length > 0) setDeckFormatHintHoverId(c.id)
-                                    onDeckCardRulesPreviewHover(c)
+                                    onDeckCardRulesPreviewHover(c, deckCardFaceIndexById[c.id] ?? 0)
                                   }}
                                   onMouseLeave={() => {
                                     if (vlist && vlist.length > 0) {
@@ -261,6 +265,8 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                   />
                                   <DeckBuilderVisualCardThumbnail
                                     card={c}
+                                    faceIndex={deckCardFaceIndexById[c.id] ?? 0}
+                                    onFaceIndexChange={(next) => onDeckCardDisplayFaceChange(c.id, next)}
                                     className="h-full w-full"
                                     thumbnailClassName="h-full w-full"
                                     imageClassName="h-full w-full object-cover"
@@ -374,7 +380,8 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                       else break
                                     }
                                     setHoveredStack({ groupName, colIdx, itemIdx: activeIdx })
-                                    onDeckCardRulesPreviewHover(colCards[activeIdx] ?? null)
+                                    const ac = colCards[activeIdx]
+                                    onDeckCardRulesPreviewHover(ac ?? null, ac ? deckCardFaceIndexById[ac.id] ?? 0 : undefined)
                                   }}
                                   onMouseLeave={() => {
                                     setHoveredStack(null)
@@ -427,6 +434,8 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                               />
                                               <DeckBuilderVisualCardThumbnail
                                                 card={card}
+                                                faceIndex={deckCardFaceIndexById[card.id] ?? 0}
+                                                onFaceIndexChange={(next) => onDeckCardDisplayFaceChange(card.id, next)}
                                                 className="w-full"
                                                 imageClassName="w-full rounded-xl border border-black/60 shadow-xl"
                                                 overlayClassName="rounded-xl"
@@ -495,7 +504,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                   disabled={cardDragDisabled}
                                   onMouseEnter={() => {
                                     if (listV && listV.length > 0) setDeckFormatHintHoverId(c.id)
-                                    onDeckCardRulesPreviewHover(c)
+                                    onDeckCardRulesPreviewHover(c, 0)
                                   }}
                                   onMouseLeave={() => {
                                     if (listV && listV.length > 0) {

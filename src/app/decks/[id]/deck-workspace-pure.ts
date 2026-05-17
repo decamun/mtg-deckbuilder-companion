@@ -1,4 +1,4 @@
-import type { DeckCard, GroupingMode, SortingMode } from "@/lib/types"
+import type { DeckCard, DeckCardFace, GroupingMode, SortingMode } from "@/lib/types"
 import { getCardTypeGroup, typeGroupSectionSortMeta } from "@/lib/card-types"
 import { RARITY_SORT_RANK, TAG_GROUP_UNTAGGED } from "./deck-workspace-constants"
 import type { DeckCardRow } from "./deck-workspace-types"
@@ -117,6 +117,7 @@ export function mergeDeckCardRow(current: DeckCard, row: DeckCardRow): DeckCard 
     ...row,
     image_url: current.image_url,
     face_images: current.face_images,
+    face_rules: current.face_rules,
     type_line: current.type_line,
     mana_cost: current.mana_cost,
     oracle_text: current.oracle_text,
@@ -194,4 +195,18 @@ export function editorGroupNameForCard(c: DeckCard, grouping: GroupingMode): str
 
 export function primaryDeckCardImage(card: DeckCard): string | undefined {
   return card.face_images?.[0]?.normal ?? card.face_images?.[0]?.small ?? card.image_url
+}
+
+/** Same face ordering as decklist thumbnails (see `getDeckCardFaces` in `deck-workspace-card-media`). */
+export function deckCardArtImageAtFaceIndex(card: DeckCard, faceIndex: number): string | undefined {
+  const faces: DeckCardFace[] =
+    card.face_images?.length && card.face_images.length > 0
+      ? card.face_images
+      : card.image_url
+        ? [{ name: card.name, normal: card.image_url }]
+        : []
+  if (!faces.length) return primaryDeckCardImage(card)
+  const n = faces.length
+  const i = ((faceIndex % n) + n) % n
+  return faces[i]?.normal ?? faces[i]?.small
 }

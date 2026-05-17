@@ -1237,7 +1237,7 @@ function HandGenerator({
   onDeckCardRulesPreviewHover,
 }: {
   cards: DeckStatsCard[]
-  onDeckCardRulesPreviewHover?: (card: DeckCard | null) => void
+  onDeckCardRulesPreviewHover?: (card: DeckCard | null, faceIndex?: number) => void
 }) {
   const library = useMemo(() => {
     const out: DeckStatsCard[] = []
@@ -1303,7 +1303,7 @@ function HandGenerator({
             key={`${c.id}-${idx}`}
             className="relative aspect-[5/7] rounded-lg overflow-hidden border border-border shadow-md bg-muted"
             title={c.name}
-            onMouseEnter={() => onDeckCardRulesPreviewHover?.(c as DeckCard)}
+            onMouseEnter={() => onDeckCardRulesPreviewHover?.(c as DeckCard, 0)}
             onMouseLeave={() => onDeckCardRulesPreviewHover?.(null)}
           >
             {c.image_url ? (
@@ -1412,7 +1412,7 @@ export function DeckAnalytics({
 }: {
   cards: DeckStatsCard[]
   commanders: DeckStatsCard[]
-  onDeckCardRulesPreviewHover?: (card: DeckCard | null) => void
+  onDeckCardRulesPreviewHover?: (card: DeckCard | null, faceIndex?: number) => void
   /** When set, shows the same format validation status as the decklist toolbar / deck stats. */
   formatValidationSummary?: {
     status: DeckFormatValidationStatus

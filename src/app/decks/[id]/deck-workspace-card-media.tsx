@@ -5,7 +5,7 @@ import { FlipHorizontal2, Loader2 } from "lucide-react"
 import type { DeckCard, DeckCardFace } from "@/lib/types"
 import { primaryDeckCardImage } from "./deck-workspace-pure"
 
-function getDeckCardFaces(card: DeckCard): DeckCardFace[] {
+export function getDeckCardFaces(card: DeckCard): DeckCardFace[] {
   if (card.face_images?.length) return card.face_images
   if (card.image_url) return [{ name: card.name, normal: card.image_url }]
   return []
@@ -63,6 +63,8 @@ export function DeckBuilderVisualCardThumbnail({
   thumbnailClassName,
   imageClassName,
   overlayClassName = "rounded-xl",
+  faceIndex: controlledFaceIndex,
+  onFaceIndexChange,
 }: {
   card: DeckCard
   className?: string
@@ -70,12 +72,25 @@ export function DeckBuilderVisualCardThumbnail({
   thumbnailClassName?: string
   imageClassName: string
   overlayClassName?: string
+  /** When set with {@link onFaceIndexChange}, flip state is controlled by the parent (e.g. for dock hover sync). */
+  faceIndex?: number
+  onFaceIndexChange?: (nextFaceIndex: number) => void
 }) {
-  const [faceIndex, setFaceIndex] = useState(0)
+  const [internalFaceIndex, setInternalFaceIndex] = useState(0)
+  const isControlled = controlledFaceIndex !== undefined && onFaceIndexChange !== undefined
+  const faceIndex = isControlled ? controlledFaceIndex : internalFaceIndex
   const faces = getDeckCardFaces(card)
   const canFlip = faces.length > 1
 
   const nextName = faces[(faceIndex + 1) % faces.length]?.name ?? "other face"
+
+  const bumpFace = () => {
+    if (!canFlip) return
+    const n = faces.length
+    const next = (faceIndex + 1) % n
+    if (isControlled) onFaceIndexChange!(next)
+    else setInternalFaceIndex(next)
+  }
 
   return (
     <div className={`relative ${className ?? ""}`}>
@@ -93,7 +108,7 @@ export function DeckBuilderVisualCardThumbnail({
           aria-label={`Flip to ${nextName}`}
           onClick={(e) => {
             e.stopPropagation()
-            setFaceIndex((i) => (i + 1) % faces.length)
+            bumpFace()
           }}
         >
           <FlipHorizontal2 className="h-4 w-4" aria-hidden />
