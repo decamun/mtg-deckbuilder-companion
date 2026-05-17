@@ -1117,83 +1117,83 @@ export default function DeckWorkspaceClient({
   return (
     <div className="fixed inset-x-0 bottom-0 top-below-nav-compact flex flex-col overflow-hidden bg-background font-sans text-foreground pb-safe">
 
-      <DeckWorkspaceHeader
-        deckId={deckId}
-        deck={deck}
-        isOwner={isOwner}
-        viewing={!!viewing}
-        tab={tab}
-        interactionsLocked={interactionsLocked}
-        displayedCoverImageUrl={displayedCoverImageUrl}
-        displayedDeckName={displayedDeckName}
-        displayedCards={displayedCards}
-        titleBarCardCount={titleBarCardCount}
-        titleBarTotalUsd={titleBarTotalUsd}
-        displayedCommanderIds={displayedCommanderIds}
-        exportPrimerMarkdown={viewing ? viewing.primerMarkdown : primerMarkdown}
-        deckTitleEditing={deckTitleEditing}
-        deckTitleDraft={deckTitleDraft}
-        deckTitleSaving={deckTitleSaving}
-        deckTitleFieldRef={deckTitleFieldRef}
-        query={query}
-        searchFocused={searchFocused}
-        results={results}
-        selectedResultIdx={selectedResultIdx}
-        searchContainerRef={searchContainerRef}
-        onBack={() => router.push(isOwner ? "/decks" : "/")}
-        onDeckTitleDraftChange={setDeckTitleDraft}
-        onDeckTitleInputBlur={() => {
-          if (skipDeckTitleBlurCommitRef.current) {
-            skipDeckTitleBlurCommitRef.current = false
-            return
-          }
-          void commitDeckTitleEdit()
-        }}
-        onDeckTitleInputKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.preventDefault()
-            skipDeckTitleBlurCommitRef.current = true
-            setDeckTitleDraft(deck?.name ?? "")
-            setDeckTitleEditing(false)
-          } else if (e.key === "Enter") {
-            e.preventDefault()
-            deckTitleFieldRef.current?.querySelector("input")?.blur()
-          }
-        }}
-        onDeckTitleDisplayDoubleClick={(e) => {
-          e.preventDefault()
-          if (!isOwner || viewing || !deck) return
-          skipDeckTitleBlurCommitRef.current = false
-          setDeckTitleDraft(deck.name ?? "")
-          setDeckTitleEditing(true)
-        }}
-        onQueryChange={setQuery}
-        onSearchFocus={() => setSearchFocused(true)}
-        onSearchKeyDown={handleSearchKeyDown}
-        onSearchResultHover={setSelectedResultIdx}
-        onSearchResultRulesHover={onSearchResultRulesHover}
-        onAddCard={handleAddCard}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onImportClick={() => setImportOpen(true)}
-        onVisibilityChange={(pub) => deck && setDeck({ ...deck, is_public: pub })}
-      />
-
-      <DeckTabs
-        tab={tab}
-        onChange={setTab}
-        afterTabs={viewing && (
-          <ViewingVersionBanner
-            versionLabel={viewing.label}
-            isOwner={isOwner}
-            onCompareLatest={openViewingDiffWithLatest}
-            onRevert={() => setRevertConfirmOpen(true)}
-            onBackToLatest={exitVersionView}
-          />
-        )}
-      />
-
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div ref={scrollContainerRef} className="min-w-0 flex-1 overflow-y-auto bg-background/20">
+          <DeckWorkspaceHeader
+            deckId={deckId}
+            deck={deck}
+            isOwner={isOwner}
+            viewing={!!viewing}
+            tab={tab}
+            interactionsLocked={interactionsLocked}
+            displayedCoverImageUrl={displayedCoverImageUrl}
+            displayedDeckName={displayedDeckName}
+            displayedCards={displayedCards}
+            titleBarCardCount={titleBarCardCount}
+            titleBarTotalUsd={titleBarTotalUsd}
+            displayedCommanderIds={displayedCommanderIds}
+            exportPrimerMarkdown={viewing ? viewing.primerMarkdown : primerMarkdown}
+            deckTitleEditing={deckTitleEditing}
+            deckTitleDraft={deckTitleDraft}
+            deckTitleSaving={deckTitleSaving}
+            deckTitleFieldRef={deckTitleFieldRef}
+            query={query}
+            searchFocused={searchFocused}
+            results={results}
+            selectedResultIdx={selectedResultIdx}
+            searchContainerRef={searchContainerRef}
+            onBack={() => router.push(isOwner ? "/decks" : "/")}
+            onDeckTitleDraftChange={setDeckTitleDraft}
+            onDeckTitleInputBlur={() => {
+              if (skipDeckTitleBlurCommitRef.current) {
+                skipDeckTitleBlurCommitRef.current = false
+                return
+              }
+              void commitDeckTitleEdit()
+            }}
+            onDeckTitleInputKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault()
+                skipDeckTitleBlurCommitRef.current = true
+                setDeckTitleDraft(deck?.name ?? "")
+                setDeckTitleEditing(false)
+              } else if (e.key === "Enter") {
+                e.preventDefault()
+                deckTitleFieldRef.current?.querySelector("input")?.blur()
+              }
+            }}
+            onDeckTitleDisplayDoubleClick={(e) => {
+              e.preventDefault()
+              if (!isOwner || viewing || !deck) return
+              skipDeckTitleBlurCommitRef.current = false
+              setDeckTitleDraft(deck.name ?? "")
+              setDeckTitleEditing(true)
+            }}
+            onQueryChange={setQuery}
+            onSearchFocus={() => setSearchFocused(true)}
+            onSearchKeyDown={handleSearchKeyDown}
+            onSearchResultHover={setSelectedResultIdx}
+            onSearchResultRulesHover={onSearchResultRulesHover}
+            onAddCard={handleAddCard}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onImportClick={() => setImportOpen(true)}
+            onVisibilityChange={(pub) => deck && setDeck({ ...deck, is_public: pub })}
+          />
+
+          <DeckTabs
+            tab={tab}
+            onChange={setTab}
+            afterTabs={viewing && (
+              <ViewingVersionBanner
+                versionLabel={viewing.label}
+                isOwner={isOwner}
+                onCompareLatest={openViewingDiffWithLatest}
+                onRevert={() => setRevertConfirmOpen(true)}
+                onBackToLatest={exitVersionView}
+              />
+            )}
+          />
+
           <DeckWorkspaceContentFrame>
         {tab === "decklist" && (
           <>
