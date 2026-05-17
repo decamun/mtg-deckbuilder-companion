@@ -2,12 +2,15 @@
 
 import type { ReactNode } from "react"
 
+import { cn } from "@/lib/utils"
+
 export type DeckTab = "decklist" | "boards" | "primer" | "versions"
 
 interface Props {
   tab: DeckTab
   onChange: (t: DeckTab) => void
   afterTabs?: ReactNode
+  className?: string
 }
 
 const TABS: { key: DeckTab; label: string }[] = [
@@ -17,9 +20,14 @@ const TABS: { key: DeckTab; label: string }[] = [
   { key: "versions", label: "Versions" },
 ]
 
-export function DeckTabs({ tab, onChange, afterTabs }: Props) {
+export function DeckTabs({ tab, onChange, afterTabs, className }: Props) {
   return (
-    <nav className="w-full min-w-0 border-b border-border bg-background/80 px-4 pt-4 text-sm font-medium backdrop-blur-xl sm:px-6">
+    <nav
+      className={cn(
+        "w-full min-w-0 border-b border-border bg-background/80 px-4 pt-4 text-sm font-medium backdrop-blur-xl sm:px-6",
+        className
+      )}
+    >
       {/*
         Overflow: tab row scrolls horizontally on very narrow widths; from `sm`, tabs can wrap with the banner.
       */}

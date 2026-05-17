@@ -1,28 +1,22 @@
 "use client"
 
-/* eslint-disable react-hooks/refs -- receives RefObjects for title/search containers; only passed to DOM refs */
+/* eslint-disable react-hooks/refs -- receives RefObject for title field; only passed to DOM ref */
 
-import { Search, Settings } from "lucide-react"
+import { Settings } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import type { Deck, DeckCard } from "@/lib/types"
-import type { ScryfallCard } from "@/lib/scryfall"
-import { getCardImageUrl } from "@/lib/scryfall"
 import { cn } from "@/lib/utils"
-import { ManaText } from "@/components/mana/ManaText"
 import { formatPrice } from "@/lib/format"
 import { ExportDeckMenu } from "@/components/deck/ExportDeckMenu"
 import { DeckLikeButton } from "@/components/deck/DeckLikeButton"
-import type { DeckTab } from "@/components/deck/DeckTabs"
 
 export type DeckWorkspaceHeaderProps = {
   deckId: string
   deck: Deck | null
   isOwner: boolean
   viewing: boolean
-  tab: DeckTab
-  interactionsLocked: boolean
   displayedCoverImageUrl: string | null
   displayedDeckName: string
   displayedCards: DeckCard[]
@@ -35,33 +29,19 @@ export type DeckWorkspaceHeaderProps = {
   deckTitleDraft: string
   deckTitleSaving: boolean
   deckTitleFieldRef: React.RefObject<HTMLDivElement | null>
-  query: string
-  searchFocused: boolean
-  results: ScryfallCard[]
-  selectedResultIdx: number
-  searchContainerRef: React.RefObject<HTMLDivElement | null>
   onBack: () => void
   onDeckTitleDraftChange: (v: string) => void
   onDeckTitleInputBlur: () => void
   onDeckTitleInputKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void
   onDeckTitleDisplayDoubleClick: (e: React.MouseEvent) => void
-  onQueryChange: (v: string) => void
-  onSearchFocus: () => void
-  onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void
-  onSearchResultHover: (idx: number) => void
-  /** Fired when the pointer enters or leaves a search hit row (for deck rules preview). */
-  onSearchResultRulesHover?: (card: ScryfallCard | null) => void
-  onAddCard: (card: ScryfallCard) => void
   onOpenSettings: () => void
   onImportClick: () => void
   onVisibilityChange: (pub: boolean) => void
 }
 
 export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
-  const showSearch = !headerProps.interactionsLocked && headerProps.tab === "decklist"
-
   return (
-    <header className="relative z-40 min-h-14 shrink-0 border-b border-border sm:h-14">
+    <header className="relative z-10 min-h-14 shrink-0 border-b border-border sm:h-14">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {headerProps.displayedCoverImageUrl ? (
           <>
@@ -139,82 +119,31 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
           </div>
         </div>
 
-        <div className="flex w-full min-w-0 flex-col gap-2 sm:contents">
-          {showSearch ? (
-            <div ref={headerProps.searchContainerRef} className="relative min-h-9 min-w-0 w-full sm:flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Add a card..."
-                className="h-8 w-full min-w-0 border-border bg-background/60 pl-9 pr-4 text-sm text-foreground"
-                value={headerProps.query}
-                onChange={(e) => {
-                  headerProps.onQueryChange(e.target.value)
-                  headerProps.onSearchFocus()
-                }}
-                onFocus={() => headerProps.onSearchFocus()}
-                onKeyDown={headerProps.onSearchKeyDown}
-              />
-              {headerProps.searchFocused && headerProps.results.length > 0 && (
-                <div
-                  className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-card shadow-2xl"
-                  onMouseLeave={() => headerProps.onSearchResultRulesHover?.(null)}
-                >
-                  <div className="max-h-80 overflow-y-auto">
-                    {headerProps.results.slice(0, 10).map((card, idx) => (
-                      <div
-                        key={card.id}
-                        className={`flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors ${
-                          idx === headerProps.selectedResultIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"
-                        }`}
-                        onMouseEnter={() => {
-                          headerProps.onSearchResultHover(idx)
-                          headerProps.onSearchResultRulesHover?.(card)
-                        }}
-                        onClick={() => headerProps.onAddCard(card)}
-                      >
-                        {getCardImageUrl(card, "small") && (
-                          <img src={getCardImageUrl(card, "small")} alt="" className="h-auto w-7 shrink-0 rounded" draggable={false} />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">{card.name}</div>
-                          <div className="truncate text-xs text-muted-foreground">{card.type_line}</div>
-                        </div>
-                        <ManaText text={card.mana_cost} className="ml-2 shrink-0 text-xs text-muted-foreground" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="hidden min-h-9 sm:block sm:min-h-0 sm:flex-1 sm:min-w-0" aria-hidden />
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:contents sm:ml-auto">
+          {headerProps.deck ? <DeckLikeButton deckId={headerProps.deckId} /> : null}
+          {headerProps.isOwner && !headerProps.viewing && (
+            <button
+              type="button"
+              onClick={() => headerProps.onOpenSettings()}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent"
+              title="Deck settings"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
           )}
-          <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:contents">
-            {headerProps.deck ? <DeckLikeButton deckId={headerProps.deckId} /> : null}
-            {headerProps.isOwner && !headerProps.viewing && (
-              <button
-                type="button"
-                onClick={() => headerProps.onOpenSettings()}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent"
-                title="Deck settings"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            )}
-            {headerProps.deck && (
-              <ExportDeckMenu
-                deckId={headerProps.deckId}
-                deckName={headerProps.displayedDeckName}
-                cards={headerProps.displayedCards}
-                primerMarkdown={headerProps.exportPrimerMarkdown}
-                commanderIds={headerProps.displayedCommanderIds}
-                isPublic={!!headerProps.deck.is_public}
-                isOwner={headerProps.isOwner}
-                onVisibilityChange={headerProps.onVisibilityChange}
-                onImportClick={headerProps.isOwner && !headerProps.viewing ? headerProps.onImportClick : undefined}
-              />
-            )}
-          </div>
+          {headerProps.deck && (
+            <ExportDeckMenu
+              deckId={headerProps.deckId}
+              deckName={headerProps.displayedDeckName}
+              cards={headerProps.displayedCards}
+              primerMarkdown={headerProps.exportPrimerMarkdown}
+              commanderIds={headerProps.displayedCommanderIds}
+              isPublic={!!headerProps.deck.is_public}
+              isOwner={headerProps.isOwner}
+              onVisibilityChange={headerProps.onVisibilityChange}
+              onImportClick={headerProps.isOwner && !headerProps.viewing ? headerProps.onImportClick : undefined}
+            />
+          )}
         </div>
       </div>
     </header>
