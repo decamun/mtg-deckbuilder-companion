@@ -517,6 +517,60 @@ export function getFormatValidationDataVersion(format: string | null | undefined
   return null
 }
 
+/**
+ * Scryfall `f:` legality token for a normalized deck format. Commander/EDH maps
+ * to `commander`. Canadian Highlander has no reliable single Scryfall filter
+ * for points — return null and rely on `get_deck_stats` / format_validation.
+ */
+export function scryfallLegalityFilterForNormalizedFormat(
+  normalized: string | null | undefined
+): string | null {
+  if (!normalized) return null
+  if (normalized === 'edh') return 'commander'
+  if (SIXTY_CARD_CONSTRUCTED_FORMATS.has(normalized)) return normalized
+  return null
+}
+
+/**
+ * Short copy for MCP / AI tool descriptions and system prompts. When adding a
+ * format with `implemented` validation to `FORMAT_VALIDATOR_REGISTRY` in this file,
+ * extend this helper so agent/MCP strings stay accurate.
+ */
+export function formatValidationToolSummary(format: string | null | undefined): string {
+  const normalized = normalizeFormatForValidation(format)
+  if (!normalized) {
+    return 'No format is set; format_validation uses neutral status (no format-specific rules).'
+  }
+  const def = FORMAT_VALIDATOR_REGISTRY[normalized]
+  const status = def?.status ?? 'neutral'
+
+  if (status === 'implemented' && def) {
+    if (normalized === 'edh') {
+      return 'Commander/EDH: Scryfall commander legality, color identity within commanders, singleton rule (with oracle-text exceptions), and bracket game-changer caps.'
+    }
+    if (normalized === 'canlander') {
+      return 'Canadian Highlander: points total, singleton/copy rules, and 100-card mainboard / sideboard limits (see format_validation in the stats report).'
+    }
+    if (normalized === 'vintage') {
+      return 'Vintage: Scryfall legality, restricted-list copy limits, 60-card mainboard / sideboard rules, and constructed copy limits.'
+    }
+    if (SIXTY_CARD_CONSTRUCTED_FORMATS.has(normalized)) {
+      return `${def.label}: Scryfall format legality, copy limits in validated zones, and 60-card mainboard / sideboard rules where enforced.`
+    }
+    return `${def.label}: implemented construction rules (see format_validation in the stats report).`
+  }
+
+  if (status === 'not_yet_implemented') {
+    return `${def?.label ?? normalized}: validation is not yet implemented (format_validation reflects this honestly).`
+  }
+
+  if (normalized === 'other') {
+    return 'Format "Other": no format-specific validation (analytics only).'
+  }
+
+  return `Unknown or generic format: no dedicated validator (neutral); use analytics and user guidance.`
+}
+
 export function validateDeckForFormat(
   format: string | null | undefined,
   ctx: {

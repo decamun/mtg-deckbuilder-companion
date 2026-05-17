@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   colorIdentityScryfallClause,
+  formatValidationToolSummary,
   getConstructedCopyLimitViolations,
   getFormatValidationDataVersion,
   getFormatValidationStatus,
   isFormatValidationImplemented,
   normalizeFormatForValidation,
+  scryfallLegalityFilterForNormalizedFormat,
   validateDeckForFormat,
   validateEdh,
 } from '@/lib/deck-format-validation'
@@ -18,6 +20,25 @@ describe('deck format validation helpers', () => {
     expect(normalizeFormatForValidation('canadian-highlander')).toBe('canlander')
     expect(colorIdentityScryfallClause(['W', 'U', 'W'])).toBe('id<=wu')
     expect(colorIdentityScryfallClause([])).toBe('id=c')
+  })
+})
+
+describe('formatValidationToolSummary and scryfall f: mapping', () => {
+  it('summarizes implemented formats for agent/MCP copy', () => {
+    expect(formatValidationToolSummary('commander')).toContain('Commander/EDH')
+    expect(formatValidationToolSummary('standard')).toContain('Standard')
+    expect(formatValidationToolSummary('canlander')).toContain('Canadian Highlander')
+    expect(formatValidationToolSummary('vintage')).toContain('Vintage')
+    expect(formatValidationToolSummary('other')).toContain('Other')
+    expect(formatValidationToolSummary(null)).toContain('No format')
+    expect(formatValidationToolSummary('totally-unknown-format')).toContain('no dedicated validator')
+  })
+
+  it('maps normalized formats to Scryfall legality tokens', () => {
+    expect(scryfallLegalityFilterForNormalizedFormat('edh')).toBe('commander')
+    expect(scryfallLegalityFilterForNormalizedFormat('modern')).toBe('modern')
+    expect(scryfallLegalityFilterForNormalizedFormat('canlander')).toBeNull()
+    expect(scryfallLegalityFilterForNormalizedFormat(null)).toBeNull()
   })
 })
 

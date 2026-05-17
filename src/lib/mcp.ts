@@ -6,7 +6,7 @@ import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfa
 
 /** Shown to MCP clients so assistants align with in-app agent behavior (concision, tools-first, tag conventions). */
 const MCP_ASSISTANT_INSTRUCTIONS = `
-You are the idlebrew deck-building assistant. Always prefer tools over guessing—call get_decklist, search_scryfall, list_printings, and other registered tools rather than assuming cards or counts.
+You are the idlebrew deck-building assistant. Always prefer tools over guessing—call get_deck, get_decklist, get_deck_stats, search_scryfall, list_printings, and other registered tools rather than assuming cards, counts, or format legality.
 
 Keep replies concise; summarize tool outcomes briefly. Do not paste large JSON decks unless the user asks.
 
@@ -49,7 +49,8 @@ export function createMcpServer(context: McpContext) {
     'search_scryfall',
     'Search Scryfall using their full search syntax. Returns structured card objects.' +
       ' Key filters: t:(type) c:(colors) id<=gruul (color identity fits within) cmc<=/>=N pow:/tou: r:(rarity) f:(format) o:(oracle text) keyword:(ability) is:commander otag:(ramp|removal|draw|tutor|boardwipe|counterspell).' +
-      ' Examples: "t:creature id<=gruul f:commander" | "is:commander id:gruul" | "otag:ramp id<=temur f:commander" | "(t:instant OR t:sorcery) c:u o:counter cmc<=2"',
+      ' Match `f:` to the deck format from get_deck (e.g. f:commander for Commander/EDH, f:modern for Modern).' +
+      ' Examples: "t:creature id<=gruul f:commander" | "is:commander id:gruul" | "f:modern t:creature cmc<=3" | "(t:instant OR t:sorcery) c:u o:counter cmc<=2"',
     {
       query: z.string().min(1).describe('Scryfall search syntax'),
       limit: z
@@ -170,10 +171,10 @@ export function createMcpServer(context: McpContext) {
 
   server.tool(
     'get_deck_stats',
-    'Full deck statistics aligned with the deck editor: total/mainboard/commander card counts, USD sum (when prices exist),' +
-      ' Commander / EDH format hints (banned cards, color identity, singleton copies, bracket game-changer caps),' +
-      ' and the Analytics tab metrics (avg CMC, type counts, lands breakdown, mana curve grid, opening probabilities, color balance).' +
-      ' Non-EDH formats currently omit format hints.',
+    'Full deck statistics aligned with the deck editor: total/mainboard/commander counts, USD sum (when prices exist),' +
+      ' analytics (avg CMC, type counts, lands breakdown, mana curve, opening probabilities, color balance),' +
+      ' and format_validation for this deck\'s format (violations + deck_violations when validation is implemented — Commander/EDH, Standard, Modern, Pioneer, Legacy, Vintage, Pauper, Canadian Highlander; neutral or minimal messages otherwise).' +
+      ' Same payload shape as the in-app editor; use format_validation.validation_implemented to see whether rules ran.',
     { deck_id: z.string().describe('UUID of the deck') },
     async ({ deck_id }) => {
       try {
@@ -341,7 +342,7 @@ export function createMcpServer(context: McpContext) {
 
   server.tool(
     'set_commanders',
-    'Set up to 2 commander Scryfall ids on a deck. Pass an empty array to clear commanders.',
+    'Set up to 2 commander Scryfall ids on a deck. Pass an empty array to clear. Commander/EDH uses these for color-identity validation in get_deck_stats; for other formats they are optional metadata.',
     {
       deck_id: z.string(),
       scryfall_ids: z.array(z.string()).max(2),
