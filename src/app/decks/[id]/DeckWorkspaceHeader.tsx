@@ -79,13 +79,13 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
         )}
       </div>
 
-      <div className="relative z-10 flex flex-col gap-1 px-4 pb-2 pt-12 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:flex-wrap sm:items-end sm:gap-x-2 sm:gap-y-2 sm:pb-1.5 sm:pt-0">
+      <div className="relative z-10 flex flex-col gap-2 px-page-safe pb-2 pt-12 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:flex-wrap sm:items-end sm:gap-x-2 sm:gap-y-2 sm:pb-1.5 sm:pt-0">
         <div className="flex min-h-9 min-w-0 w-full items-center gap-2 sm:contents">
           <Button variant="ghost" size="sm" onClick={headerProps.onBack} className="shrink-0 text-muted-foreground hover:text-foreground">
             &larr; Back
           </Button>
 
-          <div className="flex min-h-9 min-w-0 flex-1 items-center gap-2 sm:min-w-0 sm:max-w-[min(100%,28rem)] sm:flex-none sm:border-r sm:border-border sm:pr-3">
+          <div className="flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-2 sm:max-w-[min(100%,28rem)] sm:flex-none sm:flex-nowrap sm:border-r sm:border-border sm:pr-3">
             {headerProps.deckTitleEditing && headerProps.deck ? (
               <div ref={headerProps.deckTitleFieldRef} className="min-w-0 flex-1 sm:flex-none sm:max-w-[min(100%,28rem)]">
                 <Input
@@ -139,13 +139,13 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
           </div>
         </div>
 
-        <div className="flex min-h-9 w-full min-w-0 items-center gap-2 sm:contents">
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:contents">
           {showSearch ? (
-            <div ref={headerProps.searchContainerRef} className="relative min-h-9 min-w-0 flex-1">
+            <div ref={headerProps.searchContainerRef} className="relative min-h-9 min-w-0 w-full sm:flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Add a card..."
-                className="h-8 w-full border-border bg-background/60 pl-9 pr-4 text-sm text-foreground"
+                className="h-8 w-full min-w-0 border-border bg-background/60 pl-9 pr-4 text-sm text-foreground"
                 value={headerProps.query}
                 onChange={(e) => {
                   headerProps.onQueryChange(e.target.value)
@@ -189,30 +189,32 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
           ) : (
             <div className="hidden min-h-9 sm:block sm:min-h-0 sm:flex-1 sm:min-w-0" aria-hidden />
           )}
-          {headerProps.deck ? <DeckLikeButton deckId={headerProps.deckId} /> : null}
-          {headerProps.isOwner && !headerProps.viewing && (
-            <button
-              type="button"
-              onClick={() => headerProps.onOpenSettings()}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent"
-              title="Deck settings"
-            >
-              <Settings className="h-4 w-4" />
-            </button>
-          )}
-          {headerProps.deck && (
-            <ExportDeckMenu
-              deckId={headerProps.deckId}
-              deckName={headerProps.displayedDeckName}
-              cards={headerProps.displayedCards}
-              primerMarkdown={headerProps.exportPrimerMarkdown}
-              commanderIds={headerProps.displayedCommanderIds}
-              isPublic={!!headerProps.deck.is_public}
-              isOwner={headerProps.isOwner}
-              onVisibilityChange={headerProps.onVisibilityChange}
-              onImportClick={headerProps.isOwner && !headerProps.viewing ? headerProps.onImportClick : undefined}
-            />
-          )}
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:contents">
+            {headerProps.deck ? <DeckLikeButton deckId={headerProps.deckId} /> : null}
+            {headerProps.isOwner && !headerProps.viewing && (
+              <button
+                type="button"
+                onClick={() => headerProps.onOpenSettings()}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent"
+                title="Deck settings"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            )}
+            {headerProps.deck && (
+              <ExportDeckMenu
+                deckId={headerProps.deckId}
+                deckName={headerProps.displayedDeckName}
+                cards={headerProps.displayedCards}
+                primerMarkdown={headerProps.exportPrimerMarkdown}
+                commanderIds={headerProps.displayedCommanderIds}
+                isPublic={!!headerProps.deck.is_public}
+                isOwner={headerProps.isOwner}
+                onVisibilityChange={headerProps.onVisibilityChange}
+                onImportClick={headerProps.isOwner && !headerProps.viewing ? headerProps.onImportClick : undefined}
+              />
+            )}
+          </div>
         </div>
       </div>
     </header>

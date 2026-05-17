@@ -57,9 +57,9 @@ export function BlogSection() {
     listMode === "preview" && BLOG_POSTS.length > PREVIEW_ROWS
 
   return (
-    <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-12">
-      <h2 className="font-heading mb-2 text-4xl font-bold text-foreground">Blog</h2>
-      <p className="mb-10 text-muted-foreground">
+    <div className="mx-auto w-full max-w-2xl flex-1 px-page-safe py-8 sm:py-12">
+      <h2 className="title-section mb-2">Blog</h2>
+      <p className="mb-6 text-muted-foreground sm:mb-10">
         Tips, guides, and strategy for Commander deckbuilding.
       </p>
 

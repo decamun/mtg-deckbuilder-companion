@@ -459,11 +459,9 @@ export function BrowseSection() {
     listMode === "preview" && !loading && !error && decks.length > previewCap
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-12">
-      <div className="mb-8 max-w-3xl">
-        <h2 className="font-heading text-4xl font-bold text-foreground mb-2">
-          Browse Decks
-        </h2>
+    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-page-safe py-8 sm:py-12">
+      <div className="mb-6 max-w-3xl sm:mb-8">
+        <h2 className="title-section mb-2">Browse Decks</h2>
         <p className="text-muted-foreground">
           Search public brews by deck name, description, and commander.
         </p>
@@ -665,7 +663,7 @@ export function BrowseSection() {
                       <Badge variant="outline">{formatPrice(deck.budget_usd)}</Badge>
                     )}
                   </div>
-                  <h3 className="mb-2 font-heading text-2xl font-bold text-foreground transition-colors group-hover:text-primary">
+                  <h3 className="mb-2 font-heading text-lg font-bold text-foreground transition-colors group-hover:text-primary sm:text-xl md:text-2xl">
                     {deck.name}
                   </h3>
                   {deck.commander_names.length > 0 && (

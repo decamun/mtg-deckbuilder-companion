@@ -433,10 +433,8 @@ function DecksSectionContent() {
 
   if (isAuthenticated === false) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-        <h2 className="font-heading text-3xl font-bold text-foreground">
-          Your Decks
-        </h2>
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-page-safe py-8 text-center">
+        <h2 className="title-section">Your Decks</h2>
         <p className="text-muted-foreground">
           Log in to view and manage your decks.
         </p>
@@ -451,8 +449,10 @@ function DecksSectionContent() {
   }
 
   return (
-    <div className="container mx-auto flex flex-1 flex-col px-4 py-8">
-      <div className="mb-8 flex flex-wrap items-center justify-end gap-2">
+    <div className="container mx-auto flex flex-1 flex-col px-page-safe py-6 sm:py-8">
+      <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <h2 className="title-section shrink-0">Your Decks</h2>
+        <div className="flex flex-wrap items-stretch justify-end gap-2 sm:justify-end">
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger
             render={
@@ -655,6 +655,7 @@ function DecksSectionContent() {
             )}
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <Dialog
