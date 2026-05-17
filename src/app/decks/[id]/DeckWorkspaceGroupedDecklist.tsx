@@ -211,11 +211,11 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                   className="flex w-full items-center gap-2 border-b border-border pb-2 mb-4 text-left group"
                 >
                   <ChevronDown
-                    className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 ${collapsedSections.has(groupName) ? "-rotate-90" : ""}`}
+                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${collapsedSections.has(groupName) ? "-rotate-90" : ""}`}
                   />
-                  <h3 className="text-xl font-bold text-foreground">
+                  <h3 className="text-lg font-bold text-foreground">
                     {groupSectionHeading(groupName, grouping)}{" "}
-                    <span className="text-sm font-normal text-muted-foreground ml-2">({sectionQty})</span>
+                    <span className="text-xs font-normal text-muted-foreground ml-2">({sectionQty})</span>
                   </h3>
                 </button>
                 {collapsedSections.has(groupName) ? null : (
@@ -512,12 +512,12 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                       showClickedPreview(c, groupName)
                                     }}
                                   >
-                                    <span className="text-muted-foreground w-4 text-right font-mono">{c.quantity}</span>
+                                    <span className="w-4 shrink-0 text-right font-mono text-xs text-muted-foreground">{c.quantity}</span>
                                     {(c.face_images?.[0] || c.image_url) && (
-                                      <CardThumbnail card={c} className="h-9 shrink-0" imageClassName="h-9 w-auto rounded border border-border/50" overlayClassName="rounded" />
+                                      <CardThumbnail card={c} className="h-8 shrink-0" imageClassName="h-8 w-auto rounded border border-border/50" overlayClassName="rounded" />
                                     )}
-                                    <ManaText text={c.name} className="font-medium cursor-pointer hover:text-primary transition-colors truncate" />
-                                    <ManaText text={c.mana_cost} className="text-xs text-muted-foreground" />
+                                    <ManaText text={c.name} className="text-sm font-medium cursor-pointer truncate transition-colors hover:text-primary" />
+                                    <ManaText text={c.mana_cost} className="text-[11px] text-muted-foreground" />
                                   </div>
                                   <div
                                     className="flex items-center gap-3 ml-auto shrink-0"
