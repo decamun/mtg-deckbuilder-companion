@@ -161,7 +161,7 @@ export function TopNav() {
       <div
         className={cn(
           "container mx-auto flex items-center gap-2 px-4 pt-safe sm:gap-6",
-          navBarCompact ? "h-7 min-h-7" : "h-14 min-h-14",
+          navBarCompact ? "h-10 min-h-10" : "h-14 min-h-14",
         )}
       >
         {/* Logo & name — always anchored left */}
@@ -176,7 +176,7 @@ export function TopNav() {
           <IdlebrewLogo
             className={cn(
               "w-auto text-foreground",
-              navBarCompact ? "h-4" : "h-7",
+              navBarCompact ? "h-5" : "h-7",
             )}
           />
           <span
@@ -214,7 +214,7 @@ export function TopNav() {
                     className={cn(
                       "shrink-0 rounded-md font-medium transition-colors",
                       navBarCompact
-                        ? "px-1.5 py-0.5 text-[11px] sm:px-2 sm:text-xs"
+                        ? "px-2 py-1 text-sm"
                         : "px-2 py-1.5 text-sm sm:px-4",
                       isActive
                         ? "border border-primary/20 bg-primary/10 text-primary"
@@ -242,19 +242,14 @@ export function TopNav() {
                 className={cn(
                   "flex items-center text-muted-foreground hover:text-foreground",
                   navBarCompact
-                    ? "h-7 gap-0.5 px-1.5 py-0"
+                    ? "h-9 gap-0.5 px-2 py-0"
                     : "gap-1.5",
                 )}
               />
             }
           >
-            <User className={navBarCompact ? "h-3.5 w-3.5" : "h-4 w-4"} />
-            <ChevronDown
-              className={cn(
-                "opacity-60",
-                navBarCompact ? "h-2.5 w-2.5" : "h-3 w-3",
-              )}
-            />
+            <User className="h-4 w-4" />
+            <ChevronDown className="h-3 w-3 opacity-60" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             {user ? (
