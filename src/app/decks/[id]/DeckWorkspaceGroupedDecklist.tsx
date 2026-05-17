@@ -60,9 +60,11 @@ function useDecklistSectionColumnCount(viewMode: ViewMode, cardSize: number, con
       }
 
       if (viewMode === "visual") {
-        const minCol = cardSize * 2 + gap
-        setCount(Math.min(3, Math.max(1, Math.floor((w + gap) / (minCol + gap)))))
-      } else if (viewMode === "stack") {
+        setCount(1)
+        return
+      }
+
+      if (viewMode === "stack") {
         const minCol = cardSize
         setCount(Math.min(4, Math.max(1, Math.floor((w + gap) / (minCol + gap)))))
       } else {
@@ -220,6 +222,16 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
   const sectionColumnsRef = useRef<HTMLDivElement>(null)
   const sectionColumnCount = useDecklistSectionColumnCount(viewMode, cardSize, sectionColumnsRef)
 
+  /** Double-click fires two click events first; defer single-section toggle so dblclick can cancel it. */
+  const sectionHeaderSingleClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearSectionHeaderClickTimer = () => {
+    if (sectionHeaderSingleClickTimerRef.current) {
+      clearTimeout(sectionHeaderSingleClickTimerRef.current)
+      sectionHeaderSingleClickTimerRef.current = null
+    }
+  }
+  useLayoutEffect(() => () => clearSectionHeaderClickTimer(), [])
+
   const sectionColumnBuckets = useMemo(() => {
     const n = sectionColumnCount
     const cols: [string, DeckCard[]][][] = Array.from({ length: n }, () => [])
@@ -279,9 +291,16 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
               <DroppableTagGroup key={groupName} id={groupName} enabled={!cardDragDisabled && groupName !== TAG_GROUP_UNTAGGED}>
                 <button
                   type="button"
-                  onClick={() => toggleSection(groupName)}
+                  onClick={() => {
+                    clearSectionHeaderClickTimer()
+                    sectionHeaderSingleClickTimerRef.current = setTimeout(() => {
+                      sectionHeaderSingleClickTimerRef.current = null
+                      toggleSection(groupName)
+                    }, 200)
+                  }}
                   onDoubleClick={(e) => {
                     e.preventDefault()
+                    clearSectionHeaderClickTimer()
                     toggleAllSections(Object.keys(groupedCards), e.currentTarget)
                   }}
                   className="flex w-full items-center gap-2 border-b border-border pb-2 mb-4 text-left group"
