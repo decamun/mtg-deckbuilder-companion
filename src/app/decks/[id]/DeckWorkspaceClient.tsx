@@ -173,7 +173,7 @@ export default function DeckWorkspaceClient({
     scrollAnchorRef.current = null
     const delta = anchor.el.getBoundingClientRect().top - anchor.top
     scrollContainerRef.current.scrollTop += delta
-  })
+  }, [collapsedSections])
   const toggleAllSections = (allNames: string[], anchorEl: HTMLElement) => {
     scrollAnchorRef.current = { el: anchorEl, top: anchorEl.getBoundingClientRect().top }
     setCollapsedSections(prev => prev.size === allNames.length ? new Set() : new Set(allNames))

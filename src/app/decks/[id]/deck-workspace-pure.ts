@@ -199,12 +199,11 @@ export function primaryDeckCardImage(card: DeckCard): string | undefined {
 
 /** Same face ordering as decklist thumbnails (see `getDeckCardFaces` in `deck-workspace-card-media`). */
 export function deckCardArtImageAtFaceIndex(card: DeckCard, faceIndex: number): string | undefined {
-  const faces: DeckCardFace[] =
-    card.face_images?.length && card.face_images.length > 0
-      ? card.face_images
-      : card.image_url
-        ? [{ name: card.name, normal: card.image_url }]
-        : []
+  const faces: DeckCardFace[] = card.face_images?.length
+    ? card.face_images
+    : card.image_url
+      ? [{ name: card.name, normal: card.image_url }]
+      : []
   if (!faces.length) return primaryDeckCardImage(card)
   const n = faces.length
   const i = ((faceIndex % n) + n) % n

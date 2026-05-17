@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, type CSSProperties } from "react"
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react"
 import { motion } from "framer-motion"
 import { DndContext, type DragEndEvent, type SensorDescriptor, type SensorOptions } from "@dnd-kit/core"
 import { ChevronDown, Crown, Image as ImageIcon, Loader2 } from "lucide-react"
@@ -35,6 +35,57 @@ import type { DeckFormatValidationStatus } from "@/lib/deck-format-validation"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
 import { DeckWorkspaceCardRulesPreview, rulesHoverPayloadToArtImageUrl, rulesHoverPayloadToFields } from "./DeckWorkspaceCardRulesPreview"
 import { DeckWorkspaceDockCardArtPreview } from "./DeckWorkspaceDockCardArtPreview"
+
+/** Horizontal gap between decklist section columns (matches `gap-4`). */
+const SECTION_COLUMN_GAP_PX = 16
+
+/** Minimum width for a list-mode section column (one full-width list card row). */
+const LIST_SECTION_MIN_WIDTH_PX = 360
+
+function useDecklistSectionColumnCount(viewMode: ViewMode, cardSize: number, containerRef: RefObject<HTMLElement | null>) {
+  const [count, setCount] = useState(1)
+
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const measure = () => {
+      const wide = window.matchMedia("(min-width: 48rem)").matches
+      const w = el.clientWidth
+      const gap = SECTION_COLUMN_GAP_PX
+
+      if (!wide) {
+        setCount(1)
+        return
+      }
+
+      if (viewMode === "visual") {
+        setCount(1)
+        return
+      }
+
+      if (viewMode === "stack") {
+        const minCol = cardSize
+        setCount(Math.min(4, Math.max(1, Math.floor((w + gap) / (minCol + gap)))))
+      } else {
+        const minCol = LIST_SECTION_MIN_WIDTH_PX
+        setCount(Math.min(2, Math.max(1, Math.floor((w + gap) / (minCol + gap)))))
+      }
+    }
+
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    const mq = window.matchMedia("(min-width: 48rem)")
+    mq.addEventListener("change", measure)
+    return () => {
+      ro.disconnect()
+      mq.removeEventListener("change", measure)
+    }
+  }, [viewMode, cardSize, containerRef])
+
+  return count
+}
 
 export type DeckWorkspaceGroupedDecklistProps = {
   groupedCards: Record<string, DeckCard[]>
@@ -145,6 +196,51 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
   const previewFields = rulesHoverPayloadToFields(rulesHover)
   const artImageUrl = rulesHoverPayloadToArtImageUrl(rulesHover)
 
+  const sortedGroupEntries = useMemo(
+    () =>
+      Object.entries(groupedCards).sort(([a], [b]) => {
+        if (grouping === "mana") {
+          const manaSortKey = (name: string) => {
+            const prefix = "Mana Value "
+            if (!name.startsWith(prefix)) return 0
+            const n = Number(name.slice(prefix.length))
+            return Number.isFinite(n) ? n : 0
+          }
+          return manaSortKey(a) - manaSortKey(b)
+        }
+        if (grouping === "type") return compareTypeGroupSectionKeys(a, b)
+        if (grouping === "tag") {
+          if (a === TAG_GROUP_UNTAGGED) return 1
+          if (b === TAG_GROUP_UNTAGGED) return -1
+          return a.localeCompare(b, undefined, { sensitivity: "base" })
+        }
+        return 0
+      }),
+    [groupedCards, grouping],
+  )
+
+  const sectionColumnsRef = useRef<HTMLDivElement>(null)
+  const sectionColumnCount = useDecklistSectionColumnCount(viewMode, cardSize, sectionColumnsRef)
+
+  /** Double-click fires two click events first; defer single-section toggle so dblclick can cancel it. */
+  const sectionHeaderSingleClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearSectionHeaderClickTimer = () => {
+    if (sectionHeaderSingleClickTimerRef.current) {
+      clearTimeout(sectionHeaderSingleClickTimerRef.current)
+      sectionHeaderSingleClickTimerRef.current = null
+    }
+  }
+  useLayoutEffect(() => () => clearSectionHeaderClickTimer(), [])
+
+  const sectionColumnBuckets = useMemo(() => {
+    const n = sectionColumnCount
+    const cols: [string, DeckCard[]][][] = Array.from({ length: n }, () => [])
+    sortedGroupEntries.forEach((entry, i) => {
+      cols[i % n].push(entry)
+    })
+    return cols
+  }, [sortedGroupEntries, sectionColumnCount])
+
   return (
     <>
       <div
@@ -181,35 +277,30 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
           </div>
         )}
         <DndContext sensors={sensors} onDragEnd={onTagDragEnd}>
-        {Object.entries(groupedCards)
-          .sort(([a], [b]) => {
-            if (grouping === "mana") {
-              const manaSortKey = (name: string) => {
-                const prefix = "Mana Value "
-                if (!name.startsWith(prefix)) return 0
-                const n = Number(name.slice(prefix.length))
-                return Number.isFinite(n) ? n : 0
-              }
-              return manaSortKey(a) - manaSortKey(b)
-            }
-            if (grouping === "type") return compareTypeGroupSectionKeys(a, b)
-            if (grouping === "tag") {
-              if (a === TAG_GROUP_UNTAGGED) return 1
-              if (b === TAG_GROUP_UNTAGGED) return -1
-              return a.localeCompare(b, undefined, { sensitivity: "base" })
-            }
-            return 0
-          })
-          .map(([groupName, groupCards]) => {
+        <div
+          ref={sectionColumnsRef}
+          className="flex w-full items-start"
+          style={{ gap: SECTION_COLUMN_GAP_PX }}
+        >
+        {sectionColumnBuckets.map((columnEntries, layoutColIdx) => (
+          <div key={layoutColIdx} className="flex min-w-0 flex-1 flex-col gap-5">
+            {columnEntries.map(([groupName, groupCards]) => {
             const sectionQty =
               grouping === "type" && groupName === "Land" ? deckLandQtyIncludingMdfc : groupCards.reduce((acc, c) => acc + c.quantity, 0)
             return (
               <DroppableTagGroup key={groupName} id={groupName} enabled={!cardDragDisabled && groupName !== TAG_GROUP_UNTAGGED}>
                 <button
                   type="button"
-                  onClick={() => toggleSection(groupName)}
+                  onClick={() => {
+                    clearSectionHeaderClickTimer()
+                    sectionHeaderSingleClickTimerRef.current = setTimeout(() => {
+                      sectionHeaderSingleClickTimerRef.current = null
+                      toggleSection(groupName)
+                    }, 200)
+                  }}
                   onDoubleClick={(e) => {
                     e.preventDefault()
+                    clearSectionHeaderClickTimer()
                     toggleAllSections(Object.keys(groupedCards), e.currentTarget)
                   }}
                   className="flex w-full items-center gap-2 border-b border-border pb-2 mb-4 text-left group"
@@ -351,143 +442,136 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
 
                     {viewMode === "stack" &&
                       (() => {
-                        const numCols = Math.min(3, Math.max(1, Math.ceil(groupCards.length / 5)))
-                        const colSize = Math.ceil(groupCards.length / numCols)
-                        const columns = Array.from({ length: numCols }, (_, ci) => groupCards.slice(ci * colSize, (ci + 1) * colSize))
+                        const colIdx = 0
+                        const colCards = groupCards
+                        const basePositions: number[] = []
+                        let accY = 0
+                        colCards.forEach((card) => {
+                          basePositions.push(accY)
+                          accY += stackPeek + (card.quantity > 1 ? stackExtraPeek : 0)
+                        })
+                        const colHeight = accY + stackCardHeight + stackHoverShift
 
                         return (
-                          <div className="flex flex-wrap gap-8">
-                            {columns.map((colCards, colIdx) => {
-                              const basePositions: number[] = []
-                              let accY = 0
-                              colCards.forEach((card) => {
-                                basePositions.push(accY)
-                                accY += stackPeek + (card.quantity > 1 ? stackExtraPeek : 0)
-                              })
-                              const colHeight = accY + stackCardHeight + stackHoverShift
+                          <div className="flex flex-wrap">
+                            <div
+                              className="relative shrink-0"
+                              style={{ width: cardSize, height: colHeight }}
+                              onMouseMove={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect()
+                                const mouseY = e.clientY - rect.top
+                                let activeIdx = 0
+                                for (let i = 1; i < colCards.length; i++) {
+                                  if (mouseY >= basePositions[i]) activeIdx = i
+                                  else break
+                                }
+                                setHoveredStack({ groupName, colIdx, itemIdx: activeIdx })
+                                const activeCard = colCards[activeIdx]
+                                onDeckCardRulesPreviewHover(activeCard ?? null, activeCard ? deckCardFaceIndexById[activeCard.id] ?? 0 : undefined)
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredStack(null)
+                                onDeckCardRulesPreviewHover(null)
+                              }}
+                            >
+                              {colCards.map((card, itemIdx) => {
+                                const isHovered =
+                                  !!hoveredStack &&
+                                  hoveredStack.groupName === groupName &&
+                                  hoveredStack.colIdx === colIdx &&
+                                  hoveredStack.itemIdx === itemIdx
+                                const isBelow =
+                                  !!hoveredStack &&
+                                  hoveredStack.groupName === groupName &&
+                                  hoveredStack.colIdx === colIdx &&
+                                  itemIdx > hoveredStack.itemIdx
+                                const stackViolations = formatViolationMap.get(card.id)
 
-                              return (
-                                <div
-                                  key={colIdx}
-                                  className="relative shrink-0"
-                                  style={{ width: cardSize, height: colHeight }}
-                                  onMouseMove={(e) => {
-                                    const rect = e.currentTarget.getBoundingClientRect()
-                                    const mouseY = e.clientY - rect.top
-                                    let activeIdx = 0
-                                    for (let i = 1; i < colCards.length; i++) {
-                                      if (mouseY >= basePositions[i]) activeIdx = i
-                                      else break
-                                    }
-                                    setHoveredStack({ groupName, colIdx, itemIdx: activeIdx })
-                                    const ac = colCards[activeIdx]
-                                    onDeckCardRulesPreviewHover(ac ?? null, ac ? deckCardFaceIndexById[ac.id] ?? 0 : undefined)
-                                  }}
-                                  onMouseLeave={() => {
-                                    setHoveredStack(null)
-                                    onDeckCardRulesPreviewHover(null)
-                                  }}
-                                >
-                                  {colCards.map((card, itemIdx) => {
-                                    const isHovered =
-                                      !!hoveredStack &&
-                                      hoveredStack.groupName === groupName &&
-                                      hoveredStack.colIdx === colIdx &&
-                                      hoveredStack.itemIdx === itemIdx
-                                    const isBelow =
-                                      !!hoveredStack &&
-                                      hoveredStack.groupName === groupName &&
-                                      hoveredStack.colIdx === colIdx &&
-                                      itemIdx > hoveredStack.itemIdx
-                                    const stackViolations = formatViolationMap.get(card.id)
+                                const dragStyle: CSSProperties = {
+                                  top: basePositions[itemIdx],
+                                  zIndex: isHovered ? colCards.length + 10 : itemIdx + 1,
+                                }
 
-                                    const dragStyle: CSSProperties = {
-                                      top: basePositions[itemIdx],
-                                      zIndex: isHovered ? colCards.length + 10 : itemIdx + 1,
-                                    }
-
-                                    return (
-                                      <ContextMenu key={card.id} onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(card) }}>
-                                        <ContextMenuTrigger>
-                                          <DraggableDeckCard
-                                            id={deckCardDragId(grouping, groupName, card.id)}
-                                            disabled={cardDragDisabled}
-                                            className="absolute w-full cursor-grab active:cursor-grabbing group"
-                                            style={dragStyle}
-                                          >
-                                            <motion.div
-                                              className={`relative rounded-xl${stackViolations?.length ? " ring-2 ring-red-500/55 ring-offset-2 ring-offset-background" : ""}`}
-                                              animate={{
-                                                y: isHovered ? -12 : isBelow ? stackHoverShift : 0,
-                                                scale: isHovered ? 1.05 : 1,
-                                              }}
-                                              transition={{ type: "spring", stiffness: 500, damping: 35, mass: 0.4 }}
+                                return (
+                                  <ContextMenu key={card.id} onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(card) }}>
+                                    <ContextMenuTrigger>
+                                      <DraggableDeckCard
+                                        id={deckCardDragId(grouping, groupName, card.id)}
+                                        disabled={cardDragDisabled}
+                                        className="absolute w-full cursor-grab active:cursor-grabbing group"
+                                        style={dragStyle}
+                                      >
+                                        <motion.div
+                                          className={`relative rounded-xl${stackViolations?.length ? " ring-2 ring-red-500/55 ring-offset-2 ring-offset-background" : ""}`}
+                                          animate={{
+                                            y: isHovered ? -12 : isBelow ? stackHoverShift : 0,
+                                            scale: isHovered ? 1.05 : 1,
+                                          }}
+                                          transition={{ type: "spring", stiffness: 500, damping: 35, mass: 0.4 }}
+                                        >
+                                          <button
+                                            type="button"
+                                            className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
+                                            aria-label={`Preview ${card.name}`}
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              showClickedPreview(card, groupName)
+                                            }}
+                                          />
+                                          <DeckBuilderVisualCardThumbnail
+                                            card={card}
+                                            faceIndex={deckCardFaceIndexById[card.id] ?? 0}
+                                            onFaceIndexChange={(next) => onDeckCardDisplayFaceChange(card.id, next)}
+                                            className="w-full"
+                                            imageClassName="w-full rounded-xl border border-black/60 shadow-xl"
+                                            overlayClassName="rounded-xl"
+                                          />
+                                          {stackViolations && stackViolations.length > 0 && (
+                                            <div
+                                              className={`pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
+                                                isHovered ? "opacity-100" : "opacity-0"
+                                              }`}
                                             >
-                                              <button
-                                                type="button"
-                                                className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
-                                                aria-label={`Preview ${card.name}`}
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  showClickedPreview(card, groupName)
-                                                }}
-                                              />
-                                              <DeckBuilderVisualCardThumbnail
-                                                card={card}
-                                                faceIndex={deckCardFaceIndexById[card.id] ?? 0}
-                                                onFaceIndexChange={(next) => onDeckCardDisplayFaceChange(card.id, next)}
-                                                className="w-full"
-                                                imageClassName="w-full rounded-xl border border-black/60 shadow-xl"
-                                                overlayClassName="rounded-xl"
-                                              />
-                                              {stackViolations && stackViolations.length > 0 && (
-                                                <div
-                                                  className={`pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
-                                                    isHovered ? "opacity-100" : "opacity-0"
-                                                  }`}
-                                                >
-                                                  <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
-                                                    <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
-                                                    <ul className="space-y-0.5">
-                                                      {stackViolations.map((line) => (
-                                                        <li key={line} className="list-disc pl-3.5 marker:text-red-400/90">
-                                                          {line}
-                                                        </li>
-                                                      ))}
-                                                    </ul>
-                                                  </div>
-                                                </div>
-                                              )}
-                                              {card.quantity > 1 && (
-                                                <div className="pointer-events-none absolute bottom-2 left-2 z-[15] bg-background/90 text-foreground text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
-                                                  x{card.quantity}
-                                                </div>
-                                              )}
-                                              {displayedCommanderIds.includes(card.scryfall_id) && (
-                                                <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-0.5 shadow">
-                                                  <Crown className="w-2.5 h-2.5" /> CMD
-                                                </div>
-                                              )}
-                                              <div className="absolute top-2 right-2 z-20">
-                                                <DeckWorkspaceThreeDotMenu {...overflowMenus} c={card} groupName={groupName} align="end" />
+                                              <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
+                                                <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
+                                                <ul className="space-y-0.5">
+                                                  {stackViolations.map((line) => (
+                                                    <li key={line} className="list-disc pl-3.5 marker:text-red-400/90">
+                                                      {line}
+                                                    </li>
+                                                  ))}
+                                                </ul>
                                               </div>
-                                              {itemIdx === colCards.length - 1 && (
-                                                <div className="absolute bottom-2 right-2 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
-                                                  {formatPrice(card.price_usd)}
-                                                </div>
-                                              )}
-                                            </motion.div>
-                                          </DraggableDeckCard>
-                                        </ContextMenuTrigger>
-                                        <ContextMenuContent className="w-56 bg-white border-border text-foreground">
-                                          <DeckWorkspaceCardActionMenuItems variant="context" {...buildDeckWorkspaceMenuItemProps(overflowMenus, card, groupName)} />
-                                        </ContextMenuContent>
-                                      </ContextMenu>
-                                    )
-                                  })}
-                                </div>
-                              )
-                            })}
+                                            </div>
+                                          )}
+                                          {card.quantity > 1 && (
+                                            <div className="pointer-events-none absolute bottom-2 left-2 z-[15] bg-background/90 text-foreground text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
+                                              x{card.quantity}
+                                            </div>
+                                          )}
+                                          {displayedCommanderIds.includes(card.scryfall_id) && (
+                                            <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-0.5 shadow">
+                                              <Crown className="w-2.5 h-2.5" /> CMD
+                                            </div>
+                                          )}
+                                          <div className="absolute top-2 right-2 z-20">
+                                            <DeckWorkspaceThreeDotMenu {...overflowMenus} c={card} groupName={groupName} align="end" />
+                                          </div>
+                                          {itemIdx === colCards.length - 1 && (
+                                            <div className="absolute bottom-2 right-2 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
+                                              {formatPrice(card.price_usd)}
+                                            </div>
+                                          )}
+                                        </motion.div>
+                                      </DraggableDeckCard>
+                                    </ContextMenuTrigger>
+                                    <ContextMenuContent className="w-56 bg-white border-border text-foreground">
+                                      <DeckWorkspaceCardActionMenuItems variant="context" {...buildDeckWorkspaceMenuItemProps(overflowMenus, card, groupName)} />
+                                    </ContextMenuContent>
+                                  </ContextMenu>
+                                )
+                              })}
+                            </div>
                           </div>
                         )
                       })()}
@@ -504,7 +588,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                   disabled={cardDragDisabled}
                                   onMouseEnter={() => {
                                     if (listV && listV.length > 0) setDeckFormatHintHoverId(c.id)
-                                    onDeckCardRulesPreviewHover(c, 0)
+                                    onDeckCardRulesPreviewHover(c, deckCardFaceIndexById[c.id] ?? 0)
                                   }}
                                   onMouseLeave={() => {
                                     if (listV && listV.length > 0) {
@@ -569,6 +653,9 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
               </DroppableTagGroup>
             )
           })}
+          </div>
+        ))}
+        </div>
       </DndContext>
 
       <div className="border-t border-border pt-8 mt-4">
