@@ -393,7 +393,8 @@ export function createMcpServer(context: McpContext) {
   server.tool(
     'set_primer',
     'Write or replace a deck\'s primer. The primer is GitHub-Flavored Markdown (headings, bold, italic, lists, links).' +
-      ' Embed a card image inline with {{card:<printing_scryfall_id>}} — use the `id` field from search_scryfall or list_printings results (a UUID), NOT the oracle_id.' +
+      ' Card embeds: {{card:<printing_scryfall_id>}} using the printing `id` from search_scryfall or list_printings (or scryfall_id from get_decklist), NOT oracle_id.' +
+      ' Inline (inside running text): bold card name with hover image preview. Block (token alone in its own paragraph or as the only list-item text): centered card image.' +
       ' Links must point to idlebrew.app (other hosts are stripped by the renderer).' +
       ' Pass the complete markdown content; this replaces the entire primer.',
     {

@@ -205,21 +205,21 @@ ${scryfallFormatLegalitySection(normalized)}
 
 Primers are public-facing deck guides written in **GitHub-Flavored Markdown** (headings, bold, italic, bullet/numbered lists, tables, code blocks, blockquotes). Use \`get_primer\` to read the existing primer and \`set_primer\` to write or replace it.
 
-**Card embeds** — render a card image inline:
+**Card embeds** — use a printing-specific Scryfall id (the \`id\` field from \`search_scryfall\` / \`list_printings\`, or \`scryfall_id\` from \`get_decklist\`). Do **not** use \`oracle_id\`; it will not render.
 \`\`\`
 {{card:<printing_scryfall_id>}}
 \`\`\`
-- Use the \`id\` field returned by \`search_scryfall\` or \`list_printings\` — this is a printing-specific UUID (e.g. \`"a1b2c3d4-..."\`).
-- Do NOT use \`oracle_id\` here; oracle ids are not accepted and will not render.
-- Call \`get_decklist\` first when you need card ids already in the deck; call \`search_scryfall\` or \`list_printings\` when you need a specific printing.
-- Card tokens can appear anywhere in the markdown text, including inside paragraphs or list items.
+- **Inline mention** — put the token inside a sentence or list item (same line as other text). The UI shows the **card name in bold** with a **hover image preview**; click opens a full-size preview.
+- **Block figure** — put the token **alone in its own paragraph** (surrounded by blank lines), or as the **only text in a list item**, so nothing else shares that paragraph or bullet line. The UI shows a **centered card image** (good for showcase rows).
+- You can place multiple \`{{card:…}}\` tokens in one paragraph when that paragraph is **only** tokens and whitespace; each renders as a stacked block image.
+- Call \`get_decklist\` first when you need ids already in the deck; call \`search_scryfall\` or \`list_printings\` when you need a specific printing.
 
 **Links** — only links to \`idlebrew.app\` are allowed. Other hosts are silently stripped by the renderer when the primer is displayed. Do not add links to external sites.
 
 **Workflow for drafting a primer**:
 1. Call \`get_deck\` for deck name, format, and commanders (if any).
 2. Call \`get_decklist\` to see all cards and their ids.
-3. Draft the full markdown, embedding card images with \`{{card:<id>}}\` using the \`scryfall_id\` values from the decklist (or use \`list_printings\` if a specific art/set is wanted).
+3. Draft the full markdown, using \`{{card:<id>}}\` with \`scryfall_id\` from the decklist (or \`list_printings\` for a specific art). Use **solo paragraphs** for large card figures and **inline mentions** when the card name should read as part of a sentence.
 4. Call \`set_primer\` with the complete markdown — this replaces the entire primer.
 
 **Workflow for editing part of an existing primer**:
