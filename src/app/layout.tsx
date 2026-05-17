@@ -6,6 +6,8 @@ import { TopNav } from "@/components/TopNav";
 import { TopNavDeckGuestProvider } from "@/components/TopNavDeckGuestContext";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from '@vercel/analytics/next';
+import { GoogleConsentModeDefault } from "@/components/ads/GoogleConsentModeDefault";
+import { AdSenseLayout } from "@/components/ads/AdSenseLayout";
 
 const armata = Armata({
   variable: "--font-armata",
@@ -42,8 +44,10 @@ export default function RootLayout({
       className={`${armata.variable} ${audiowide.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col">
+        <GoogleConsentModeDefault />
         <TopNavDeckGuestProvider>
           <TopNav />
+          <AdSenseLayout />
           {children}
         </TopNavDeckGuestProvider>
         <Toaster theme="dark" />

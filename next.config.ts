@@ -21,6 +21,10 @@ const scriptSrc = [
   "https://vercel.live",
   // Cloudflare Turnstile (feedback form); see https://developers.cloudflare.com/turnstile/reference/content-security-policy/
   "https://challenges.cloudflare.com",
+  // Google AdSense loader + related scripts (issue #215)
+  "https://pagead2.googlesyndication.com",
+  "https://www.google.com",
+  "https://www.googletagservices.com",
 ];
 const styleSrc = ["'self'", "'unsafe-inline'"];
 const connectSrc = [
@@ -34,6 +38,10 @@ const connectSrc = [
   "https://cards.scryfall.io",
   "https://vitals.vercel-insights.com",
   "https://va.vercel-scripts.com",
+  // Ad requests / telemetry used by AdSense
+  "https://pagead2.googlesyndication.com",
+  "https://googleads.g.doubleclick.net",
+  "https://www.google.com",
 ];
 
 if (isDev) {
@@ -48,11 +56,11 @@ const contentSecurityPolicy = [
   "frame-ancestors 'none'",
   `script-src ${scriptSrc.join(" ")}`,
   `style-src ${styleSrc.join(" ")}`,
-  "img-src 'self' data: blob: https://cards.scryfall.io https://*.scryfall.io",
+  "img-src 'self' data: blob: https://cards.scryfall.io https://*.scryfall.io https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://pagead2.googlesyndication.com https://tpc.googlesyndication.com",
   "font-src 'self' data:",
   `connect-src ${connectSrc.join(" ")}`,
   // Vercel Toolbar / Next.js Live Feedback embeds vercel.live in a frame on preview deployments.
-  "frame-src https://vercel.live https://challenges.cloudflare.com",
+  "frame-src https://vercel.live https://challenges.cloudflare.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://www.google.com https://pagead2.googlesyndication.com",
   "form-action 'self'",
   "upgrade-insecure-requests",
 ].join("; ");
