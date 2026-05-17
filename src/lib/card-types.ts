@@ -72,25 +72,34 @@ export function hasLandFaceOnTypeLine(typeLine: string | undefined): boolean {
   return false
 }
 
-const NONLAND_PERMANENT_TYPES = new Set<string>([
-  'Creature',
+/**
+ * Non-land type sections in decklist / diff display order (Planeswalker through Instant).
+ * {@link TYPE_GROUP_SECTION_ORDER} appends `Land`. `Other` sorts after Instant and before Land.
+ */
+export const TYPE_GROUP_NONLAND_SECTION_ORDER = [
   'Planeswalker',
-  'Battle',
+  'Creature',
   'Artifact',
   'Enchantment',
-])
+  'Battle',
+  'Sorcery',
+  'Instant',
+] as const
 
-const NONLAND_NONPERMANENT_TYPES = new Set<string>(['Instant', 'Sorcery'])
+/** Full type section order including lands (matches common paper decklist layout). */
+export const TYPE_GROUP_SECTION_ORDER = [...TYPE_GROUP_NONLAND_SECTION_ORDER, 'Land'] as const
+
+const NONLAND_SECTION_INDEX = new Map<string, number>(
+  TYPE_GROUP_NONLAND_SECTION_ORDER.map((t, i) => [t, i]),
+)
 
 /**
- * Sort key for deck type sections: nonland permanents (A–Z), then nonland
- * nonpermanents (A–Z), then Other, then Land.
+ * Sort key for deck type sections (editor, diff, etc.).
  */
-export function typeGroupSectionSortMeta(group: CardTypeGroup | string): { tier: number; name: string } {
+export function typeGroupSectionSortMeta(group: CardTypeGroup | string): { sortKey: number; name: string } {
   const g = String(group)
-  if (g === 'Land') return { tier: 3, name: g }
-  if (g === 'Other') return { tier: 2, name: g }
-  if (NONLAND_NONPERMANENT_TYPES.has(g)) return { tier: 1, name: g }
-  if (NONLAND_PERMANENT_TYPES.has(g)) return { tier: 0, name: g }
-  return { tier: 2, name: g }
+  if (g === 'Land') return { sortKey: TYPE_GROUP_NONLAND_SECTION_ORDER.length + 1, name: g }
+  const idx = NONLAND_SECTION_INDEX.get(g)
+  if (idx !== undefined) return { sortKey: idx, name: g }
+  return { sortKey: TYPE_GROUP_NONLAND_SECTION_ORDER.length, name: g }
 }

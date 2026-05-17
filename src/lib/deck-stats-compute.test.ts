@@ -158,13 +158,13 @@ describe('computeDeckStatsReport', () => {
       avg_cmc_non_land: 3,
       avg_cmc_all_cards: 1.8,
       type_counts: {
-        Creature: 0,
         Planeswalker: 0,
-        Battle: 0,
-        Instant: 0,
-        Sorcery: 2,
+        Creature: 0,
         Artifact: 1,
         Enchantment: 0,
+        Battle: 0,
+        Sorcery: 2,
+        Instant: 0,
         Land: 2,
       },
       lands: {
