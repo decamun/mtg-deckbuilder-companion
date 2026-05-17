@@ -7,6 +7,8 @@ import {
 
 describe('rate-limit', () => {
   beforeEach(() => {
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
     resetRateLimitsForTests()
   })
 
@@ -22,10 +24,10 @@ describe('rate-limit', () => {
     expect(blocked.retryAfter).toBe(8)
   })
 
-  it('resetRateLimitsForTests clears counters', () => {
-    checkRateLimit('k2', { maxRequests: 1, windowMs: 60_000 })
-    expect(checkRateLimit('k2', { maxRequests: 1, windowMs: 60_000 }).ok).toBe(false)
+  it('resetRateLimitsForTests clears counters', async () => {
+    await checkRateLimit('k2', { maxRequests: 1, windowMs: 60_000 })
+    expect((await checkRateLimit('k2', { maxRequests: 1, windowMs: 60_000 })).ok).toBe(false)
     resetRateLimitsForTests()
-    expect(checkRateLimit('k2', { maxRequests: 1, windowMs: 60_000 }).ok).toBe(true)
+    expect((await checkRateLimit('k2', { maxRequests: 1, windowMs: 60_000 })).ok).toBe(true)
   })
 })

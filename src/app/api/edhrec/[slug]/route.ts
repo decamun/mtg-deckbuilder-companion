@@ -70,7 +70,7 @@ export async function GET(
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  const rateLimit = checkRateLimit(`edhrec:${user.id}`, EDHREC_RATE_LIMIT)
+  const rateLimit = await checkRateLimit(`edhrec:${user.id}`, EDHREC_RATE_LIMIT)
   if (!rateLimit.ok) {
     return NextResponse.json(
       { error: "rate_limited", retryAfter: rateLimit.retryAfter },

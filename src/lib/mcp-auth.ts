@@ -62,13 +62,13 @@ export async function resolveMcpAuth(request: Request): Promise<McpAuthResult> {
   if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
     const raw = authHeader.slice(7).trim()
     if (raw.startsWith(TOKEN_PREFIX)) {
-      const oauthLimit = checkRateLimit(`mcp:oauth-ip:${ipHash}`, MCP_KEY_RATE_LIMIT)
+      const oauthLimit = await checkRateLimit(`mcp:oauth-ip:${ipHash}`, MCP_KEY_RATE_LIMIT)
       if (!oauthLimit.ok) {
         return { userId: null, context: null, mode: 'unauthorized', reason: 'rate_limited' }
       }
       const token = await resolveAccessToken(raw)
       if (!token) {
-        checkRateLimit(`mcp:invalid:${ipHash}`, MCP_INVALID_KEY_RATE_LIMIT)
+        await checkRateLimit(`mcp:invalid:${ipHash}`, MCP_INVALID_KEY_RATE_LIMIT)
         return { userId: null, context: null, mode: 'unauthorized', reason: 'invalid_token' }
       }
       const service = getServiceClient()
@@ -81,7 +81,7 @@ export async function resolveMcpAuth(request: Request): Promise<McpAuthResult> {
       }
     }
     if (!raw.startsWith(KEY_PREFIX)) {
-      checkRateLimit(`mcp:invalid:${ipHash}`, MCP_INVALID_KEY_RATE_LIMIT)
+      await checkRateLimit(`mcp:invalid:${ipHash}`, MCP_INVALID_KEY_RATE_LIMIT)
       return { userId: null, context: null, mode: 'unauthorized', reason: 'invalid_key' }
     }
     const hash = await sha256Hex(raw)
@@ -92,10 +92,10 @@ export async function resolveMcpAuth(request: Request): Promise<McpAuthResult> {
       .eq('key_hash', hash)
       .maybeSingle()
     if (error || !data || !data.is_active) {
-      checkRateLimit(`mcp:invalid:${ipHash}`, MCP_INVALID_KEY_RATE_LIMIT)
+      await checkRateLimit(`mcp:invalid:${ipHash}`, MCP_INVALID_KEY_RATE_LIMIT)
       return { userId: null, context: null, mode: 'unauthorized', reason: 'invalid_key' }
     }
-    const rateLimit = checkRateLimit(`mcp:key:${data.id}`, MCP_KEY_RATE_LIMIT)
+    const rateLimit = await checkRateLimit(`mcp:key:${data.id}`, MCP_KEY_RATE_LIMIT)
     if (!rateLimit.ok) {
       void service
         .from('mcp_api_keys')
