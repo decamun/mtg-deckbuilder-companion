@@ -374,7 +374,7 @@ export function DeckAgentSidebar({
       {open && !mdUp && (
         <button
           type="button"
-          className="fixed top-below-nav right-0 bottom-0 left-0 z-[45] bg-black/40"
+          className="fixed top-below-nav-compact right-0 bottom-0 left-0 z-[45] bg-black/40"
           aria-label="Dismiss deck assistant"
           onClick={onClose}
         />
@@ -384,7 +384,7 @@ export function DeckAgentSidebar({
           "flex flex-col border-l border-border bg-card/95 shadow-xl",
           mdUp
             ? "relative z-10 h-full min-h-0 shrink-0"
-            : "fixed top-below-nav right-0 bottom-0 z-[46] max-w-[100vw] pb-safe",
+            : "fixed top-below-nav-compact right-0 bottom-0 z-[46] max-w-[100vw] pb-safe",
         )}
         style={{ width: panelWidthPx }}
       >

@@ -55,21 +55,13 @@ export type DeckWorkspaceHeaderProps = {
   onOpenSettings: () => void
   onImportClick: () => void
   onVisibilityChange: (pub: boolean) => void
-  /** When true, the cover banner uses a shorter layout to free vertical space while scrolling. */
-  collapsedChrome?: boolean
 }
 
 export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
   const showSearch = !headerProps.interactionsLocked && headerProps.tab === "decklist"
-  const compact = !!headerProps.collapsedChrome
 
   return (
-    <header
-      className={cn(
-        "relative z-40 shrink-0 border-b border-border transition-[min-height] duration-200 ease-out",
-        compact ? "min-h-14 sm:h-14" : "min-h-28 sm:h-28"
-      )}
-    >
+    <header className="relative z-40 min-h-14 shrink-0 border-b border-border sm:h-14">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {headerProps.displayedCoverImageUrl ? (
           <>
@@ -77,17 +69,9 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
               src={headerProps.displayedCoverImageUrl}
               alt=""
               aria-hidden
-              className={cn(
-                "absolute inset-0 h-full w-full object-cover object-center transition-transform duration-200",
-                compact && "scale-105 object-[center_20%]"
-              )}
+              className="absolute inset-0 h-full w-full scale-105 object-cover object-[center_20%]"
             />
-            <div
-              className={cn(
-                "absolute inset-0 bg-gradient-to-t from-secondary/95 via-secondary/70 to-secondary/30 transition-opacity duration-200",
-                compact && "via-secondary/80 to-secondary/50"
-              )}
-            />
+            <div className="absolute inset-0 bg-gradient-to-t from-secondary/95 via-secondary/80 to-secondary/50" />
             <div className="absolute inset-0 backdrop-blur-[2px]" />
           </>
         ) : (
@@ -95,12 +79,7 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
         )}
       </div>
 
-      <div
-        className={cn(
-          "relative z-10 flex flex-col px-4 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:flex-wrap sm:items-end sm:pt-0",
-          compact ? "gap-1 pb-2 pt-12 sm:gap-x-2 sm:gap-y-2 sm:pb-1.5" : "gap-2 pb-3 pt-10 sm:gap-x-3 sm:gap-y-2 sm:pb-2"
-        )}
-      >
+      <div className="relative z-10 flex flex-col gap-1 px-4 pb-2 pt-12 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:flex-wrap sm:items-end sm:gap-x-2 sm:gap-y-2 sm:pb-1.5 sm:pt-0">
         <div className="flex min-h-9 min-w-0 w-full items-center gap-2 sm:contents">
           <Button variant="ghost" size="sm" onClick={headerProps.onBack} className="shrink-0 text-muted-foreground hover:text-foreground">
             &larr; Back
@@ -135,8 +114,7 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
                 )}
                 <h1
                   className={cn(
-                    "relative min-w-0 truncate font-bold drop-shadow-md sm:whitespace-nowrap",
-                    compact ? "text-sm sm:text-sm" : "text-base",
+                    "relative min-w-0 truncate text-sm font-bold drop-shadow-md sm:whitespace-nowrap sm:text-sm",
                     headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "cursor-text select-none" : ""
                   )}
                   title={headerProps.isOwner && !headerProps.viewing && headerProps.deck ? "Double-click to rename" : undefined}
@@ -167,10 +145,7 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Add a card..."
-                className={cn(
-                  "w-full border-border bg-background/60 pl-9 pr-4 text-foreground",
-                  compact ? "h-8 text-sm" : "h-9"
-                )}
+                className="h-8 w-full border-border bg-background/60 pl-9 pr-4 text-sm text-foreground"
                 value={headerProps.query}
                 onChange={(e) => {
                   headerProps.onQueryChange(e.target.value)

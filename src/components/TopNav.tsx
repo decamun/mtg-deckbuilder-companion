@@ -58,11 +58,11 @@ function navLinkIsActive(
 export function TopNav() {
   const pathname = usePathname()
   const router = useRouter()
-  const { guestDeckNav, deckEditorScrollCompact } = useTopNavDeckGuest()
+  const { guestDeckNav } = useTopNavDeckGuest()
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const currentPath = pathname ?? ""
-  const navBarCompact =
-    isDeckWorkspacePath(currentPath) && deckEditorScrollCompact
+  /** Deck workspace uses the short nav bar immediately (no expand→compact transition). */
+  const navBarCompact = isDeckWorkspacePath(currentPath)
   const [visiblePath, setVisiblePath] = useState<string | null>(null)
   const isScrollShellPage = SHELL_PATHS.has(currentPath)
   const activePath = isScrollShellPage ? visiblePath ?? currentPath : currentPath
@@ -136,7 +136,7 @@ export function TopNav() {
     <header className="sticky top-0 z-50 shrink-0 border-b border-border bg-background/80 backdrop-blur-xl">
       <div
         className={cn(
-          "container mx-auto flex items-center gap-2 px-4 pt-safe transition-[height,min-height] duration-200 ease-out sm:gap-6",
+          "container mx-auto flex items-center gap-2 px-4 pt-safe sm:gap-6",
           navBarCompact ? "h-7 min-h-7" : "h-14 min-h-14",
         )}
       >
@@ -151,7 +151,7 @@ export function TopNav() {
         >
           <IdlebrewLogo
             className={cn(
-              "w-auto text-foreground transition-[height] duration-200 ease-out",
+              "w-auto text-foreground",
               navBarCompact ? "h-4" : "h-7",
             )}
           />
