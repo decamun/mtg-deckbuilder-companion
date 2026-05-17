@@ -216,6 +216,15 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
   const sectionColumnsRef = useRef<HTMLDivElement>(null)
   const sectionColumnCount = useDecklistSectionColumnCount(viewMode, cardSize, sectionColumnsRef)
 
+  const sectionColumnBuckets = useMemo(() => {
+    const n = sectionColumnCount
+    const cols: [string, DeckCard[]][][] = Array.from({ length: n }, () => [])
+    sortedGroupEntries.forEach((entry, i) => {
+      cols[i % n].push(entry)
+    })
+    return cols
+  }, [sortedGroupEntries, sectionColumnCount])
+
   return (
     <>
       <div
@@ -254,19 +263,16 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
         <DndContext sensors={sensors} onDragEnd={onTagDragEnd}>
         <div
           ref={sectionColumnsRef}
-          className="w-full"
-          style={{
-            columnCount: sectionColumnCount,
-            columnGap: SECTION_COLUMN_GAP_PX,
-            columnFill: "auto",
-          }}
+          className="flex w-full items-start"
+          style={{ gap: SECTION_COLUMN_GAP_PX }}
         >
-        {sortedGroupEntries.map(([groupName, groupCards]) => {
+        {sectionColumnBuckets.map((columnEntries, layoutColIdx) => (
+          <div key={layoutColIdx} className="flex min-w-0 flex-1 flex-col gap-5">
+            {columnEntries.map(([groupName, groupCards]) => {
             const sectionQty =
               grouping === "type" && groupName === "Land" ? deckLandQtyIncludingMdfc : groupCards.reduce((acc, c) => acc + c.quantity, 0)
             return (
-              <div key={groupName} className="break-inside-avoid mb-5">
-              <DroppableTagGroup id={groupName} enabled={!cardDragDisabled && groupName !== TAG_GROUP_UNTAGGED}>
+              <DroppableTagGroup key={groupName} id={groupName} enabled={!cardDragDisabled && groupName !== TAG_GROUP_UNTAGGED}>
                 <button
                   type="button"
                   onClick={() => toggleSection(groupName)}
@@ -617,9 +623,10 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                   </>
                 )}
               </DroppableTagGroup>
-              </div>
             )
           })}
+          </div>
+        ))}
         </div>
       </DndContext>
 
