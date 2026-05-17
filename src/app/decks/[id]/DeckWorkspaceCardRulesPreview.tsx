@@ -54,6 +54,8 @@ export function rulesHoverPayloadToFields(hover: DeckRulesHoverPayload): CardRul
   }
 }
 
+const ORACLE_PREVIEW_SCROLL_STEP_MS = 3000
+
 function OracleTextHoverPreview({ text }: { text: string }) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -63,12 +65,40 @@ function OracleTextHoverPreview({ text }: { text: string }) {
 
     el.scrollTop = 0
 
-    const t = window.setTimeout(() => {
-      if (el.scrollHeight <= el.clientHeight) return
-      el.scrollTo({ top: el.scrollHeight - el.clientHeight, behavior: "smooth" })
-    }, 1000)
+    let cancelled = false
+    let timeoutId: number | null = null
 
-    return () => window.clearTimeout(t)
+    const clearScheduled = () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+        timeoutId = null
+      }
+    }
+
+    const scheduleScroll = (scrollDown: boolean) => {
+      clearScheduled()
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null
+        if (cancelled) return
+        const node = scrollRef.current
+        if (!node) return
+        if (node.scrollHeight <= node.clientHeight) return
+
+        if (scrollDown) {
+          node.scrollTo({ top: node.scrollHeight - node.clientHeight, behavior: "smooth" })
+        } else {
+          node.scrollTo({ top: 0, behavior: "smooth" })
+        }
+        scheduleScroll(!scrollDown)
+      }, ORACLE_PREVIEW_SCROLL_STEP_MS)
+    }
+
+    scheduleScroll(true)
+
+    return () => {
+      cancelled = true
+      clearScheduled()
+    }
   }, [text])
 
   return (
