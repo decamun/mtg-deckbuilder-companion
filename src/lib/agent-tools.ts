@@ -2,6 +2,11 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import * as deckService from './deck-service'
+import {
+  formatValidationToolSummary,
+  normalizeFormatForValidation,
+  scryfallLegalityFilterForNormalizedFormat,
+} from './deck-format-validation'
 import { buildDeckStatsReport } from './deck-stats'
 import { searchCards, getPrintingsByOracleId, type ScryfallCard } from './scryfall'
 
@@ -27,12 +32,35 @@ export const DECK_AGENT_MUTATING_TOOLS = new Set([
  * Each tool closes over (supabase, userId, deckId). The deckId is
  * forced — the agent cannot edit other decks even if the model hallucinates
  * one, because tools that take a deckId double-check it equals the bound deck.
+ *
+ * **Format awareness:** pass `deckFormat` from `deck.format` so tool descriptions
+ * and Scryfall hints match the deck. When adding a selectable format with
+ * validation, register it in `deck-format-validation.ts` (`FORMAT_VALIDATOR_REGISTRY`)
+ * and extend `formatValidationToolSummary` / `scryfallLegalityFilterForNormalizedFormat`
+ * so this surface stays honest.
  */
 export function buildDeckAgentTools(
   supabase: SupabaseClient,
   userId: string,
-  deckId: string
+  deckId: string,
+  deckFormat?: string | null
 ) {
+  const normalizedFormat = normalizeFormatForValidation(deckFormat)
+  const scryfallF = scryfallLegalityFilterForNormalizedFormat(normalizedFormat)
+  const formatStatsLine = formatValidationToolSummary(deckFormat)
+
+  const searchScryfallDescription =
+    'Search Scryfall using their full search syntax. Returns up to `limit` card objects with image URLs.' +
+    ' Key filters: t:(type) c:(colors) id<=gruul (color identity fits within) cmc<=/>=N pow:/tou: r:(rarity) f:(format) o:(oracle text) keyword:(ability) is:commander otag:(ramp|removal|draw|tutor|boardwipe|counterspell).' +
+    (scryfallF === 'commander' || scryfallF == null
+      ? ' Examples: "t:creature id<=gruul f:commander" | "is:commander id:gruul" | "otag:ramp id<=temur f:commander" | "(t:instant OR t:sorcery) c:u o:counter cmc<=2"'
+      : ` For this deck's format, prefer \`f:${scryfallF}\` in queries when checking legality (example: "f:${scryfallF} t:instant cmc<=2").`)
+
+  const setCommandersDescription =
+    normalizedFormat === 'edh'
+      ? 'Set the commander scryfall_ids for this deck (max 2). Empty array clears.'
+      : 'Set stored commander/partner Scryfall ids (max 2). Primarily used for Commander/EDH; this deck is not EDH, so commanders do not affect format validation—only metadata/cover flows may use them. Empty array clears.'
+
   const enforceDeck = (id: string) => {
     if (id !== deckId) {
       throw new Error(`This conversation is bound to deck ${deckId}; cannot operate on ${id}`)
@@ -41,10 +69,7 @@ export function buildDeckAgentTools(
 
   return {
     search_scryfall: tool({
-      description:
-        'Search Scryfall using their full search syntax. Returns up to `limit` card objects with image URLs.' +
-        ' Key filters: t:(type) c:(colors) id<=gruul (color identity fits within) cmc<=/>=N pow:/tou: r:(rarity) f:(format) o:(oracle text) keyword:(ability) is:commander otag:(ramp|removal|draw|tutor|boardwipe|counterspell).' +
-        ' Examples: "t:creature id<=gruul f:commander" | "is:commander id:gruul" | "otag:ramp id<=temur f:commander" | "(t:instant OR t:sorcery) c:u o:counter cmc<=2"',
+      description: searchScryfallDescription,
       inputSchema: z.object({
         query: z.string().min(1),
         limit: z.number().int().min(1).max(50).default(10),
@@ -110,8 +135,8 @@ export function buildDeckAgentTools(
 
     get_deck_stats: tool({
       description:
-        'Full statistics for this deck (matches the deck editor Analytics tab and format hints): counts, USD sum,' +
-        ' format violations for Commander/EDH (and empty hints for other formats), mana curve, probabilities, color balance.',
+        'Full statistics for this deck (matches the deck editor Analytics tab): counts, USD sum, mana curve, opening probabilities, color balance, and format_validation — ' +
+        formatStatsLine,
       inputSchema: z.object({}),
       execute: async () => {
         const deck = await deckService.getDeck(supabase, userId, deckId)
@@ -221,7 +246,7 @@ export function buildDeckAgentTools(
     }),
 
     set_commanders: tool({
-      description: 'Set the commander scryfall_ids for this deck (max 2). Empty array clears.',
+      description: setCommandersDescription,
       inputSchema: z.object({
         deck_id: z.string(),
         scryfall_ids: z.array(z.string()).max(2),

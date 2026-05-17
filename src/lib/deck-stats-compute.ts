@@ -14,7 +14,7 @@ import {
 } from '@/lib/deck-format-validation'
 import { DEFAULT_CARD_ZONE_ID, zoneCountsTowardMainDeck } from '@/lib/zones'
 
-/** Card shape for analytics + Commander format hints (matches hydrated deck rows). */
+/** Card shape for analytics + per-format validation (matches hydrated deck rows). */
 export interface DeckStatsCard {
   id: string
   scryfall_id: string

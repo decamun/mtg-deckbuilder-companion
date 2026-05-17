@@ -12,6 +12,10 @@ import {
 } from '@/lib/agent-quota'
 import { resolveModel, reasoningProviderOptions } from '@/lib/agent-models'
 import { buildDeckAgentTools } from '@/lib/agent-tools'
+import {
+  normalizeFormatForValidation,
+  scryfallLegalityFilterForNormalizedFormat,
+} from '@/lib/deck-format-validation'
 import * as deckService from '@/lib/deck-service'
 import { getCardsByIds, type ScryfallCard } from '@/lib/scryfall'
 import { getRequestId } from '@/lib/request-id'
@@ -32,42 +36,113 @@ function buildDeckContext(
   format: string | null,
   commanderCards: ScryfallCard[]
 ): string {
-  const fmt = format ?? 'commander'
+  const fmtDisplay = (format && format.trim()) || 'unspecified'
+  const normalized = normalizeFormatForValidation(format)
 
-  if (commanderCards.length === 0) {
-    return `Format: ${fmt}. No commanders set — search without color-identity constraints until the user specifies one.`
+  if (!normalized) {
+    return `Format: ${fmtDisplay} (not set to a known rules bundle). Call get_deck for the stored format string, pick a matching Scryfall \`f:\` filter when one exists, and use get_deck_stats for any validation the app exposes.`
   }
 
-  const combinedIdentity = [
-    ...new Set(commanderCards.flatMap(c => c.color_identity ?? [])),
-  ]
-    .sort()
-    .join('')
-    .toLowerCase() || 'c'
+  if (normalized === 'edh') {
+    if (commanderCards.length === 0) {
+      return `Format: ${fmtDisplay} (Commander/EDH). No commanders set — search with \`f:commander\` for legality; add \`id<=\` once commanders define color identity.`
+    }
 
-  const commanderLines = commanderCards
-    .map(c => {
-      const ci = (c.color_identity ?? []).join('').toLowerCase() || 'c'
-      const text = c.oracle_text?.replace(/\n/g, ' ') ?? ''
-      return `  - ${c.name} [${ci}] — ${text}`
-    })
-    .join('\n')
+    const combinedIdentity = [
+      ...new Set(commanderCards.flatMap(c => c.color_identity ?? [])),
+    ]
+      .sort()
+      .join('')
+      .toLowerCase() || 'c'
 
-  return `Format: ${fmt}
+    const commanderLines = commanderCards
+      .map(c => {
+        const ci = (c.color_identity ?? []).join('').toLowerCase() || 'c'
+        const text = c.oracle_text?.replace(/\n/g, ' ') ?? ''
+        return `  - ${c.name} [${ci}] — ${text}`
+      })
+      .join('\n')
+
+    return `Format: ${fmtDisplay} (Commander/EDH)
 Commanders:
 ${commanderLines}
 Combined color identity: ${combinedIdentity}
 
-Default search behavior: always include \`id<=${combinedIdentity} f:${fmt}\` unless the user explicitly asks for off-identity or off-format cards.
+Default search behavior: always include \`id<=${combinedIdentity} f:commander\` unless the user explicitly asks for off-identity or off-format cards.
 Card evaluation: when suggesting adds or cuts, assess synergy with the commander(s) above — prefer cards that advance or enable their strategies.`
+  }
+
+  if (normalized === 'canlander') {
+    return `Format: ${fmtDisplay} (Canadian Highlander). Points and deck construction are validated in-app — after shortlisting cards with Scryfall, call get_deck_stats and read format_validation (Scryfall does not encode the points list).`
+  }
+
+  const fKey = scryfallLegalityFilterForNormalizedFormat(normalized)
+  if (fKey) {
+    return `Format: ${fmtDisplay}. When searching for cards to add, include \`f:${fKey}\` for format legality unless the user asks otherwise. Color-identity filters (\`id<=\`) are optional outside Commander.`
+  }
+
+  return `Format: ${fmtDisplay}. Use get_deck_stats for format_validation; this label has no dedicated Scryfall \`f:\` mapping here — rely on oracle/type searches and in-app validation.`
+}
+
+function scryfallFormatLegalitySection(normalized: string | null): string {
+  if (normalized === 'edh') {
+    return `**Format legality** — This deck is **Commander/EDH**. Always use \`f:commander\` when searching for format-legal cards.
+
+**Examples**:
+- Creatures that fit in a Gruul deck: \`t:creature id<=gruul f:commander\`
+- Find Gruul commanders: \`is:commander id:gruul\`
+- Green ramp spells (by oracle tag): \`otag:ramp id<=gruul f:commander\`
+- Blue counterspells cmc≤2: \`t:instant c:u o:counter cmc<=2 f:commander\`
+- Cheap white creatures: \`t:creature c:w cmc<=2 f:commander\`
+- Artifact ramp under 3 mana: \`f:commander t:artifact o:mana cmc<=3\`
+- Draw spells for Dimir: \`otag:draw id<=dimir f:commander\`
+- Board wipes: \`otag:boardwipe f:commander\``
+  }
+
+  if (!normalized) {
+    return `**Format legality** — \`f:\` supports commander, standard, modern, pioneer, legacy, vintage, pauper (among others). This deck has no normalized format in metadata — call \`get_deck\` first, then choose the \`f:\` token that matches that format.
+
+**Examples** (swap \`f:\` to match the deck once known):
+- Commander within Temur identity: \`f:commander id<=temur t:creature cmc<=4\`
+- Modern curve creatures: \`f:modern t:creature cmc<=3\`
+- Pioneer interaction: \`f:pioneer t:instant cmc<=2\``
+  }
+
+  if (normalized === 'canlander') {
+    return `**Format legality** — Canadian Highlander uses a points list validated in-app (not in Scryfall). Shortlist with oracle/type searches, then call \`get_deck_stats\` and read \`format_validation\` for points and deck-size errors.
+
+**Examples** (no points filter in Scryfall):
+- One-mana cantrips: \`t:instant cmc=1 o:"draw a card"\`
+- Efficient creatures: \`t:creature o:"enters the battlefield" cmc<=3\``
+  }
+
+  const fKey = scryfallLegalityFilterForNormalizedFormat(normalized)
+  if (fKey) {
+    return `**Format legality** — This deck uses **${fKey}** legality on Scryfall. Include \`f:${fKey}\` when searching for format-legal cards unless the user asks otherwise.
+
+**Examples**:
+- Curve creatures: \`f:${fKey} t:creature cmc<=3\`
+- Removal suite: \`f:${fKey} (t:instant OR t:sorcery) o:destroy\`
+- Rare beaters: \`f:${fKey} r>=rare t:creature\`
+- Sideboard tech (check zone rules in-app): \`f:${fKey} t:artifact o:counter\``
+  }
+
+  return `**Format legality** — This deck's format has no single Scryfall \`f:\` mapping in this assistant. Use oracle/type/color filters, then call \`get_deck_stats\` for \`format_validation\`.
+
+**Examples**:
+- Typal synergy search: \`t:elf o:"enters the battlefield"\`
+- Color pie slice: \`c:w t:creature cmc<=2\``
 }
 
 const SYSTEM_PROMPT = (
   deckName: string,
   deckId: string,
   terse: boolean,
-  deckContext: string
-) => `
+  deckContext: string,
+  deckFormat: string | null
+) => {
+  const normalized = normalizeFormatForValidation(deckFormat)
+  return `
 You are an MTG deck-building assistant operating on the deck "${deckName}" (id: ${deckId}).
 
 ## Working style
@@ -114,7 +189,7 @@ ${deckContext}
 
 **Set** — \`s:\` or \`e:\`: \`s:khm\` \`e:bro\` (3-letter set codes)
 
-**Format legality** — \`f:\`: commander standard modern legacy pauper pioneer vintage. Always use \`f:commander\` when searching for Commander-legal cards.
+${scryfallFormatLegalitySection(normalized)}
 
 **Oracle text** — \`o:\`: \`o:flying\` \`o:"draw a card"\` \`o:"enters the battlefield"\` \`o:"sacrifice"\`
 
@@ -125,16 +200,6 @@ ${deckContext}
 **Oracle tags** — \`otag:\` / \`oracletag:\`: curated functional tags, great for Commander. \`otag:ramp\` \`otag:removal\` \`otag:draw\` \`otag:tutor\` \`otag:boardwipe\` \`otag:counterspell\`
 
 **Booleans**: space = AND; \`OR\`; \`-\` or \`NOT\` to negate. Parentheses group terms.
-
-**Examples**:
-- Creatures that fit in a Gruul deck: \`t:creature id<=gruul f:commander\`
-- Find Gruul commanders: \`is:commander id:gruul\`
-- Green ramp spells (by oracle tag): \`otag:ramp id<=gruul f:commander\`
-- Blue counterspells cmc≤2: \`t:instant c:u o:counter cmc<=2\`
-- Cheap white creatures: \`t:creature c:w cmc<=2 f:commander\`
-- Artifact ramp under 3 mana: \`f:commander t:artifact o:mana cmc<=3\`
-- Draw spells for Dimir: \`otag:draw id<=dimir f:commander\`
-- Board wipes: \`otag:boardwipe f:commander\`
 
 ## Primer Syntax
 
@@ -152,7 +217,7 @@ Primers are public-facing deck guides written in **GitHub-Flavored Markdown** (h
 **Links** — only links to \`idlebrew.app\` are allowed. Other hosts are silently stripped by the renderer when the primer is displayed. Do not add links to external sites.
 
 **Workflow for drafting a primer**:
-1. Call \`get_deck\` for deck name and commanders.
+1. Call \`get_deck\` for deck name, format, and commanders (if any).
 2. Call \`get_decklist\` to see all cards and their ids.
 3. Draft the full markdown, embedding card images with \`{{card:<id>}}\` using the \`scryfall_id\` values from the decklist (or use \`list_printings\` if a specific art/set is wanted).
 4. Call \`set_primer\` with the complete markdown — this replaces the entire primer.
@@ -164,6 +229,7 @@ Primers are public-facing deck guides written in **GitHub-Flavored Markdown** (h
 4. If the string matches multiple places, widen \`old_string\` until it is unique.
 Use \`patch_primer\` for targeted edits; reserve \`set_primer\` for full rewrites.
 `.trim()
+}
 
 export async function POST(request: Request) {
   let body: ChatRequestBody
@@ -259,7 +325,7 @@ export async function POST(request: Request) {
     ? await getCardsByIds(deck.commander_scryfall_ids)
     : []
 
-  const tools = buildDeckAgentTools(supabase, user.id, body.deckId)
+  const tools = buildDeckAgentTools(supabase, user.id, body.deckId, deck.format)
   const useTerseAssistantStyle =
     modelId === 'anthropic/claude-haiku-4.5' ||
     modelId === 'deepseek/deepseek-v4-flash'
@@ -267,7 +333,7 @@ export async function POST(request: Request) {
 
   const result = streamText({
     model: resolveModel(modelId),
-    system: SYSTEM_PROMPT(deck.name, deck.id, useTerseAssistantStyle, deckContext),
+    system: SYSTEM_PROMPT(deck.name, deck.id, useTerseAssistantStyle, deckContext, deck.format),
     messages: await convertToModelMessages(body.messages),
     tools,
     stopWhen: stepCountIs(tier.maxStepsPerCall),
