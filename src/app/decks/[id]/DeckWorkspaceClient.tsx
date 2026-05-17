@@ -28,6 +28,7 @@ import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type D
 import { pickPrice } from "@/lib/format"
 import { hasLandFaceOnTypeLine } from "@/lib/card-types"
 import {
+  computeDeckFormatValidationInputKey,
   getFormatValidationDataVersion,
   validateDeckForFormat,
 } from "@/lib/deck-format-validation"
@@ -961,15 +962,25 @@ export default function DeckWorkspaceClient({
     [zoneFilteredCards]
   )
 
+  const formatValidationDataVersion = getFormatValidationDataVersion(displayedFormat)
+  const formatValidationInputKey = computeDeckFormatValidationInputKey(displayedFormat, {
+    cards: displayedCards,
+    commanderScryfallIds: displayedCommanderIds,
+    bracket: displayedBracket,
+    dataVersion: formatValidationDataVersion,
+  })
   const formatValidation = useMemo(
     () =>
       validateDeckForFormat(displayedFormat, {
         cards: displayedCards,
         commanderScryfallIds: displayedCommanderIds,
         bracket: displayedBracket,
-        dataVersion: getFormatValidationDataVersion(displayedFormat),
+        dataVersion: formatValidationDataVersion,
       }),
-    [displayedCards, displayedCommanderIds, displayedFormat, displayedBracket]
+    // Same fingerprint implies identical validation inputs; avoids redundant work
+    // when `displayedCards` is a new array reference with unchanged row data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [formatValidationInputKey]
   )
   const formatViolationMap = formatValidation.violationsByCardId
 
