@@ -179,10 +179,11 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
         <DndContext sensors={sensors} onDragEnd={onTagDragEnd}>
         <div
           className={cn(
-            "grid items-start gap-x-6 gap-y-8",
-            viewMode === "visual" && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
-            viewMode === "stack" && "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4",
-            viewMode === "list" && "grid-cols-1 md:grid-cols-2",
+            // Multi-column flow (ragged / “jagged” bottoms), not CSS grid rows.
+            "[column-gap:1.5rem] [column-fill:auto]",
+            viewMode === "visual" && "columns-1 sm:columns-2",
+            viewMode === "stack" && "columns-1 sm:columns-2 md:columns-3 xl:columns-4",
+            viewMode === "list" && "columns-1 md:columns-2",
           )}
         >
         {Object.entries(groupedCards)
@@ -208,7 +209,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
             const sectionQty =
               grouping === "type" && groupName === "Land" ? deckLandQtyIncludingMdfc : groupCards.reduce((acc, c) => acc + c.quantity, 0)
             return (
-              <div key={groupName} className="min-w-0">
+              <div key={groupName} className="mb-8 min-w-0 break-inside-avoid">
               <DroppableTagGroup id={groupName} enabled={!cardDragDisabled && groupName !== TAG_GROUP_UNTAGGED}>
                 <button
                   type="button"
@@ -230,10 +231,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                 {collapsedSections.has(groupName) ? null : (
                   <>
                     {viewMode === "visual" && (
-                      <div
-                        className="grid justify-start gap-4"
-                        style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, ${cardSize}px))` }}
-                      >
+                      <div className="grid min-w-0 grid-cols-2 justify-items-start gap-4 overflow-x-auto">
                         {groupCards.map((c) => {
                           const vlist = formatViolationMap.get(c.id)
                           return (
