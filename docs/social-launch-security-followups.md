@@ -83,7 +83,7 @@ When you integrate checkout:
 
 Add a manual or Playwright check that:
 
-- Login (Google/Facebook), deck editor, card images, Analytics/Speed Insights, and Turnstile still work under the enforced CSP.
+- Login (Google/Facebook), deck editor, card images, Analytics/Speed Insights, Turnstile, and (when enabled) Google AdSense slots and `/ads.txt` still work under the enforced CSP.
 
 ### End-to-end negative tests
 

@@ -34,8 +34,11 @@ export default function PrivacyPolicy() {
           <p className="text-muted-foreground leading-relaxed">
             Your data is used solely to provide the idlebrew service — authenticating your sessions,
             storing your deck lists, powering AI-assisted deck edits, and protecting usage limits.
-            We do not sell, rent, or share your personal information with third parties for
-            marketing purposes.
+            We do not sell or rent your personal information to data brokers. Where we show
+            third-party advertising on the free tier, ad partners such as Google may use cookies or
+            similar technologies subject to their own policies; idlebrew Pro is offered without
+            on-site display ads. Final wording for personalized ads, regional consent, and related
+            choices may be updated after legal review.
           </p>
           <p className="text-muted-foreground leading-relaxed">
             Decks are public by default so you can share and host them on idlebrew. Public deck pages
@@ -75,7 +78,8 @@ export default function PrivacyPolicy() {
               — aggregate product analytics and performance measurement
             </li>
             <li>
-              <span className="font-medium text-foreground">Google</span> — optional sign-in
+              <span className="font-medium text-foreground">Google</span> — optional sign-in and,
+              on the free tier, optional display advertising via Google AdSense
               (policies.google.com/privacy)
             </li>
             <li>

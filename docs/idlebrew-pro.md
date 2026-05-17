@@ -16,6 +16,7 @@ The current implementation is a staged rollout placeholder:
 - The prompt's "Notify me" button sets `user_account_flags.idlebrew_pro_notify_me` for the signed-in account.
 - `user_account_flags.idlebrew_pro_subscribed` is the account-level flag for subscribed mode.
 - When `idlebrew_pro_subscribed` is true, the agent tier resolves to `pro` and all models in the model dropdown are enabled.
+- Subscribed accounts are also treated as **ad-free** on the web app (no AdSense banner; see `/api/ads-policy`).
 
 ## Database flags
 
