@@ -15,7 +15,7 @@ import { ManaText } from "@/components/mana/ManaText"
 import { formatPrice } from "@/lib/format"
 import type { DeckCard, GroupingMode, ViewMode } from "@/lib/types"
 import { DraggableDeckCard, DroppableTagGroup } from "./deck-workspace-dnd"
-import { CardThumbnail } from "./deck-workspace-card-media"
+import { CardThumbnail, DeckBuilderVisualCardThumbnail } from "./deck-workspace-card-media"
 import {
   compareTypeGroupSectionKeys,
   deckCardDragId,
@@ -250,7 +250,13 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                       showClickedPreview(c, groupName)
                                     }}
                                   />
-                                  <CardThumbnail card={c} className="h-full w-full" imageClassName="h-full w-full object-cover" overlayClassName="rounded-none" />
+                                  <DeckBuilderVisualCardThumbnail
+                                    card={c}
+                                    className="h-full w-full"
+                                    thumbnailClassName="h-full w-full"
+                                    imageClassName="h-full w-full object-cover"
+                                    overlayClassName="rounded-none"
+                                  />
                                   {displayedCommanderIds.includes(c.scryfall_id) && (
                                     <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg">
                                       <Crown className="w-2.5 h-2.5" /> CMD
@@ -410,7 +416,12 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                                                   showClickedPreview(card, groupName)
                                                 }}
                                               />
-                                              <CardThumbnail card={card} imageClassName="w-full rounded-xl border border-black/60 shadow-xl" />
+                                              <DeckBuilderVisualCardThumbnail
+                                                card={card}
+                                                className="w-full"
+                                                imageClassName="w-full rounded-xl border border-black/60 shadow-xl"
+                                                overlayClassName="rounded-xl"
+                                              />
                                               {stackViolations && stackViolations.length > 0 && (
                                                 <div
                                                   className={`pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
