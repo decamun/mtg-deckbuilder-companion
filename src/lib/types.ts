@@ -66,7 +66,7 @@ export interface DeckCard {
   effective_printing_id?: string
 }
 
-export type ViewMode = 'visual' | 'stack' | 'list'
+export type ViewMode = 'list' | 'stack' | 'visual'
 export type GroupingMode = 'none' | 'type' | 'mana' | 'tag'
 export type SortingMode = 'mana' | 'name' | 'price' | 'rarity'
 

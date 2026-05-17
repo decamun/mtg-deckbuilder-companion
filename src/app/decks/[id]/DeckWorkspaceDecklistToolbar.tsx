@@ -67,10 +67,10 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
         >
           <TabsList className="h-7 bg-transparent">
             <TabsTrigger
-              value="visual"
+              value="list"
               className="h-6 px-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
             >
-              <LayoutGrid className="h-3.5 w-3.5" />
+              <List className="h-3.5 w-3.5" />
             </TabsTrigger>
             <TabsTrigger
               value="stack"
@@ -79,10 +79,10 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
               <StackIcon className="h-3.5 w-3.5" />
             </TabsTrigger>
             <TabsTrigger
-              value="list"
+              value="visual"
               className="h-6 px-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
             >
-              <List className="h-3.5 w-3.5" />
+              <LayoutGrid className="h-3.5 w-3.5" />
             </TabsTrigger>
           </TabsList>
         </Tabs>

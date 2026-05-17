@@ -5,7 +5,7 @@ const STORAGE_KEY = "deck-workspace-display-prefs:v1"
 
 const GROUPING_MODES: readonly GroupingMode[] = ["none", "type", "mana", "tag"]
 const SORTING_MODES: readonly SortingMode[] = ["mana", "name", "price", "rarity"]
-const VIEW_MODES: readonly ViewMode[] = ["visual", "stack", "list"]
+const VIEW_MODES: readonly ViewMode[] = ["list", "stack", "visual"]
 
 export type DeckWorkspaceDisplayPrefs = {
   viewMode: ViewMode
@@ -15,7 +15,7 @@ export type DeckWorkspaceDisplayPrefs = {
 }
 
 export const DEFAULT_DECK_WORKSPACE_DISPLAY_PREFS: DeckWorkspaceDisplayPrefs = {
-  viewMode: "visual",
+  viewMode: "list",
   grouping: "type",
   sorting: "mana",
   cardSize: DEFAULT_CARD_SIZE,
