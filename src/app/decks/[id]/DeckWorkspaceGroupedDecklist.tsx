@@ -31,6 +31,7 @@ import {
 } from "./deck-workspace-overflow-menus"
 import { cn } from "@/lib/utils"
 import { isCommanderZone, zoneCountsTowardMainDeck } from "@/lib/zones"
+import type { DeckFormatValidationStatus } from "@/lib/deck-format-validation"
 import type { DeckRulesHoverPayload } from "./DeckWorkspaceCardRulesPreview"
 import { DeckWorkspaceCardRulesPreview, rulesHoverPayloadToArtImageUrl, rulesHoverPayloadToFields } from "./DeckWorkspaceCardRulesPreview"
 import { DeckWorkspaceDockCardArtPreview } from "./DeckWorkspaceDockCardArtPreview"
@@ -49,6 +50,10 @@ export type DeckWorkspaceGroupedDecklistProps = {
   fullWorkspaceCards: DeckCard[]
   displayedCommanderIds: string[]
   displayedCoverImageId: string | null
+  displayedFormat: string | null
+  formatValidationStatus: DeckFormatValidationStatus
+  formatDeckViolations: readonly string[]
+  formatViolationCardCount: number
   formatViolationMap: ReadonlyMap<string, readonly string[]>
   deckFormatHintHoverId: string | null
   setDeckFormatHintHoverId: React.Dispatch<React.SetStateAction<string | null>>
@@ -85,6 +90,10 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
     fullWorkspaceCards,
     displayedCommanderIds,
     displayedCoverImageId,
+    displayedFormat,
+    formatValidationStatus,
+    formatDeckViolations,
+    formatViolationCardCount,
     formatViolationMap,
     deckFormatHintHoverId,
     setDeckFormatHintHoverId,
@@ -558,6 +567,12 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
           cards={analyticsLibraryCards}
           commanders={analyticsCommanderCards}
           onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
+          formatValidationSummary={{
+            status: formatValidationStatus,
+            formatKey: displayedFormat,
+            deckViolations: formatDeckViolations,
+            violationCardCount: formatViolationCardCount,
+          }}
         />
       </div>
       </div>

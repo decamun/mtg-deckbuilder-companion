@@ -132,12 +132,18 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
           ))}
         </div>
       )}
-      {props.formatValidationStatus === "implemented" &&
+      {(props.formatValidationStatus === "implemented" ||
+        props.formatValidationStatus === "not_yet_implemented") &&
         (props.formatViolationCount > 0 || props.formatDeckViolations.length > 0) && (
           <button
             type="button"
             onClick={() => props.onOpenFormatHints()}
-            className="w-full max-w-full cursor-pointer rounded px-0.5 text-left text-xs leading-snug text-red-400/90 hover:underline hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-red-400/50 focus-visible:outline-none md:max-w-[16rem]"
+            className={cn(
+              "w-full max-w-full cursor-pointer rounded px-0.5 text-left text-xs leading-snug hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 md:max-w-[16rem]",
+              props.formatValidationStatus === "implemented"
+                ? "text-red-400/90 focus-visible:ring-red-400/50"
+                : "text-muted-foreground focus-visible:ring-muted-foreground/40"
+            )}
             title={
               props.formatViolationCount > 0
                 ? "Show cards with format hints and deck-level messages"

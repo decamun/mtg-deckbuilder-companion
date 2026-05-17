@@ -13,6 +13,7 @@ import type { DeckWorkspaceOverflowMenusProps } from "./deck-workspace-overflow-
 import { DeckWorkspacePreviewDropdownMenu, DeckWorkspaceThreeDotMenu } from "./deck-workspace-overflow-menus"
 import type { GroupingMode } from "@/lib/types"
 import type { MutableRefObject } from "react"
+import type { DeckFormatValidationStatus } from "@/lib/deck-format-validation"
 
 const DeckDiffView = dynamic(
   () => import("@/components/deck/DeckDiffView").then((m) => ({ default: m.DeckDiffView })),
@@ -22,6 +23,7 @@ const DeckDiffView = dynamic(
 export type DeckWorkspaceDialogsSectionProps = {
   grouping: GroupingMode
   displayedFormat: string | null
+  formatValidationStatus: DeckFormatValidationStatus
   formatHintsListOpen: boolean
   setFormatHintsListOpen: (v: boolean) => void
   formatHintCardList: DeckCard[]
@@ -76,7 +78,12 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
           <DialogHeader>
             <DialogTitle>Format hints</DialogTitle>
             <DialogDescription>
-              {props.formatHintCardList.length > 0 ? (
+              {props.formatValidationStatus === "not_yet_implemented" ? (
+                <>
+                  Full construction validation is not available for this format yet. Deck-level notes (if any)
+                  appear below; there are no per-card checks in the app for this choice.
+                </>
+              ) : props.formatHintCardList.length > 0 ? (
                 <>
                   {props.formatHintCardList.length} card{props.formatHintCardList.length === 1 ? "" : "s"} that do not
                   match {props.displayedFormat === "edh" ? "EDH" : "the selected"} construction hints.
@@ -89,7 +96,13 @@ export function DeckWorkspaceDialogsSection(props: DeckWorkspaceDialogsSectionPr
             </DialogDescription>
           </DialogHeader>
           {props.formatDeckViolations.length > 0 && (
-            <div className="mb-3 rounded-md border border-red-500/35 bg-red-950/25 px-3 py-2 text-xs leading-snug text-red-200/95">
+            <div
+              className={
+                props.formatValidationStatus === "implemented"
+                  ? "mb-3 rounded-md border border-red-500/35 bg-red-950/25 px-3 py-2 text-xs leading-snug text-red-200/95"
+                  : "mb-3 rounded-md border border-amber-500/35 bg-amber-950/25 px-3 py-2 text-xs leading-snug text-amber-100/90"
+              }
+            >
               {props.formatDeckViolations.map((msg, i) => (
                 <p key={i}>{msg}</p>
               ))}

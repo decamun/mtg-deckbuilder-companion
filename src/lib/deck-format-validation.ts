@@ -499,8 +499,9 @@ const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> =
 export function getFormatValidationStatus(format: string | null | undefined): DeckFormatValidationStatus {
   const normalized = normalizeFormatForValidation(format)
   if (!normalized) return 'neutral'
-  // Unknown formats default to neutral until explicitly registered.
-  return FORMAT_VALIDATOR_REGISTRY[normalized]?.status ?? 'neutral'
+  // Unknown stored formats surface as not-yet-implemented so the UI never
+  // implies silent legality (see format validation epic / issue #190).
+  return FORMAT_VALIDATOR_REGISTRY[normalized]?.status ?? 'not_yet_implemented'
 }
 
 export function getFormatValidationDataVersion(format: string | null | undefined): string | null {
@@ -582,7 +583,9 @@ export function validateDeckForFormat(
 ): DeckFormatValidationResult {
   const normalized = normalizeFormatForValidation(format)
   const definition = normalized ? FORMAT_VALIDATOR_REGISTRY[normalized] : undefined
-  const status = definition?.status ?? 'neutral'
+  const status: DeckFormatValidationStatus = !normalized
+    ? 'neutral'
+    : (definition?.status ?? 'not_yet_implemented')
   const dataVersion = ctx.dataVersion ?? getFormatValidationDataVersion(normalized)
   const deckZoneViolations = getDeckZoneViolations(normalized, ctx.cards)
 

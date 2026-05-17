@@ -973,6 +973,14 @@ export default function DeckWorkspaceClient({
   )
   const formatViolationMap = formatValidation.violationsByCardId
 
+  const formatViolationCardCount = useMemo(() => {
+    let n = 0
+    for (const reasons of formatViolationMap.values()) {
+      if (reasons.length > 0) n += 1
+    }
+    return n
+  }, [formatViolationMap])
+
   const formatHintCardList = useMemo(
     () =>
       displayedCards
@@ -1189,7 +1197,7 @@ export default function DeckWorkspaceClient({
                     displayedFormat={displayedFormat}
                     formatValidationStatus={formatValidation.status}
                     formatDeckViolations={formatValidation.deckViolations}
-                    formatViolationCount={formatViolationMap.size}
+                    formatViolationCount={formatViolationCardCount}
                     activeZone={activeZone}
                     customZoneIds={customZoneIds}
                     onCardSizeChange={(n) => {
@@ -1232,6 +1240,10 @@ export default function DeckWorkspaceClient({
               fullWorkspaceCards={displayedCards}
               displayedCommanderIds={displayedCommanderIds}
               displayedCoverImageId={displayedCoverImageId}
+              displayedFormat={displayedFormat}
+              formatValidationStatus={formatValidation.status}
+              formatDeckViolations={formatValidation.deckViolations}
+              formatViolationCardCount={formatViolationCardCount}
               formatViolationMap={formatViolationMap}
               deckFormatHintHoverId={deckFormatHintHoverId}
               setDeckFormatHintHoverId={setDeckFormatHintHoverId}
@@ -1373,6 +1385,7 @@ export default function DeckWorkspaceClient({
         formatHintCardList={formatHintCardList}
         formatDeckViolations={formatValidation.deckViolations}
         formatViolationMap={formatViolationMap}
+        formatValidationStatus={formatValidation.status}
         formatHintsMenuClosedAtRef={formatHintsMenuClosedAtRef}
         showClickedPreview={showClickedPreview}
         overflowMenus={overflowMenus}
