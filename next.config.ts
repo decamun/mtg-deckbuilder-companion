@@ -51,7 +51,8 @@ const contentSecurityPolicy = [
   "img-src 'self' data: blob: https://cards.scryfall.io https://*.scryfall.io",
   "font-src 'self' data:",
   `connect-src ${connectSrc.join(" ")}`,
-  "frame-src https://challenges.cloudflare.com",
+  // Vercel Toolbar / Next.js Live Feedback embeds vercel.live in a frame on preview deployments.
+  "frame-src https://vercel.live https://challenges.cloudflare.com",
   "form-action 'self'",
   "upgrade-insecure-requests",
 ].join("; ");
