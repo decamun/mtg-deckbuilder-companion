@@ -120,7 +120,7 @@ export default function DeckWorkspaceClient({
   const [addCardsPanelOpen, setAddCardsPanelOpen] = useState(false)
   const [selectedResultIdx, setSelectedResultIdx] = useState(0)
 
-  const [viewMode, setViewMode] = useState<ViewMode>('visual')
+  const [viewMode, setViewMode] = useState<ViewMode>("list")
   const [grouping, setGrouping] = useState<GroupingMode>('type')
   const [sorting, setSorting] = useState<SortingMode>('mana')
   const debouncedQuery = useDebounce(query, 300)
