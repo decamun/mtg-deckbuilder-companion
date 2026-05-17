@@ -177,6 +177,14 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
           </div>
         )}
         <DndContext sensors={sensors} onDragEnd={onTagDragEnd}>
+        <div
+          className={cn(
+            "grid items-start gap-x-6 gap-y-8",
+            viewMode === "visual" && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+            viewMode === "stack" && "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4",
+            viewMode === "list" && "grid-cols-1 md:grid-cols-2",
+          )}
+        >
         {Object.entries(groupedCards)
           .sort(([a], [b]) => {
             if (grouping === "mana") {
@@ -200,7 +208,8 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
             const sectionQty =
               grouping === "type" && groupName === "Land" ? deckLandQtyIncludingMdfc : groupCards.reduce((acc, c) => acc + c.quantity, 0)
             return (
-              <DroppableTagGroup key={groupName} id={groupName} enabled={!cardDragDisabled && groupName !== TAG_GROUP_UNTAGGED}>
+              <div key={groupName} className="min-w-0">
+              <DroppableTagGroup id={groupName} enabled={!cardDragDisabled && groupName !== TAG_GROUP_UNTAGGED}>
                 <button
                   type="button"
                   onClick={() => toggleSection(groupName)}
@@ -345,138 +354,129 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
 
                     {viewMode === "stack" &&
                       (() => {
-                        const numCols = Math.min(3, Math.max(1, Math.ceil(groupCards.length / 5)))
-                        const colSize = Math.ceil(groupCards.length / numCols)
-                        const columns = Array.from({ length: numCols }, (_, ci) => groupCards.slice(ci * colSize, (ci + 1) * colSize))
+                        const colCards = groupCards
+                        const colIdx = 0
+                        const basePositions: number[] = []
+                        let accY = 0
+                        colCards.forEach((card) => {
+                          basePositions.push(accY)
+                          accY += stackPeek + (card.quantity > 1 ? stackExtraPeek : 0)
+                        })
+                        const colHeight = accY + stackCardHeight + stackHoverShift
 
                         return (
-                          <div className="flex flex-wrap gap-8">
-                            {columns.map((colCards, colIdx) => {
-                              const basePositions: number[] = []
-                              let accY = 0
-                              colCards.forEach((card) => {
-                                basePositions.push(accY)
-                                accY += stackPeek + (card.quantity > 1 ? stackExtraPeek : 0)
-                              })
-                              const colHeight = accY + stackCardHeight + stackHoverShift
+                          <div
+                            className="relative shrink-0"
+                            style={{ width: cardSize, height: colHeight }}
+                            onMouseMove={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              const mouseY = e.clientY - rect.top
+                              let activeIdx = 0
+                              for (let i = 1; i < colCards.length; i++) {
+                                if (mouseY >= basePositions[i]) activeIdx = i
+                                else break
+                              }
+                              setHoveredStack({ groupName, colIdx, itemIdx: activeIdx })
+                              onDeckCardRulesPreviewHover(colCards[activeIdx] ?? null)
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredStack(null)
+                              onDeckCardRulesPreviewHover(null)
+                            }}
+                          >
+                            {colCards.map((card, itemIdx) => {
+                              const isHovered =
+                                !!hoveredStack &&
+                                hoveredStack.groupName === groupName &&
+                                hoveredStack.colIdx === colIdx &&
+                                hoveredStack.itemIdx === itemIdx
+                              const isBelow =
+                                !!hoveredStack &&
+                                hoveredStack.groupName === groupName &&
+                                hoveredStack.colIdx === colIdx &&
+                                itemIdx > hoveredStack.itemIdx
+                              const stackViolations = formatViolationMap.get(card.id)
+
+                              const dragStyle: CSSProperties = {
+                                top: basePositions[itemIdx],
+                                zIndex: isHovered ? colCards.length + 10 : itemIdx + 1,
+                              }
 
                               return (
-                                <div
-                                  key={colIdx}
-                                  className="relative shrink-0"
-                                  style={{ width: cardSize, height: colHeight }}
-                                  onMouseMove={(e) => {
-                                    const rect = e.currentTarget.getBoundingClientRect()
-                                    const mouseY = e.clientY - rect.top
-                                    let activeIdx = 0
-                                    for (let i = 1; i < colCards.length; i++) {
-                                      if (mouseY >= basePositions[i]) activeIdx = i
-                                      else break
-                                    }
-                                    setHoveredStack({ groupName, colIdx, itemIdx: activeIdx })
-                                    onDeckCardRulesPreviewHover(colCards[activeIdx] ?? null)
-                                  }}
-                                  onMouseLeave={() => {
-                                    setHoveredStack(null)
-                                    onDeckCardRulesPreviewHover(null)
-                                  }}
-                                >
-                                  {colCards.map((card, itemIdx) => {
-                                    const isHovered =
-                                      !!hoveredStack &&
-                                      hoveredStack.groupName === groupName &&
-                                      hoveredStack.colIdx === colIdx &&
-                                      hoveredStack.itemIdx === itemIdx
-                                    const isBelow =
-                                      !!hoveredStack &&
-                                      hoveredStack.groupName === groupName &&
-                                      hoveredStack.colIdx === colIdx &&
-                                      itemIdx > hoveredStack.itemIdx
-                                    const stackViolations = formatViolationMap.get(card.id)
-
-                                    const dragStyle: CSSProperties = {
-                                      top: basePositions[itemIdx],
-                                      zIndex: isHovered ? colCards.length + 10 : itemIdx + 1,
-                                    }
-
-                                    return (
-                                      <ContextMenu key={card.id} onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(card) }}>
-                                        <ContextMenuTrigger>
-                                          <DraggableDeckCard
-                                            id={deckCardDragId(grouping, groupName, card.id)}
-                                            disabled={cardDragDisabled}
-                                            className="absolute w-full cursor-grab active:cursor-grabbing group"
-                                            style={dragStyle}
+                                <ContextMenu key={card.id} onOpenChange={(o) => { if (o) void ensurePrintingsLoaded(card) }}>
+                                  <ContextMenuTrigger>
+                                    <DraggableDeckCard
+                                      id={deckCardDragId(grouping, groupName, card.id)}
+                                      disabled={cardDragDisabled}
+                                      className="absolute w-full cursor-grab active:cursor-grabbing group"
+                                      style={dragStyle}
+                                    >
+                                      <motion.div
+                                        className={`relative rounded-xl${stackViolations?.length ? " ring-2 ring-red-500/55 ring-offset-2 ring-offset-background" : ""}`}
+                                        animate={{
+                                          y: isHovered ? -12 : isBelow ? stackHoverShift : 0,
+                                          scale: isHovered ? 1.05 : 1,
+                                        }}
+                                        transition={{ type: "spring", stiffness: 500, damping: 35, mass: 0.4 }}
+                                      >
+                                        <button
+                                          type="button"
+                                          className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
+                                          aria-label={`Preview ${card.name}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            showClickedPreview(card, groupName)
+                                          }}
+                                        />
+                                        <DeckBuilderVisualCardThumbnail
+                                          card={card}
+                                          className="w-full"
+                                          imageClassName="w-full rounded-xl border border-black/60 shadow-xl"
+                                          overlayClassName="rounded-xl"
+                                        />
+                                        {stackViolations && stackViolations.length > 0 && (
+                                          <div
+                                            className={`pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
+                                              isHovered ? "opacity-100" : "opacity-0"
+                                            }`}
                                           >
-                                            <motion.div
-                                              className={`relative rounded-xl${stackViolations?.length ? " ring-2 ring-red-500/55 ring-offset-2 ring-offset-background" : ""}`}
-                                              animate={{
-                                                y: isHovered ? -12 : isBelow ? stackHoverShift : 0,
-                                                scale: isHovered ? 1.05 : 1,
-                                              }}
-                                              transition={{ type: "spring", stiffness: 500, damping: 35, mass: 0.4 }}
-                                            >
-                                              <button
-                                                type="button"
-                                                className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
-                                                aria-label={`Preview ${card.name}`}
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  showClickedPreview(card, groupName)
-                                                }}
-                                              />
-                                              <DeckBuilderVisualCardThumbnail
-                                                card={card}
-                                                className="w-full"
-                                                imageClassName="w-full rounded-xl border border-black/60 shadow-xl"
-                                                overlayClassName="rounded-xl"
-                                              />
-                                              {stackViolations && stackViolations.length > 0 && (
-                                                <div
-                                                  className={`pointer-events-none absolute inset-x-1 bottom-9 z-[25] max-h-[42%] overflow-y-auto shadow-lg transition-opacity duration-300 ease-out ${
-                                                    isHovered ? "opacity-100" : "opacity-0"
-                                                  }`}
-                                                >
-                                                  <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
-                                                    <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
-                                                    <ul className="space-y-0.5">
-                                                      {stackViolations.map((line) => (
-                                                        <li key={line} className="list-disc pl-3.5 marker:text-red-400/90">
-                                                          {line}
-                                                        </li>
-                                                      ))}
-                                                    </ul>
-                                                  </div>
-                                                </div>
-                                              )}
-                                              {card.quantity > 1 && (
-                                                <div className="pointer-events-none absolute bottom-2 left-2 z-[15] bg-background/90 text-foreground text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
-                                                  x{card.quantity}
-                                                </div>
-                                              )}
-                                              {displayedCommanderIds.includes(card.scryfall_id) && (
-                                                <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-0.5 shadow">
-                                                  <Crown className="w-2.5 h-2.5" /> CMD
-                                                </div>
-                                              )}
-                                              <div className="absolute top-2 right-2 z-20">
-                                                <DeckWorkspaceThreeDotMenu {...overflowMenus} c={card} groupName={groupName} align="end" />
-                                              </div>
-                                              {itemIdx === colCards.length - 1 && (
-                                                <div className="absolute bottom-2 right-2 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
-                                                  {formatPrice(card.price_usd)}
-                                                </div>
-                                              )}
-                                            </motion.div>
-                                          </DraggableDeckCard>
-                                        </ContextMenuTrigger>
-                                        <ContextMenuContent className="w-56 bg-white border-border text-foreground">
-                                          <DeckWorkspaceCardActionMenuItems variant="context" {...buildDeckWorkspaceMenuItemProps(overflowMenus, card, groupName)} />
-                                        </ContextMenuContent>
-                                      </ContextMenu>
-                                    )
-                                  })}
-                                </div>
+                                            <div className="rounded-md border border-red-600 bg-zinc-950 px-2 py-1.5 text-left text-[10px] leading-snug text-red-100">
+                                              <div className="mb-0.5 font-semibold text-red-300">Format hints</div>
+                                              <ul className="space-y-0.5">
+                                                {stackViolations.map((line) => (
+                                                  <li key={line} className="list-disc pl-3.5 marker:text-red-400/90">
+                                                    {line}
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            </div>
+                                          </div>
+                                        )}
+                                        {card.quantity > 1 && (
+                                          <div className="pointer-events-none absolute bottom-2 left-2 z-[15] bg-background/90 text-foreground text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-full border border-border/60 shadow-sm leading-none">
+                                            x{card.quantity}
+                                          </div>
+                                        )}
+                                        {displayedCommanderIds.includes(card.scryfall_id) && (
+                                          <div className="absolute top-2 left-2 bg-yellow-400/90 text-yellow-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-0.5 shadow">
+                                            <Crown className="w-2.5 h-2.5" /> CMD
+                                          </div>
+                                        )}
+                                        <div className="absolute top-2 right-2 z-20">
+                                          <DeckWorkspaceThreeDotMenu {...overflowMenus} c={card} groupName={groupName} align="end" />
+                                        </div>
+                                        {itemIdx === colCards.length - 1 && (
+                                          <div className="absolute bottom-2 right-2 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-xs font-bold border border-border tabular-nums">
+                                            {formatPrice(card.price_usd)}
+                                          </div>
+                                        )}
+                                      </motion.div>
+                                    </DraggableDeckCard>
+                                  </ContextMenuTrigger>
+                                  <ContextMenuContent className="w-56 bg-white border-border text-foreground">
+                                    <DeckWorkspaceCardActionMenuItems variant="context" {...buildDeckWorkspaceMenuItemProps(overflowMenus, card, groupName)} />
+                                  </ContextMenuContent>
+                                </ContextMenu>
                               )
                             })}
                           </div>
@@ -558,8 +558,10 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
                   </>
                 )}
               </DroppableTagGroup>
+              </div>
             )
           })}
+        </div>
       </DndContext>
 
       <div className="border-t border-border pt-8 mt-4">
