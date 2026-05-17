@@ -134,6 +134,12 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground leading-snug">
+              Each listed format runs this app&apos;s construction checks on the decklist.{" "}
+              <span className="font-medium text-foreground/90">Other</span> skips those checks (casual lists,
+              formats we do not model yet, or anything you do not want validated here). Commander-only options
+              such as bracket apply only to EDH / Commander.
+            </p>
           </div>
           <div
             className={

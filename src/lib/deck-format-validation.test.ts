@@ -22,14 +22,16 @@ describe('deck format validation helpers', () => {
 })
 
 describe('validateDeckForFormat', () => {
-  it('returns neutral status for unknown formats', () => {
+  it('returns not-yet-implemented for unknown formats with an explicit deck message', () => {
     const result = validateDeckForFormat('totally-unknown-format', {
       cards: [],
       commanderScryfallIds: [],
     })
-    expect(result.status).toBe('neutral')
+    expect(result.status).toBe('not_yet_implemented')
     expect(result.violationsByCardId.size).toBe(0)
-    expect(result.deckViolations).toEqual([])
+    expect(result.deckViolations).toEqual([
+      'totally-unknown-format validation is not yet implemented.',
+    ])
   })
 
   it('maps selectable formats to explicit validation statuses', () => {
@@ -43,6 +45,7 @@ describe('validateDeckForFormat', () => {
     expect(getFormatValidationStatus('pauper')).toBe('implemented')
     expect(getFormatValidationStatus('canlander')).toBe('implemented')
     expect(getFormatValidationStatus('other')).toBe('neutral')
+    expect(getFormatValidationStatus('totally-unknown-format')).toBe('not_yet_implemented')
     expect(getFormatValidationStatus(null)).toBe('neutral')
     expect(isFormatValidationImplemented('edh')).toBe(true)
     expect(isFormatValidationImplemented('standard')).toBe(true)
