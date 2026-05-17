@@ -1212,9 +1212,8 @@ export default function DeckWorkspaceClient({
         {tab === "decklist" && (
           <>
             <div className="relative z-20 overflow-visible">
-              {/* `-mb-12` overlaps the decklist; `pointer-events-none` avoids the flex shell stealing clicks below the short toolbar. */}
-              <div className="pointer-events-none flex flex-col gap-4 min-[1180px]:flex-row min-[1180px]:items-start min-[1180px]:justify-between min-[1180px]:gap-6 min-[1180px]:-mb-12 min-[1180px]:pb-3">
-                <div className="pointer-events-auto min-w-0 min-[1180px]:flex-1">
+              <div className="flex flex-col gap-4 min-[1180px]:flex-row min-[1180px]:items-start min-[1180px]:justify-between min-[1180px]:gap-6">
+                <div className="min-w-0 min-[1180px]:flex-1">
                   <DeckWorkspaceDecklistToolbar
                     cardSize={cardSize}
                     grouping={grouping}
@@ -1265,45 +1264,47 @@ export default function DeckWorkspaceClient({
                 />
               </div>
             </div>
-            <DeckWorkspaceGroupedDecklist
-              groupedCards={groupedCards}
-              grouping={grouping}
-              viewMode={viewMode}
-              cardSize={cardSize}
-              collapsedSections={collapsedSections}
-              toggleSection={toggleSection}
-              toggleAllSections={toggleAllSections}
-              cardDragDisabled={cardDragDisabled}
-              deckLandQtyIncludingMdfc={deckLandQtyIncludingMdfc}
-              fullWorkspaceCards={displayedCards}
-              displayedCommanderIds={displayedCommanderIds}
-              displayedCoverImageId={displayedCoverImageId}
-              displayedFormat={displayedFormat}
-              formatValidationStatus={formatValidation.status}
-              formatDeckViolations={formatValidation.deckViolations}
-              formatViolationCardCount={formatViolationCardCount}
-              formatViolationMap={formatViolationMap}
-              deckFormatHintHoverId={deckFormatHintHoverId}
-              setDeckFormatHintHoverId={setDeckFormatHintHoverId}
-              hoveredStack={hoveredStack}
-              setHoveredStack={setHoveredStack}
-              ensurePrintingsLoaded={ensurePrintingsLoaded}
-              showClickedPreview={showClickedPreview}
-              stackPeek={stackPeek}
-              stackExtraPeek={stackExtraPeek}
-              stackCardHeight={stackCardHeight}
-              stackHoverShift={stackHoverShift}
-              cardsLoading={cardsLoading}
-              liveCardCount={zoneFilteredCards.length}
-              sensors={dndSensors}
-              onTagDragEnd={handleTagDragEnd}
-              overflowMenus={overflowMenus}
-              rulesHover={rulesHover}
-              onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
-              deckCardFaceIndexById={deckCardFaceIndexById}
-              onDeckCardDisplayFaceChange={onDeckCardDisplayFaceChange}
-              dockRightInsetPx={dockRightInsetPx}
-            />
+            <div className="mt-8 min-[1180px]:mt-10">
+              <DeckWorkspaceGroupedDecklist
+                groupedCards={groupedCards}
+                grouping={grouping}
+                viewMode={viewMode}
+                cardSize={cardSize}
+                collapsedSections={collapsedSections}
+                toggleSection={toggleSection}
+                toggleAllSections={toggleAllSections}
+                cardDragDisabled={cardDragDisabled}
+                deckLandQtyIncludingMdfc={deckLandQtyIncludingMdfc}
+                fullWorkspaceCards={displayedCards}
+                displayedCommanderIds={displayedCommanderIds}
+                displayedCoverImageId={displayedCoverImageId}
+                displayedFormat={displayedFormat}
+                formatValidationStatus={formatValidation.status}
+                formatDeckViolations={formatValidation.deckViolations}
+                formatViolationCardCount={formatViolationCardCount}
+                formatViolationMap={formatViolationMap}
+                deckFormatHintHoverId={deckFormatHintHoverId}
+                setDeckFormatHintHoverId={setDeckFormatHintHoverId}
+                hoveredStack={hoveredStack}
+                setHoveredStack={setHoveredStack}
+                ensurePrintingsLoaded={ensurePrintingsLoaded}
+                showClickedPreview={showClickedPreview}
+                stackPeek={stackPeek}
+                stackExtraPeek={stackExtraPeek}
+                stackCardHeight={stackCardHeight}
+                stackHoverShift={stackHoverShift}
+                cardsLoading={cardsLoading}
+                liveCardCount={zoneFilteredCards.length}
+                sensors={dndSensors}
+                onTagDragEnd={handleTagDragEnd}
+                overflowMenus={overflowMenus}
+                rulesHover={rulesHover}
+                onDeckCardRulesPreviewHover={onDeckCardRulesPreviewHover}
+                deckCardFaceIndexById={deckCardFaceIndexById}
+                onDeckCardDisplayFaceChange={onDeckCardDisplayFaceChange}
+                dockRightInsetPx={dockRightInsetPx}
+              />
+            </div>
           </>
         )}
 
