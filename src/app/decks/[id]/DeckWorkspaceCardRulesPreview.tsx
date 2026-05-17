@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect, useRef } from "react"
+
 import type { DeckCard } from "@/lib/types"
 import type { ScryfallCard } from "@/lib/scryfall"
 import { rulesTextForDisplay } from "@/lib/scryfall"
@@ -52,6 +54,33 @@ export function rulesHoverPayloadToFields(hover: DeckRulesHoverPayload): CardRul
   }
 }
 
+function OracleTextHoverPreview({ text }: { text: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    el.scrollTop = 0
+
+    const t = window.setTimeout(() => {
+      if (el.scrollHeight <= el.clientHeight) return
+      el.scrollTo({ top: el.scrollHeight - el.clientHeight, behavior: "smooth" })
+    }, 1000)
+
+    return () => window.clearTimeout(t)
+  }, [text])
+
+  return (
+    <div
+      ref={scrollRef}
+      className="text-[13px] leading-relaxed text-foreground max-h-[10lh] overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
+    >
+      <ManaText text={text} className="whitespace-pre-wrap" />
+    </div>
+  )
+}
+
 /** Art URL for the dock preview (same source as deck thumbnails / Scryfall search hits). */
 export function rulesHoverPayloadToArtImageUrl(hover: DeckRulesHoverPayload): string | null {
   if (!hover) return null
@@ -99,11 +128,13 @@ export function DeckWorkspaceCardRulesPreview({
           <ManaText text={fields.mana_cost} className="shrink-0 text-sm text-muted-foreground" />
         ) : null}
       </div>
-      <div className="shrink-0 text-[13px] leading-relaxed text-foreground">
+      <div className="min-h-0 shrink-0 text-foreground">
         {fields.oracle_text?.trim() ? (
-          <ManaText text={fields.oracle_text} className="whitespace-pre-wrap" />
+          <OracleTextHoverPreview text={fields.oracle_text} />
         ) : (
-          <span className="text-muted-foreground">No oracle text on file for this card.</span>
+          <span className="text-[13px] leading-relaxed text-muted-foreground">
+            No oracle text on file for this card.
+          </span>
         )}
       </div>
     </div>
