@@ -826,20 +826,18 @@ export function BrewSection() {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center p-8">
+    <div className="flex flex-1 flex-col items-center justify-center px-page-safe py-8 sm:py-10">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="w-full max-w-2xl space-y-10 text-center"
+        className="w-full max-w-2xl space-y-6 text-center sm:space-y-10"
       >
-        <h1 className="font-heading text-5xl font-bold leading-tight text-foreground md:text-6xl">
-          Welcome to idlebrew
-        </h1>
+        <h1 className="title-display text-balance">Welcome to idlebrew</h1>
 
         <div ref={containerRef} className="relative w-full">
           <div className="relative">
-            <div className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2">
+            <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 sm:left-5">
               {searching || creating ? (
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               ) : (
@@ -855,7 +853,7 @@ export function BrewSection() {
               onKeyDown={handleKeyDown}
               onFocus={() => results.length > 0 && setShowResults(true)}
               disabled={creating}
-              className="h-16 w-full rounded-2xl border-2 border-border bg-card pl-14 pr-6 text-lg text-foreground shadow-lg placeholder:text-muted-foreground transition-colors hover:border-primary/40 focus:border-primary focus:outline-none disabled:opacity-60"
+              className="h-12 w-full rounded-2xl border-2 border-border bg-card pl-12 pr-4 text-base text-foreground shadow-lg placeholder:text-muted-foreground transition-colors hover:border-primary/40 focus:border-primary focus:outline-none disabled:opacity-60 sm:h-16 sm:pl-14 sm:pr-6 sm:text-lg"
             />
           </div>
 
