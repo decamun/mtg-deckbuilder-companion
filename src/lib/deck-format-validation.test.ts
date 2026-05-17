@@ -7,6 +7,7 @@ import {
   isFormatValidationImplemented,
   normalizeFormatForValidation,
   validateDeckForFormat,
+  validateEdh,
 } from '@/lib/deck-format-validation'
 import { MAINBOARD_ZONE_ID, MAYBEBOARD_ZONE_ID, SIDEBOARD_ZONE_ID } from '@/lib/zones'
 
@@ -307,6 +308,35 @@ describe('validateDeckForFormat', () => {
     expect(modernResult.violationsByCardId.get('format-legality-card')).toContain('Not legal in Modern')
   })
 
+  it('matches validateEdh bundle for the same EDH context (registry parity)', () => {
+    const cards = [
+      {
+        id: 'commander',
+        scryfall_id: 'cmd-id',
+        oracle_id: 'cmd-oracle',
+        name: 'Commander',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['G'],
+        legalities: { commander: 'legal' },
+      },
+      {
+        id: 'off-color',
+        scryfall_id: 'off-id',
+        oracle_id: 'off-oracle',
+        name: 'Off Color',
+        quantity: 1,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['U'],
+        legalities: { commander: 'legal' },
+      },
+    ]
+    const ctx = { cards, commanderScryfallIds: ['cmd-id'] as const, bracket: 1 }
+    const fromRegistry = validateDeckForFormat('edh', ctx)
+    const direct = validateEdh(ctx)
+    expect(fromRegistry.violationsByCardId).toEqual(direct.violationsByCardId)
+  })
+
   it('flags commander singleton, color identity, banned, and bracket game-changer violations', () => {
     const cards = [
       {
@@ -392,6 +422,41 @@ describe('validateDeckForFormat', () => {
     expect(result.violationsByCardId.get('game-changer')).toContain(
       'Bracket 1: max 0 game changers (deck has 1)',
     )
+  })
+
+  it('allows multiple EDH copies when oracle text exempts singleton cap', () => {
+    const oracleText = 'A deck can have any number of cards named Relentless Rats.'
+    const cards = [
+      {
+        id: 'rats-a',
+        scryfall_id: 'rats-a',
+        oracle_id: 'rats-oracle',
+        name: 'Relentless Rats',
+        quantity: 50,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['B'],
+        oracle_text: oracleText,
+        legalities: { commander: 'legal' },
+      },
+      {
+        id: 'rats-b',
+        scryfall_id: 'rats-b',
+        oracle_id: 'rats-oracle',
+        name: 'Relentless Rats',
+        quantity: 50,
+        zone: MAINBOARD_ZONE_ID,
+        color_identity: ['B'],
+        oracle_text: oracleText,
+        legalities: { commander: 'legal' },
+      },
+    ]
+    const result = validateDeckForFormat('edh', {
+      cards,
+      commanderScryfallIds: ['cmd-id'],
+      bracket: null,
+    })
+    expect(result.violationsByCardId.get('rats-a')).toBeUndefined()
+    expect(result.violationsByCardId.get('rats-b')).toBeUndefined()
   })
 
   it('fails loudly when commander legality payload is missing', () => {
