@@ -222,6 +222,25 @@ export type DeckFormatValidationResult = {
   dataVersion: string | null
 }
 
+type ValidatedFormatBundle = {
+  violationsByCardId: ReadonlyMap<string, readonly string[]>
+  deckViolations?: readonly string[]
+}
+
+function isValidatorBundleResult(
+  validated: unknown
+): validated is ValidatedFormatBundle {
+  if (typeof validated !== 'object' || validated === null) return false
+  if (!('violationsByCardId' in validated)) return false
+  const candidate = validated as { violationsByCardId?: unknown; deckViolations?: unknown }
+  if (!(candidate.violationsByCardId instanceof Map)) return false
+  return (
+    candidate.deckViolations === undefined ||
+    (Array.isArray(candidate.deckViolations) &&
+      candidate.deckViolations.every((violation) => typeof violation === 'string'))
+  )
+}
+
 type DeckFormatValidationContext = {
   cards: FormatValidationCard[]
   commanderScryfallIds: readonly string[]
@@ -234,9 +253,22 @@ type DeckFormatValidatorDefinition = {
   validate?: (ctx: DeckFormatValidationContext) => ValidatedFormatViolationBundle
 }
 
-const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set(['standard', 'pioneer', 'modern', 'legacy', 'pauper'])
+const SIXTY_CARD_CONSTRUCTED_FORMATS = new Set([
+  'standard',
+  'pioneer',
+  'modern',
+  'legacy',
+  'pauper',
+  'vintage',
+])
 
-type SixtyCardConstructedFormat = 'standard' | 'pioneer' | 'modern' | 'legacy' | 'pauper'
+type SixtyCardConstructedFormat =
+  | 'standard'
+  | 'pioneer'
+  | 'modern'
+  | 'legacy'
+  | 'pauper'
+  | 'vintage'
 
 const CANADIAN_HIGHLANDER_FORMAT = 'canlander' as const
 
@@ -307,6 +339,52 @@ function validateSixtyCardConstructed(
   return asViolationBundle(new Map(Array.from(bucket, ([id, set]) => [id, [...set]])))
 }
 
+function validateVintage(cards: FormatValidationCard[]): ValidatedFormatViolationBundle {
+  const bucket = new Map<string, Set<string>>()
+  const validatingZones = new Set(
+    getZonesForFormat('vintage').filter((zone) => zone.isFormatValidated).map((zone) => zone.id)
+  )
+  const restrictedTotals = new Map<string, { qty: number; cardIds: Set<string> }>()
+
+  for (const card of cards) {
+    if (!validatingZones.has(normalizeCardZone(card.zone))) continue
+    const legalityStatus = card.legalities?.vintage
+    if (legalityStatus === undefined) {
+      getOrCreateCardViolationSet(bucket, card.id).add(
+        'Cannot validate Vintage legality: missing data from Scryfall'
+      )
+      continue
+    }
+    if (legalityStatus === 'banned' || legalityStatus === 'not_legal') {
+      getOrCreateCardViolationSet(bucket, card.id).add(
+        legalityStatus === 'banned' ? 'Banned in Vintage' : 'Not legal in Vintage'
+      )
+      continue
+    }
+    if (legalityStatus !== 'restricted') continue
+    const key = copyLimitAggregationKey(card)
+    const previous = restrictedTotals.get(key)
+    if (previous) {
+      previous.qty += card.quantity
+      previous.cardIds.add(card.id)
+    } else {
+      restrictedTotals.set(key, { qty: card.quantity, cardIds: new Set([card.id]) })
+    }
+  }
+
+  for (const restricted of restrictedTotals.values()) {
+    if (restricted.qty <= 1) continue
+    for (const cardId of restricted.cardIds) {
+      getOrCreateCardViolationSet(bucket, cardId).add(
+        'Restricted in Vintage (max 1 copy in validated deck zones)'
+      )
+    }
+  }
+
+  mergeViolationsInto(bucket, getConstructedCopyLimitViolations('vintage', cards, 4))
+  return asViolationBundle(new Map(Array.from(bucket, ([id, set]) => [id, [...set]])))
+}
+
 function getDeckZoneViolations(
   format: string | null | undefined,
   cards: FormatValidationCard[]
@@ -370,7 +448,11 @@ const FORMAT_VALIDATOR_REGISTRY: Record<string, DeckFormatValidatorDefinition> =
     status: 'implemented',
     validate: ({ cards }) => validateSixtyCardConstructed('legacy', cards),
   },
-  vintage: { label: 'Vintage', status: 'not_yet_implemented' },
+  vintage: {
+    label: 'Vintage',
+    status: 'implemented',
+    validate: ({ cards }) => validateVintage(cards),
+  },
   pauper: {
     label: 'Pauper',
     status: 'implemented',
@@ -416,16 +498,24 @@ export function validateDeckForFormat(
   const deckZoneViolations = getDeckZoneViolations(normalized, ctx.cards)
 
   if (status === 'implemented' && definition?.validate) {
-    const validated = definition.validate({
+    const validated: unknown = definition.validate({
       cards: ctx.cards,
       commanderScryfallIds: ctx.commanderScryfallIds,
       bracket: ctx.bracket ?? null,
     })
-    const extraDeck = validated.deckViolations ?? []
+    let violationsByCardId: ReadonlyMap<string, readonly string[]> = new Map()
+    let validatorDeckViolations: readonly string[] = []
+    if (validated instanceof Map) {
+      violationsByCardId = validated
+    } else if (isValidatorBundleResult(validated)) {
+      violationsByCardId = validated.violationsByCardId
+      validatorDeckViolations = validated.deckViolations ?? []
+    }
+
     return {
       status,
-      violationsByCardId: validated.violationsByCardId,
-      deckViolations: [...deckZoneViolations, ...extraDeck],
+      violationsByCardId,
+      deckViolations: [...deckZoneViolations, ...validatorDeckViolations],
       dataVersion,
     }
   }
