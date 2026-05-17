@@ -47,8 +47,6 @@ const COLOR_META: Record<
   C: { name: 'Colorless', fill: '#a8a29e', text: '#1c1917' },
 }
 
-type CardType = (typeof TYPE_PRIORITY)[number]
-
 interface HoverState { color: (typeof COLOR_KEYS)[number]; cmc: number }
 
 function ManaCurve({ cards }: { cards: DeckStatsCard[] }) {
@@ -187,11 +185,9 @@ function StatsLine({
     <div className="rounded-lg border border-border bg-card/60 p-4 flex flex-wrap items-stretch gap-x-6 gap-y-3">
       <Stat label="Avg. CMC" value={stats.avg_cmc_all_cards.toFixed(2)} hint="all" />
       <Stat label="Avg. CMC" value={stats.avg_cmc_non_land.toFixed(2)} hint="non-land" />
-      {(Object.keys(stats.type_counts) as CardType[])
-        .filter(t => stats.type_counts[t] > 0 && t !== 'Land')
-        .map(t => (
-          <Stat key={t} label={t === 'Sorcery' ? 'Sorceries' : `${t}s`} value={String(stats.type_counts[t])} />
-        ))}
+      {TYPE_PRIORITY.filter(t => stats.type_counts[t] > 0 && t !== 'Land').map(t => (
+        <Stat key={t} label={t === 'Sorcery' ? 'Sorceries' : `${t}s`} value={String(stats.type_counts[t])} />
+      ))}
       {stats.type_counts.Land > 0 && (
         <LandStat
           total={stats.lands.total_display}

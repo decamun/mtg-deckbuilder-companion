@@ -53,7 +53,7 @@ interface DeckDiffViewProps {
 function typeGroupCompare(a: string, b: string): number {
   const ma = typeGroupSectionSortMeta(a)
   const mb = typeGroupSectionSortMeta(b)
-  if (ma.tier !== mb.tier) return ma.tier - mb.tier
+  if (ma.sortKey !== mb.sortKey) return ma.sortKey - mb.sortKey
   return ma.name.localeCompare(mb.name)
 }
 

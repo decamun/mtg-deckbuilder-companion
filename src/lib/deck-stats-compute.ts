@@ -3,7 +3,7 @@
  * MCP tools, and the in-app agent.
  */
 
-import { primaryTypeLine } from '@/lib/card-types'
+import { primaryTypeLine, TYPE_GROUP_SECTION_ORDER } from '@/lib/card-types'
 import type { DeckRow } from '@/lib/deck-service'
 import {
   getFormatValidationDataVersion,
@@ -38,7 +38,12 @@ export interface DeckStatsCard {
 export const COLOR_KEYS = ['W', 'U', 'B', 'R', 'G', 'C'] as const
 export type CurveColorKey = (typeof COLOR_KEYS)[number]
 
-export const TYPE_PRIORITY = [
+/** Display order for type breakdowns (matches decklist type sections). */
+export const TYPE_PRIORITY = TYPE_GROUP_SECTION_ORDER
+export type DeckStatCardType = (typeof TYPE_PRIORITY)[number]
+
+/** Order for `includes` matching on the primary type line — Creature before Artifact/Enchantment. */
+const DECK_STAT_TYPE_LINE_MATCH_ORDER: readonly DeckStatCardType[] = [
   'Creature',
   'Planeswalker',
   'Battle',
@@ -47,8 +52,7 @@ export const TYPE_PRIORITY = [
   'Artifact',
   'Enchantment',
   'Land',
-] as const
-export type DeckStatCardType = (typeof TYPE_PRIORITY)[number]
+]
 
 export const PROB_TURNS = [1, 2, 3, 4, 5, 6, 7] as const
 
@@ -60,7 +64,7 @@ const DRAW_TAGS = ['draw', 'card draw', 'card advantage', 'cantrip']
 
 export function getDeckStatCardType(typeLine: string): DeckStatCardType {
   const primary = primaryTypeLine(typeLine)
-  for (const t of TYPE_PRIORITY) {
+  for (const t of DECK_STAT_TYPE_LINE_MATCH_ORDER) {
     if (primary.includes(t)) return t
   }
   return 'Creature'
@@ -335,13 +339,13 @@ export function computeStatsLineSummary(
   const avgCmcAll = totalAllQty > 0 ? totalAllCmc / totalAllQty : 0
 
   const typeCounts = {
-    Creature: 0,
     Planeswalker: 0,
-    Battle: 0,
-    Instant: 0,
-    Sorcery: 0,
+    Creature: 0,
     Artifact: 0,
     Enchantment: 0,
+    Battle: 0,
+    Sorcery: 0,
+    Instant: 0,
     Land: 0,
   } as Record<DeckStatCardType, number>
   for (const c of cards) {
