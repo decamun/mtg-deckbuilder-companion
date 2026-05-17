@@ -31,7 +31,6 @@ import {
   TYPE_PRIORITY,
 } from "@/lib/deck-stats-compute"
 import type { DeckCard } from "@/lib/types"
-import type { DeckFormatValidationStatus } from "@/lib/deck-format-validation"
 
 export type { DeckStatsCard as AnalyticsCard } from "@/lib/deck-stats-compute"
 
@@ -1316,117 +1315,17 @@ function HandGenerator({
   )
 }
 
-function formatValidationAnalyticsLabel(formatKey: string | null): string {
-  if (formatKey === "edh") return "EDH / Commander"
-  if (formatKey === "canlander") return "Canadian Highlander"
-  if (formatKey) return formatKey
-  return "this deck"
-}
-
-function DeckAnalyticsFormatValidationBanner({
-  status,
-  formatKey,
-  deckViolations,
-  violationCardCount,
-}: {
-  status: DeckFormatValidationStatus
-  formatKey: string | null
-  deckViolations: readonly string[]
-  violationCardCount: number
-}) {
-  const formatName = formatValidationAnalyticsLabel(formatKey)
-
-  if (status === "neutral") {
-    return (
-      <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-        {formatKey === "other" || formatKey == null
-          ? "Format checks are off — pick a listed format in deck settings to run construction hints, or keep Other for lists we should not judge."
-          : "Format checks are off for this deck value."}
-      </div>
-    )
-  }
-
-  if (status === "not_yet_implemented") {
-    return (
-      <div className="rounded-lg border border-amber-500/35 bg-amber-950/20 px-3 py-2 text-sm text-amber-100/90">
-        <p className="font-medium text-amber-50/95">Validation not available in-app for {formatName}</p>
-        {deckViolations.length > 0 ? (
-          <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-xs leading-snug text-amber-100/85">
-            {deckViolations.map((msg, i) => (
-              <li key={i}>{msg}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-1 text-xs text-amber-100/75">
-            No extra notes — this format is not modeled yet (same status as deck stats).
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  const hasIssues = violationCardCount > 0 || deckViolations.length > 0
-  return (
-    <div
-      className={
-        hasIssues
-          ? "rounded-lg border border-red-500/35 bg-red-950/20 px-3 py-2 text-sm text-red-100/90"
-          : "rounded-lg border border-emerald-500/30 bg-emerald-950/15 px-3 py-2 text-sm text-emerald-100/85"
-      }
-    >
-      {hasIssues ? (
-        <>
-          <p className="font-medium text-red-50/95">
-            Format hints: {violationCardCount} card{violationCardCount === 1 ? "" : "s"}
-            {deckViolations.length > 0
-              ? ` · ${deckViolations.length} deck message${deckViolations.length === 1 ? "" : "s"}`
-              : ""}{" "}
-            ({formatName})
-          </p>
-          <p className="mt-1 text-xs text-red-100/75">
-            Same validation pass as the decklist toolbar and deck stats — open &quot;Format hints&quot; above the list
-            for card-level detail.
-          </p>
-        </>
-      ) : (
-        <>
-          <p className="font-medium text-emerald-50/95">Format checks: no issues flagged ({formatName})</p>
-          <p className="mt-1 text-xs text-emerald-100/70">
-            Matches the decklist toolbar and the format_validation block from deck stats.
-          </p>
-        </>
-      )}
-    </div>
-  )
-}
-
 export function DeckAnalytics({
   cards,
   commanders,
   onDeckCardRulesPreviewHover,
-  formatValidationSummary,
 }: {
   cards: DeckStatsCard[]
   commanders: DeckStatsCard[]
   onDeckCardRulesPreviewHover?: (card: DeckCard | null, faceIndex?: number) => void
-  /** When set, shows the same format validation status as the decklist toolbar / deck stats. */
-  formatValidationSummary?: {
-    status: DeckFormatValidationStatus
-    formatKey: string | null
-    deckViolations: readonly string[]
-    violationCardCount: number
-  }
 }) {
   return (
     <div className="space-y-6">
-      {formatValidationSummary ? (
-        <DeckAnalyticsFormatValidationBanner
-          status={formatValidationSummary.status}
-          formatKey={formatValidationSummary.formatKey}
-          deckViolations={formatValidationSummary.deckViolations}
-          violationCardCount={formatValidationSummary.violationCardCount}
-        />
-      ) : null}
       <StatsLine cards={cards} commanders={commanders} />
       <ManaCurve cards={cards} />
       <ProbabilityTable cards={cards} commanders={commanders} />
