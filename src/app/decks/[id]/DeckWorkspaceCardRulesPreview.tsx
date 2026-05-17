@@ -99,7 +99,7 @@ export function DeckWorkspaceCardRulesPreview({
           <ManaText text={fields.mana_cost} className="shrink-0 text-sm text-muted-foreground" />
         ) : null}
       </div>
-      <div className="min-h-0 max-h-[calc(1.625*13px*12)] shrink-0 overflow-hidden text-[13px] leading-relaxed text-foreground">
+      <div className="min-h-0 max-h-[calc(1.625*13px*6)] shrink-0 overflow-hidden text-[13px] leading-relaxed text-foreground">
         {fields.oracle_text?.trim() ? (
           <ManaText text={fields.oracle_text} className="whitespace-pre-wrap" />
         ) : (
