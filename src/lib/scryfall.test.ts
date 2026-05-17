@@ -7,6 +7,7 @@ import {
   getCardByName,
   getCardBySetAndCN,
   getCardFaceImages,
+  getCardFaceRulesFields,
   getCardImageUrl,
   getCardsByIds,
   getCardsByOracleIds,
@@ -190,6 +191,73 @@ describe('scryfall pure helpers', () => {
     }
     expect(getCardFaceImages(card)).toEqual([
       { name: 'Has art', normal: 'https://example.com/only.jpg', small: undefined },
+    ])
+  })
+
+  it('getCardFaceRulesFields returns [] for nullish', () => {
+    expect(getCardFaceRulesFields(null)).toEqual([])
+    expect(getCardFaceRulesFields(undefined)).toEqual([])
+  })
+
+  it('getCardFaceRulesFields aligns face count with getCardFaceImages for DFC layouts', () => {
+    const card: Pick<ScryfallCard, 'name' | 'layout' | 'image_uris' | 'card_faces' | 'type_line' | 'mana_cost' | 'oracle_text'> = {
+      name: 'Daybound Werewolf',
+      layout: 'transform',
+      type_line: 'Creature — Werewolf',
+      mana_cost: '',
+      oracle_text: '',
+      card_faces: [
+        {
+          name: 'Day',
+          type_line: 'Human',
+          mana_cost: '{1}{W}',
+          oracle_text: 'Front rules',
+          image_uris: { normal: 'https://example.com/day.jpg' },
+        },
+        {
+          name: 'Night',
+          type_line: 'Werewolf',
+          mana_cost: '',
+          oracle_text: 'Back rules',
+          image_uris: { normal: 'https://example.com/night.jpg' },
+        },
+      ],
+    }
+    expect(getCardFaceRulesFields(card).length).toBe(getCardFaceImages(card).length)
+    expect(getCardFaceRulesFields(card)).toEqual([
+      { name: 'Day', type_line: 'Human', mana_cost: '{1}{W}', oracle_text: 'Front rules' },
+      { name: 'Night', type_line: 'Werewolf', mana_cost: '', oracle_text: 'Back rules' },
+    ])
+  })
+
+  it('getCardFaceRulesFields mirrors getCardFaceImages single-face and filtered DFC cases', () => {
+    const odd: Pick<ScryfallCard, 'name' | 'layout' | 'image_uris' | 'card_faces' | 'type_line' | 'mana_cost' | 'oracle_text'> = {
+      name: 'Odd DFC',
+      layout: 'transform',
+      type_line: 'Land // Land',
+      mana_cost: '',
+      oracle_text: '',
+      image_uris: { normal: 'https://example.com/combined.jpg' },
+      card_faces: [
+        { name: 'Front', oracle_text: 'A' },
+        { name: 'Back', oracle_text: 'B' },
+      ],
+    }
+    expect(getCardFaceRulesFields(odd).length).toBe(getCardFaceImages(odd).length)
+
+    const oneFaceArt: Pick<ScryfallCard, 'name' | 'layout' | 'image_uris' | 'card_faces' | 'type_line' | 'mana_cost' | 'oracle_text'> = {
+      name: 'DFC',
+      layout: 'transform',
+      type_line: '',
+      mana_cost: '',
+      oracle_text: '',
+      card_faces: [
+        { name: 'No art' },
+        { name: 'Has art', oracle_text: 'Only face', image_uris: { normal: 'https://example.com/only.jpg' } },
+      ],
+    }
+    expect(getCardFaceRulesFields(oneFaceArt)).toEqual([
+      { name: 'Has art', oracle_text: 'Only face' },
     ])
   })
 

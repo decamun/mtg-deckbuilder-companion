@@ -5,10 +5,10 @@ import type { ScryfallCard } from "@/lib/scryfall"
 import { rulesTextForDisplay } from "@/lib/scryfall"
 import { ManaText } from "@/components/mana/ManaText"
 import { cn } from "@/lib/utils"
-import { primaryDeckCardImage } from "./deck-workspace-pure"
+import { deckCardArtImageAtFaceIndex } from "./deck-workspace-pure"
 
 export type DeckRulesHoverPayload =
-  | { kind: "deck"; card: DeckCard }
+  | { kind: "deck"; card: DeckCard; faceIndex: number }
   | { kind: "scryfall"; card: ScryfallCard }
   | null
 
@@ -23,6 +23,19 @@ export function rulesHoverPayloadToFields(hover: DeckRulesHoverPayload): CardRul
   if (!hover) return null
   if (hover.kind === "deck") {
     const c = hover.card
+    const idx = hover.faceIndex ?? 0
+    const fr = c.face_rules
+    if (fr?.length) {
+      const n = fr.length
+      const i = ((idx % n) + n) % n
+      const f = fr[i]
+      return {
+        name: f.name,
+        mana_cost: f.mana_cost,
+        type_line: f.type_line,
+        oracle_text: f.oracle_text ?? "",
+      }
+    }
     return {
       name: c.name,
       mana_cost: c.mana_cost,
@@ -43,7 +56,7 @@ export function rulesHoverPayloadToFields(hover: DeckRulesHoverPayload): CardRul
 export function rulesHoverPayloadToArtImageUrl(hover: DeckRulesHoverPayload): string | null {
   if (!hover) return null
   if (hover.kind === "deck") {
-    const u = primaryDeckCardImage(hover.card)
+    const u = deckCardArtImageAtFaceIndex(hover.card, hover.faceIndex ?? 0)
     return u ?? null
   }
   const c = hover.card

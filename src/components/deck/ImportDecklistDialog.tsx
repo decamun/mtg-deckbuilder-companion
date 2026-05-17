@@ -14,7 +14,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabase/client"
-import { getCardsByIds, getCardImageUrl, getCardFaceImages, cmcOf } from "@/lib/scryfall"
+import { getCardsByIds, getCardImageUrl, getCardFaceImages, getCardFaceRulesFields, cmcOf } from "@/lib/scryfall"
 import { resolveDecklist } from "@/lib/decklist-import"
 import { commanderIdsAndCoverFromResolvedCards } from "@/lib/deck-commander-meta"
 import { DeckDiffView } from "@/components/deck/DeckDiffView"
@@ -94,6 +94,7 @@ export function ImportDecklistDialog({
         tags: [],
         image_url: getCardImageUrl(effSf),
         face_images: getCardFaceImages(effSf),
+        face_rules: getCardFaceRulesFields(effSf),
         type_line: effSf?.type_line ?? "",
         mana_cost: effSf?.mana_cost ?? "",
         cmc: cmcOf(effSf),

@@ -24,6 +24,14 @@ export interface DeckCardFace {
   small?: string
 }
 
+/** Rules text per face; indices align with {@link DeckCard.face_images} when both are set from Scryfall. */
+export interface DeckCardFaceRules {
+  name: string
+  mana_cost?: string
+  type_line?: string
+  oracle_text?: string
+}
+
 export interface DeckCard {
   id: string
   deck_id: string
@@ -39,6 +47,7 @@ export interface DeckCard {
   // Runtime-populated from Scryfall
   image_url?: string
   face_images?: DeckCardFace[]
+  face_rules?: DeckCardFaceRules[]
   type_line?: string
   mana_cost?: string
   cmc?: number
