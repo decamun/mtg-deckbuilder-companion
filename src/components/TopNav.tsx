@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { IdlebrewLogo } from "@/components/IdlebrewLogo"
@@ -67,6 +67,8 @@ export function TopNav() {
   const isScrollShellPage = SHELL_PATHS.has(currentPath)
   const activePath = isScrollShellPage ? visiblePath ?? currentPath : currentPath
   const [loginOpen, setLoginOpen] = useState(false)
+  const navScrollerRef = useRef<HTMLDivElement>(null)
+  const navLinkRefs = useRef<Record<string, HTMLAnchorElement | null>>({})
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -76,6 +78,28 @@ export function TopNav() {
     window.addEventListener("sectionchange", handler)
     return () => window.removeEventListener("sectionchange", handler)
   }, [])
+
+  // When the highlighted tab changes (e.g. user scrolls the shell), keep that
+  // tab visible inside the horizontal nav scroller on narrow viewports.
+  useEffect(() => {
+    const activeHref = NAV_LINKS.filter((l) => !l.requiresAuth || user).find((l) =>
+      navLinkIsActive(l.href, activePath, guestDeckNav),
+    )?.href
+    if (!activeHref) return
+
+    const scroller = navScrollerRef.current
+    const linkEl = navLinkRefs.current[activeHref]
+    if (!scroller || !linkEl) return
+
+    if (scroller.scrollWidth <= scroller.clientWidth + 1) return
+
+    const instant = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    linkEl.scrollIntoView({
+      behavior: instant ? "instant" : "smooth",
+      inline: "center",
+      block: "nearest",
+    })
+  }, [activePath, user, guestDeckNav])
 
   useEffect(() => {
     const handler = () => setLoginOpen(true)
@@ -171,7 +195,10 @@ export function TopNav() {
           Many primary links on a narrow bar: keep a single horizontal scroller (`flex-nowrap`) so the logo
           and account menu stay visible (issue #226).
         */}
-        <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:thin] md:flex-none md:overflow-visible">
+        <div
+          ref={navScrollerRef}
+          className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:thin] md:flex-none md:overflow-visible"
+        >
           <nav className="flex flex-nowrap items-center gap-0.5 sm:gap-1">
             {NAV_LINKS.filter((link) => !link.requiresAuth || user).map(
               ({ href, label }) => {
@@ -179,6 +206,9 @@ export function TopNav() {
                 return (
                   <Link
                     key={href}
+                    ref={(node) => {
+                      navLinkRefs.current[href] = node
+                    }}
                     href={href}
                     onClick={(e) => handleNavClick(e, href)}
                     className={cn(
