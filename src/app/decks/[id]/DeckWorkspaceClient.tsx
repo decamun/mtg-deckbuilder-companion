@@ -1278,10 +1278,6 @@ export default function DeckWorkspaceClient({
                 fullWorkspaceCards={displayedCards}
                 displayedCommanderIds={displayedCommanderIds}
                 displayedCoverImageId={displayedCoverImageId}
-                displayedFormat={displayedFormat}
-                formatValidationStatus={formatValidation.status}
-                formatDeckViolations={formatValidation.deckViolations}
-                formatViolationCardCount={formatViolationCardCount}
                 formatViolationMap={formatViolationMap}
                 deckFormatHintHoverId={deckFormatHintHoverId}
                 setDeckFormatHintHoverId={setDeckFormatHintHoverId}
