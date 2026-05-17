@@ -249,12 +249,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
       >
         <div className="pointer-events-none flex w-1/2 max-w-[40rem] flex-col rounded-xl border border-border bg-background/80 p-3 text-foreground shadow-sm backdrop-blur-xl">
           <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row sm:items-stretch">
-            <div
-              className={cn(
-                "pointer-events-none min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-border/60 bg-transparent p-3",
-                "max-h-[min(38vh,22rem)] sm:max-h-[min(42vh,26rem)]"
-              )}
-            >
+            <div className="pointer-events-none min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-border/60 bg-transparent p-3">
               <DeckWorkspaceCardRulesPreview fields={previewFields} />
             </div>
             <DeckWorkspaceDockCardArtPreview
