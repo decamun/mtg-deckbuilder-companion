@@ -478,7 +478,7 @@ export function DeckAgentSidebar({
             )}
           </div>
 
-          <footer className="shrink-0 border-t border-border bg-background/30 p-3">
+          <footer className="shrink-0 border-t border-border bg-background/30 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}

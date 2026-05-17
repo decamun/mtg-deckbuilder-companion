@@ -2,7 +2,7 @@ import { Loader2 } from "lucide-react"
 
 export function DeckWorkspaceLoading() {
   return (
-    <div className="fixed top-14 inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground">
+    <div className="fixed top-below-nav inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background pb-safe font-sans text-foreground">
       <header className="relative z-40 flex h-28 shrink-0 items-center border-b border-border bg-secondary/80 px-4">
         <div className="h-9 w-40 animate-pulse rounded-md bg-muted/50" />
         <div className="ml-auto flex items-center gap-2">

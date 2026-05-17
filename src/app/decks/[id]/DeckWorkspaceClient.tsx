@@ -153,7 +153,7 @@ export default function DeckWorkspaceClient({
     setGrouping(p.grouping)
     setSorting(p.sorting)
     setCardSize(p.cardSize)
-    // Match Tailwind `md`: assistant expanded on desktop, collapsed on narrow viewports (before first paint).
+    // Match Tailwind `deck-wide` / `md` (48rem): assistant expanded on desktop, collapsed on narrow viewports (before first paint).
     setAgentOpen(window.matchMedia("(min-width: 768px)").matches)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [])
@@ -1152,8 +1152,8 @@ export default function DeckWorkspaceClient({
 
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground transition-[top] duration-200 ease-out ${
-        deckEditorScrollCompact ? "top-7" : "top-14"
+      className={`fixed inset-x-0 bottom-0 flex flex-col overflow-hidden bg-background font-sans text-foreground pb-safe transition-[top] duration-200 ease-out ${
+        deckEditorScrollCompact ? "top-below-nav-compact" : "top-below-nav"
       }`}
     >
 
