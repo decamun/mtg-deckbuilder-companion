@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { normalizeFormatForValidation } from "@/lib/deck-format-validation"
 import { BRACKET_LABELS, type Bracket } from "@/lib/game-changers"
 
 interface Props {
@@ -50,6 +51,8 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
     }
   }, [open, initial])
 
+  const isEdhFormat = normalizeFormatForValidation(format) === "edh"
+
   const save = async () => {
     if (!name.trim()) {
       toast.error("Name is required")
@@ -68,7 +71,7 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
       description: description.trim() || null,
       format,
       budget_usd: budgetUsd,
-      bracket: bracket === "none" ? null : Number(bracket),
+      bracket: isEdhFormat ? (bracket === "none" ? null : Number(bracket)) : null,
       is_public: isPublic,
     }
     const { error } = await supabase.from("decks").update(patch).eq("id", deckId)
@@ -132,7 +135,11 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div
+            className={
+              isEdhFormat ? "grid gap-4 sm:grid-cols-2" : "space-y-2"
+            }
+          >
             <div className="space-y-2">
               <Label htmlFor="ds-budget">Budget (USD)</Label>
               <Input
@@ -146,22 +153,24 @@ export function DeckSettingsDialog({ deckId, open, onOpenChange, initial, onSave
                 placeholder="Optional"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Bracket</Label>
-              <Select value={bracket} onValueChange={v => v && setBracket(v)}>
-                <SelectTrigger className="bg-background/50 border-border text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-card border-border text-foreground">
-                  <SelectItem value="none">Not set</SelectItem>
-                  {([1, 2, 3, 4, 5] as Bracket[]).map(value => (
-                    <SelectItem key={value} value={String(value)}>
-                      {value} - {BRACKET_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {isEdhFormat ? (
+              <div className="space-y-2">
+                <Label>Bracket</Label>
+                <Select value={bracket} onValueChange={v => v && setBracket(v)}>
+                  <SelectTrigger className="bg-background/50 border-border text-foreground">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border text-foreground">
+                    <SelectItem value="none">Not set</SelectItem>
+                    {([1, 2, 3, 4, 5] as Bracket[]).map(value => (
+                      <SelectItem key={value} value={String(value)}>
+                        {value} - {BRACKET_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label>Visibility</Label>

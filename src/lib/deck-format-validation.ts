@@ -135,86 +135,6 @@ export function getConstructedCopyLimitViolations(
   return violations
 }
 
-function commanderLegalityStatus(legalities: Record<string, string> | undefined): string | undefined {
-  return legalities?.commander
-}
-
-function validateEdh(ctx: {
-  cards: FormatValidationCard[]
-  commanderScryfallIds: readonly string[]
-  bracket: number | null | undefined
-}): ValidatedFormatViolationBundle {
-  const bucket = new Map<string, Set<string>>()
-  const add = (id: string, reason: string) => {
-    let s = bucket.get(id)
-    if (!s) {
-      s = new Set()
-      bucket.set(id, s)
-    }
-    s.add(reason)
-  }
-
-  const mainboard = ctx.cards.filter((c) => zoneCountsTowardMainDeck(c.zone))
-  const commanderRows = ctx.cards.filter((c) => ctx.commanderScryfallIds.includes(c.scryfall_id))
-  const canAssessColorIdentity =
-    ctx.commanderScryfallIds.length > 0 &&
-    commanderRows.length === ctx.commanderScryfallIds.length &&
-    commanderRows.every((c) => Array.isArray(c.color_identity))
-  const allowedColors = canAssessColorIdentity
-    ? unionColorIdentity(commanderRows.map((c) => c.color_identity as string[]))
-    : null
-
-  for (const c of mainboard) {
-    const status = commanderLegalityStatus(c.legalities)
-    if (status === undefined) {
-      add(c.id, 'Cannot validate Commander legality: missing data from Scryfall')
-    } else if (status === 'banned') {
-      add(c.id, 'Banned in Commander')
-    } else if (status === 'not_legal') {
-      add(c.id, 'Not legal in Commander')
-    }
-
-    if (allowedColors && c.color_identity && !colorIdentityIsSubset(c.color_identity, allowedColors)) {
-      add(c.id, 'Color identity outside commanders')
-    }
-  }
-
-  const oracleTotals = new Map<string, { qty: number }>()
-  for (const c of mainboard) {
-    if (!c.oracle_id) continue
-    if (isBasicLandTypeLine(c.type_line)) continue
-    if (oracleTextIgnoresSingletonCap(c.oracle_text)) continue
-    const prev = oracleTotals.get(c.oracle_id)
-    const qty = c.quantity
-    if (prev) prev.qty += qty
-    else oracleTotals.set(c.oracle_id, { qty })
-  }
-  for (const c of mainboard) {
-    if (!c.oracle_id) continue
-    if (isBasicLandTypeLine(c.type_line)) continue
-    if (oracleTextIgnoresSingletonCap(c.oracle_text)) continue
-    const t = oracleTotals.get(c.oracle_id)
-    if (t && t.qty > 1) add(c.id, 'More than one copy (Commander singleton rule)')
-  }
-
-  const bracket = ctx.bracket
-  if (bracket != null && bracket >= 1 && bracket <= 5) {
-    const cap = BRACKET_GC_LIMIT[bracket as Bracket]
-    if (Number.isFinite(cap)) {
-      const gcRows = mainboard.filter((c) => isGameChanger(c.name))
-      const totalGc = gcRows.reduce((s, c) => s + c.quantity, 0)
-      if (totalGc > cap) {
-        const label = cap === 1 ? 'game changer' : 'game changers'
-        for (const c of gcRows) {
-          add(c.id, `Bracket ${bracket}: max ${cap} ${label} (deck has ${totalGc})`)
-        }
-      }
-    }
-  }
-
-  return asViolationBundle(new Map(Array.from(bucket, ([id, set]) => [id, [...set]])))
-}
-
 export type DeckFormatValidationResult = {
   status: DeckFormatValidationStatus
   violationsByCardId: ReadonlyMap<string, readonly string[]>
@@ -241,7 +161,7 @@ function isValidatorBundleResult(
   )
 }
 
-type DeckFormatValidationContext = {
+export type DeckFormatValidationContext = {
   cards: FormatValidationCard[]
   commanderScryfallIds: readonly string[]
   bracket: number | null
@@ -307,6 +227,121 @@ function getOrCreateCardViolationSet(
     bucket.set(cardId, reasons)
   }
   return reasons
+}
+
+/** Scryfall legality field used for Commander / EDH construction. */
+const COMMANDER_LEGALITY_KEY = 'commander' as const
+
+function commanderLegalityStatus(legalities: Record<string, string> | undefined): string | undefined {
+  return legalities?.[COMMANDER_LEGALITY_KEY]
+}
+
+function violationsMapFromBucket(bucket: Map<string, Set<string>>): Map<string, string[]> {
+  return new Map(Array.from(bucket, ([id, set]) => [id, [...set]]))
+}
+
+function collectCommanderLegalityViolations(
+  mainboard: readonly FormatValidationCard[]
+): ReadonlyMap<string, readonly string[]> {
+  const bucket = new Map<string, Set<string>>()
+  for (const c of mainboard) {
+    const status = commanderLegalityStatus(c.legalities)
+    if (status === undefined) {
+      getOrCreateCardViolationSet(bucket, c.id).add(
+        'Cannot validate Commander legality: missing data from Scryfall'
+      )
+    } else if (status === 'banned') {
+      getOrCreateCardViolationSet(bucket, c.id).add('Banned in Commander')
+    } else if (status === 'not_legal') {
+      getOrCreateCardViolationSet(bucket, c.id).add('Not legal in Commander')
+    }
+  }
+  return violationsMapFromBucket(bucket)
+}
+
+function collectCommanderColorIdentityViolations(
+  mainboard: readonly FormatValidationCard[],
+  allowedColors: Set<string> | null
+): ReadonlyMap<string, readonly string[]> {
+  if (!allowedColors) return new Map()
+  const bucket = new Map<string, Set<string>>()
+  for (const c of mainboard) {
+    if (c.color_identity && !colorIdentityIsSubset(c.color_identity, allowedColors)) {
+      getOrCreateCardViolationSet(bucket, c.id).add('Color identity outside commanders')
+    }
+  }
+  return violationsMapFromBucket(bucket)
+}
+
+function collectCommanderSingletonViolations(
+  mainboard: readonly FormatValidationCard[]
+): ReadonlyMap<string, readonly string[]> {
+  const bucket = new Map<string, Set<string>>()
+  const oracleTotals = new Map<string, { qty: number }>()
+  for (const c of mainboard) {
+    if (!c.oracle_id) continue
+    if (isBasicLandTypeLine(c.type_line)) continue
+    if (oracleTextIgnoresSingletonCap(c.oracle_text)) continue
+    const prev = oracleTotals.get(c.oracle_id)
+    const qty = c.quantity
+    if (prev) prev.qty += qty
+    else oracleTotals.set(c.oracle_id, { qty })
+  }
+  for (const c of mainboard) {
+    if (!c.oracle_id) continue
+    if (isBasicLandTypeLine(c.type_line)) continue
+    if (oracleTextIgnoresSingletonCap(c.oracle_text)) continue
+    const t = oracleTotals.get(c.oracle_id)
+    if (t && t.qty > 1) {
+      getOrCreateCardViolationSet(bucket, c.id).add('More than one copy (Commander singleton rule)')
+    }
+  }
+  return violationsMapFromBucket(bucket)
+}
+
+function collectBracketGameChangerViolations(
+  mainboard: readonly FormatValidationCard[],
+  bracket: number | null | undefined
+): ReadonlyMap<string, readonly string[]> {
+  const bucket = new Map<string, Set<string>>()
+  if (bracket == null || bracket < 1 || bracket > 5) return new Map()
+  const cap = BRACKET_GC_LIMIT[bracket as Bracket]
+  if (!Number.isFinite(cap)) return new Map()
+  const gcRows = mainboard.filter((c) => isGameChanger(c.name))
+  const totalGc = gcRows.reduce((s, c) => s + c.quantity, 0)
+  if (totalGc <= cap) return new Map()
+  const label = cap === 1 ? 'game changer' : 'game changers'
+  for (const c of gcRows) {
+    getOrCreateCardViolationSet(bucket, c.id).add(
+      `Bracket ${bracket}: max ${cap} ${label} (deck has ${totalGc})`
+    )
+  }
+  return violationsMapFromBucket(bucket)
+}
+
+/**
+ * Commander / EDH construction rules (Scryfall `legalities.commander`, color
+ * identity, singleton with oracle-text exceptions, bracket game-changer caps).
+ * Prefer `validateDeckForFormat('edh', …)` in app code; this is exposed for
+ * tests and for parity with the registry entry.
+ */
+export function validateEdh(ctx: DeckFormatValidationContext): ValidatedFormatViolationBundle {
+  const mainboard = ctx.cards.filter((c) => zoneCountsTowardMainDeck(c.zone))
+  const commanderRows = ctx.cards.filter((c) => ctx.commanderScryfallIds.includes(c.scryfall_id))
+  const canAssessColorIdentity =
+    ctx.commanderScryfallIds.length > 0 &&
+    commanderRows.length === ctx.commanderScryfallIds.length &&
+    commanderRows.every((c) => Array.isArray(c.color_identity))
+  const allowedColors = canAssessColorIdentity
+    ? unionColorIdentity(commanderRows.map((c) => c.color_identity as string[]))
+    : null
+
+  const bucket = new Map<string, Set<string>>()
+  mergeViolationsInto(bucket, collectCommanderLegalityViolations(mainboard))
+  mergeViolationsInto(bucket, collectCommanderColorIdentityViolations(mainboard, allowedColors))
+  mergeViolationsInto(bucket, collectCommanderSingletonViolations(mainboard))
+  mergeViolationsInto(bucket, collectBracketGameChangerViolations(mainboard, ctx.bracket))
+  return asViolationBundle(violationsMapFromBucket(bucket))
 }
 
 function validateSixtyCardConstructed(
