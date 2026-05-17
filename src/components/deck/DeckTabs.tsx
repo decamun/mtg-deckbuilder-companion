@@ -15,9 +15,9 @@ interface Props {
 
 const TABS: { key: DeckTab; label: string }[] = [
   { key: "decklist", label: "Decklist" },
-  { key: "boards", label: "Boards" },
   { key: "primer", label: "Primer" },
-  { key: "versions", label: "Versions" },
+  { key: "boards", label: "Boards" },
+  { key: "versions", label: "Version" },
 ]
 
 export function DeckTabs({ tab, onChange, afterTabs, className }: Props) {
