@@ -3,7 +3,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 
-/** Source-image crop: middle 85% horizontally; vertically 11%–55%; uniform scale to fill the pane. */
+/** Source-image crop: middle 85% horizontally; vertically 11%–55%; uniform scale to fill the pane; art aligned to the left edge of the pane. */
 function computeArtPlacement(wrapW: number, wrapH: number, iw: number, ih: number) {
   const cropL = 0.075 * iw
   const cropT = 0.11 * ih
@@ -12,7 +12,7 @@ function computeArtPlacement(wrapW: number, wrapH: number, iw: number, ih: numbe
   const s = Math.max(wrapW / cropW, wrapH / cropH)
   const tw = iw * s
   const th = ih * s
-  const tx = -cropL * s + (wrapW - cropW * s) / 2
+  const tx = -cropL * s
   const ty = -cropT * s + (wrapH - cropH * s) / 2
   return { tw, th, tx, ty }
 }
@@ -47,7 +47,7 @@ export function DeckWorkspaceDockCardArtPreview({ imageUrl, label }: { imageUrl:
       ref={wrapRef}
       className={cn(
         "pointer-events-none relative shrink-0 overflow-hidden rounded-lg border border-border/60 bg-background/80 backdrop-blur-xl",
-        "h-[7rem] w-[10.5rem]"
+        "h-[3.5rem] w-[5.25rem]"
       )}
     >
       {imageUrl ? (
@@ -70,7 +70,7 @@ export function DeckWorkspaceDockCardArtPreview({ imageUrl, label }: { imageUrl:
                     width: "100%",
                     height: "100%",
                     objectFit: "cover",
-                    objectPosition: "50% 33%",
+                    objectPosition: "left 33%",
                   }
             }
           />
