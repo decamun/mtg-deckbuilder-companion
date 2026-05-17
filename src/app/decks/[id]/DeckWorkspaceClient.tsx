@@ -1170,6 +1170,7 @@ export default function DeckWorkspaceClient({
         titleBarCardCount={titleBarCardCount}
         titleBarTotalUsd={titleBarTotalUsd}
         displayedCommanderIds={displayedCommanderIds}
+        registrationQuery={viewing ? `?version=${encodeURIComponent(viewing.versionId)}` : ""}
         exportPrimerMarkdown={viewing ? viewing.primerMarkdown : primerMarkdown}
         deckTitleEditing={deckTitleEditing}
         deckTitleDraft={deckTitleDraft}

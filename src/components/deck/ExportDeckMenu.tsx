@@ -1,6 +1,7 @@
 "use client"
 
-import { ChevronDown, Copy, Download, FileText, BookOpen, Share2, Globe, Lock, Link as LinkIcon, Upload } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ChevronDown, ClipboardList, Copy, Download, FileText, BookOpen, Share2, Globe, Lock, Link as LinkIcon, Upload } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +30,8 @@ interface Props {
   commanderIds: string[]
   isPublic: boolean
   isOwner: boolean
+  /** Appended to `/decks/[id]/registration` (e.g. `?version=…` when viewing a saved version). */
+  registrationQuery?: string
   onVisibilityChange?: (isPublic: boolean) => void
   onImportClick?: () => void
 }
@@ -169,10 +172,13 @@ export function ExportDeckMenu({
   commanderIds,
   isPublic,
   isOwner,
+  registrationQuery = "",
   onVisibilityChange,
   onImportClick,
 }: Props) {
+  const router = useRouter()
   const safeName = deckName.replace(/[^a-z0-9]/gi, "-").toLowerCase()
+  const registrationHref = `/decks/${deckId}/registration${registrationQuery}`
 
   const handleCopyLink = async () => {
     try {
@@ -305,6 +311,10 @@ export function ExportDeckMenu({
           <DropdownMenuItem onClick={handleCopyArena}>
             <FileText className="w-4 h-4" />
             Copy for Arena
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push(registrationHref)}>
+            <ClipboardList className="w-4 h-4" />
+            Registration view
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

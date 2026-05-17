@@ -30,6 +30,8 @@ export type DeckWorkspaceHeaderProps = {
   titleBarCardCount: number
   titleBarTotalUsd: { sum: number; anyMissing: boolean }
   displayedCommanderIds: string[]
+  /** Registration route query string (e.g. `?version=…` for version snapshots). */
+  registrationQuery?: string
   exportPrimerMarkdown: string
   deckTitleEditing: boolean
   deckTitleDraft: string
@@ -234,6 +236,7 @@ export function DeckWorkspaceHeader(headerProps: DeckWorkspaceHeaderProps) {
               commanderIds={headerProps.displayedCommanderIds}
               isPublic={!!headerProps.deck.is_public}
               isOwner={headerProps.isOwner}
+              registrationQuery={headerProps.registrationQuery ?? ""}
               onVisibilityChange={headerProps.onVisibilityChange}
               onImportClick={headerProps.isOwner && !headerProps.viewing ? headerProps.onImportClick : undefined}
             />
