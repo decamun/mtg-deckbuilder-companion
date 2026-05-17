@@ -3,11 +3,22 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV === "development";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseOrigin = supabaseUrl ? new URL(supabaseUrl).origin : "https://*.supabase.co";
+const supabaseWssOrigin =
+  supabaseUrl &&
+  (() => {
+    try {
+      return `wss://${new URL(supabaseUrl).host}`;
+    } catch {
+      return null;
+    }
+  })();
 
 const scriptSrc = [
   "'self'",
   "'unsafe-inline'",
   "https://va.vercel-scripts.com",
+  // Vercel Toolbar / Next.js Live Feedback (/_next-live/feedback on preview deployments)
+  "https://vercel.live",
   // Cloudflare Turnstile (feedback form); see https://developers.cloudflare.com/turnstile/reference/content-security-policy/
   "https://challenges.cloudflare.com",
 ];
@@ -15,7 +26,10 @@ const styleSrc = ["'self'", "'unsafe-inline'"];
 const connectSrc = [
   "'self'",
   supabaseOrigin,
+  ...(supabaseWssOrigin ? [supabaseWssOrigin] : []),
   "https://*.supabase.co",
+  // Realtime uses wss://; connect-src host sources with https: do not match WebSockets (CSP).
+  "wss://*.supabase.co",
   "https://api.scryfall.com",
   "https://cards.scryfall.io",
   "https://vitals.vercel-insights.com",
