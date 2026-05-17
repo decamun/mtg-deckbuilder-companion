@@ -58,15 +58,59 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
 
   return (
     <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-2">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <Tabs
+          value={props.viewMode}
+          onValueChange={(v) => props.onViewModeChange(v as ViewMode)}
+          className="rounded-md border border-border bg-card p-0.5"
+        >
+          <TabsList className="h-7 bg-transparent">
+            <TabsTrigger
+              value="visual"
+              className="h-6 px-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </TabsTrigger>
+            <TabsTrigger
+              value="stack"
+              className="h-6 px-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
+            >
+              <StackIcon className="h-3.5 w-3.5" />
+            </TabsTrigger>
+            <TabsTrigger
+              value="list"
+              className="h-6 px-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
+            >
+              <List className="h-3.5 w-3.5" />
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground md:max-w-none md:flex-none">
+          <span className="shrink-0">Card size</span>
+          <input
+            type="range"
+            min={MIN_CARD_SIZE}
+            max={MAX_CARD_SIZE}
+            step={4}
+            value={props.cardSize}
+            onChange={(e) => props.onCardSizeChange(Number(e.target.value))}
+            className="min-w-0 flex-1 accent-primary md:w-28 md:flex-none"
+          />
+          <span className="w-8 shrink-0 text-right font-mono text-[11px]">{props.cardSize}</span>
+        </label>
+        </div>
         {showAddCards && (
-          <div ref={props.searchContainerRef} className="relative w-full min-w-0 md:w-auto md:max-w-[min(100%,20rem)]">
+          <div
+            ref={props.searchContainerRef}
+            className="relative w-full min-w-0 shrink-0 sm:w-auto sm:max-w-[min(100%,20rem)]"
+          >
             <Button
               type="button"
               variant="outline"
               size="sm"
               className={cn(
-                "h-8 w-full justify-start gap-2 border-border bg-card text-foreground md:w-auto",
+                "h-8 w-full justify-start gap-2 border-border bg-card text-foreground sm:w-auto sm:justify-center",
                 props.addCardsOpen && "ring-2 ring-ring ring-offset-2 ring-offset-background"
               )}
               onClick={() => {
@@ -81,7 +125,7 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
             {props.addCardsOpen && (
               <div
                 id="deck-add-cards-panel"
-                className="absolute left-0 right-0 top-full z-50 mt-1 min-w-[min(100vw-2rem,22rem)] max-w-[min(100vw-2rem,28rem)] rounded-lg border border-border bg-card p-2 shadow-2xl md:left-0 md:right-auto md:min-w-[22rem]"
+                className="absolute left-0 right-0 top-full z-50 mt-1 min-w-[min(100vw-2rem,22rem)] max-w-[min(100vw-2rem,28rem)] rounded-lg border border-border bg-card p-2 shadow-2xl sm:left-auto sm:right-0 sm:min-w-[22rem]"
               >
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -129,45 +173,6 @@ export function DeckWorkspaceDecklistToolbar(props: DeckWorkspaceDecklistToolbar
             )}
           </div>
         )}
-        <Tabs
-          value={props.viewMode}
-          onValueChange={(v) => props.onViewModeChange(v as ViewMode)}
-          className="rounded-md border border-border bg-card p-0.5"
-        >
-          <TabsList className="h-7 bg-transparent">
-            <TabsTrigger
-              value="visual"
-              className="h-6 px-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-            </TabsTrigger>
-            <TabsTrigger
-              value="stack"
-              className="h-6 px-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
-            >
-              <StackIcon className="h-3.5 w-3.5" />
-            </TabsTrigger>
-            <TabsTrigger
-              value="list"
-              className="h-6 px-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
-            >
-              <List className="h-3.5 w-3.5" />
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs text-muted-foreground md:max-w-none md:flex-none">
-          <span className="shrink-0">Card size</span>
-          <input
-            type="range"
-            min={MIN_CARD_SIZE}
-            max={MAX_CARD_SIZE}
-            step={4}
-            value={props.cardSize}
-            onChange={(e) => props.onCardSizeChange(Number(e.target.value))}
-            className="min-w-0 flex-1 accent-primary md:w-28 md:flex-none"
-          />
-          <span className="w-8 shrink-0 text-right font-mono text-[11px]">{props.cardSize}</span>
-        </label>
       </div>
 
       <div className="grid min-w-0 grid-cols-1 gap-2 md:flex md:flex-wrap md:gap-2">
