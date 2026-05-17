@@ -167,35 +167,40 @@ export function TopNav() {
           </span>
         </Link>
 
-        {/* Nav links */}
-        <nav className="flex items-center gap-0.5 sm:gap-1">
-          {NAV_LINKS.filter((link) => !link.requiresAuth || user).map(
-            ({ href, label }) => {
-              const isActive = navLinkIsActive(href, activePath, guestDeckNav)
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={(e) => handleNavClick(e, href)}
-                  className={cn(
-                    "rounded-md font-medium transition-colors",
-                    navBarCompact
-                      ? "px-1.5 py-0.5 text-[11px] sm:px-2 sm:text-xs"
-                      : "px-2 py-1.5 text-sm sm:px-4",
-                    isActive
-                      ? "border border-primary/20 bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  {label}
-                </Link>
-              )
-            },
-          )}
-        </nav>
+        {/*
+          Many primary links on a narrow bar: keep a single horizontal scroller (`flex-nowrap`) so the logo
+          and account menu stay visible (issue #226).
+        */}
+        <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:thin] md:flex-none md:overflow-visible">
+          <nav className="flex flex-nowrap items-center gap-0.5 sm:gap-1">
+            {NAV_LINKS.filter((link) => !link.requiresAuth || user).map(
+              ({ href, label }) => {
+                const isActive = navLinkIsActive(href, activePath, guestDeckNav)
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={(e) => handleNavClick(e, href)}
+                    className={cn(
+                      "shrink-0 rounded-md font-medium transition-colors",
+                      navBarCompact
+                        ? "px-1.5 py-0.5 text-[11px] sm:px-2 sm:text-xs"
+                        : "px-2 py-1.5 text-sm sm:px-4",
+                      isActive
+                        ? "border border-primary/20 bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </Link>
+                )
+              },
+            )}
+          </nav>
+        </div>
 
-        {/* Spacer pushes dropdown to the far right */}
-        <div className="flex-1" />
+        {/* Spacer pushes dropdown to the far right on wide layouts */}
+        <div className="hidden flex-1 md:block" />
 
         {/* User dropdown — always anchored right */}
         <DropdownMenu>

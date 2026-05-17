@@ -22,6 +22,7 @@ import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 import { useRouter, useSearchParams } from "next/navigation"
 import { DeckTabs, type DeckTab } from "@/components/deck/DeckTabs"
+import { DeckWorkspaceContentFrame } from "@/components/deck/DeckWorkspaceContentFrame"
 import { ViewingVersionBanner } from "@/components/versions/ViewingVersionBanner"
 import { getVersion, recordVersion, revertToVersion, flushPendingVersion, type DeckVersionRow } from "@/lib/versions"
 import { pickPrice } from "@/lib/format"
@@ -1233,9 +1234,9 @@ export default function DeckWorkspaceClient({
         )}
       />
 
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-background/20 min-w-0">
-          <div className="p-6 max-w-7xl mx-auto space-y-8">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div ref={scrollContainerRef} className="min-w-0 flex-1 overflow-y-auto bg-background/20">
+          <DeckWorkspaceContentFrame>
         {tab === "decklist" && (
           <>
             <div className="relative z-20 overflow-visible">
@@ -1374,18 +1375,26 @@ export default function DeckWorkspaceClient({
             onReverted={() => { setViewing(null); void fetchDeck() }}
           />
         )}
-          </div>
+          </DeckWorkspaceContentFrame>
         </div>
 
       {isOwner && !viewing && (
-        <DeckAgentSidebar
-          deckId={deckId}
-          open={agentOpen}
-          onClose={() => setAgentOpen(false)}
-          onOpen={() => setAgentOpen(true)}
-          onAssistantResponseFinished={fetchDeck}
-          onRailInsetChange={setAgentRailInsetPx}
-        />
+        <div
+          className={
+            agentOpen
+              ? "flex min-w-0 shrink-0 max-md:w-0 max-md:overflow-visible"
+              : "flex min-w-0 shrink-0 max-md:w-10"
+          }
+        >
+          <DeckAgentSidebar
+            deckId={deckId}
+            open={agentOpen}
+            onClose={() => setAgentOpen(false)}
+            onOpen={() => setAgentOpen(true)}
+            onAssistantResponseFinished={fetchDeck}
+            onRailInsetChange={setAgentRailInsetPx}
+          />
+        </div>
       )}
       </div>
 
