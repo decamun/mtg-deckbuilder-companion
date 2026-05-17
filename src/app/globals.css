@@ -10,6 +10,16 @@
   --color-berry-crush: var(--berry-crush);
   --color-wisteria-blue: var(--wisteria-blue);
 
+  /* Mobile / page layout — use `px-page-x`, `p-page-y`, `gap-page-gutter`, `top-nav`, etc. */
+  --spacing-page-x: 1rem;
+  --spacing-page-y: 1rem;
+  --spacing-page-gutter: 1rem;
+  /* Matches TopNav inner row: `h-14` default, `h-7` compact */
+  --spacing-nav: 3.5rem;
+  --spacing-nav-compact: 1.75rem;
+  /* Same threshold as Tailwind `md`; use `deck-wide:` in deck UI for readable intent */
+  --breakpoint-deck-wide: 48rem;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-armata);
@@ -103,8 +113,35 @@
   html {
     @apply font-sans;
   }
-  h1, h2, h3, h4, h5, h6 {
+  /* Primary headings only — blog/prose still opt in via `prose-headings:font-heading` */
+  h1,
+  h2,
+  h3 {
     @apply font-heading tracking-wider;
+  }
+  h4,
+  h5,
+  h6 {
+    @apply font-sans font-semibold tracking-wide text-balance;
+  }
+}
+
+@layer components {
+  /* Semantic title utilities for new pages (issue #225). Prefer over ad-hoc `text-*` + `font-heading`. */
+  .title-display {
+    @apply font-heading font-bold tracking-tight text-foreground;
+    font-size: clamp(1.875rem, 4vw + 1rem, 3.5rem);
+    line-height: 1.08;
+  }
+  .title-page {
+    @apply font-heading font-bold tracking-tight text-foreground;
+    font-size: clamp(1.5rem, 2.5vw + 1rem, 2.25rem);
+    line-height: 1.15;
+  }
+  .title-section {
+    @apply font-heading font-bold tracking-tight text-foreground;
+    font-size: clamp(1.25rem, 1.5vw + 0.75rem, 1.875rem);
+    line-height: 1.2;
   }
 }
 
@@ -158,4 +195,37 @@
   .mana-symbol-c,
   .mana-symbol-s,
   .mana-symbol-generic { background: #d7d7d7; }
+
+  /*
+    Safe-area insets (pair with `viewportFit: "cover"` on the root layout).
+    - `pt-safe` / `pb-safe` / `pl-safe` / `pr-safe`: env insets only (stack with separate padding via wrapper or extra classes).
+    - `pb-page-with-safe`: page rhythm (1rem) + home-indicator inset for footers.
+    - `px-page-safe`: horizontal page gutter, not less than left/right safe inset.
+  */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  .pb-page-with-safe {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+  .px-page-safe {
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+  /* Fixed panels clearing sticky TopNav: inner row uses `pt-safe` + `h-14` / `h-7` (matches `--spacing-nav` / `--spacing-nav-compact`) */
+  .top-below-nav {
+    top: calc(env(safe-area-inset-top, 0px) + 3.5rem);
+  }
+  .top-below-nav-compact {
+    top: calc(env(safe-area-inset-top, 0px) + 1.75rem);
+  }
 }

@@ -135,7 +135,7 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
   return (
     <>
       <div
-        className="pointer-events-none fixed bottom-0 left-0 z-[60] hidden justify-center px-4 pt-4 pb-0 md:flex"
+        className="pointer-events-none fixed bottom-0 left-0 z-[60] hidden justify-center px-4 pt-4 pb-safe deck-wide:flex"
         style={{ right: dockRightInsetPx }}
       >
         <div className="pointer-events-none flex w-full max-w-7xl flex-col rounded-xl border border-border bg-background/80 p-3 text-foreground shadow-sm backdrop-blur-xl">
@@ -157,9 +157,9 @@ export function DeckWorkspaceGroupedDecklist(props: DeckWorkspaceGroupedDecklist
         </div>
       </div>
 
-      <div className="pb-10 md:pb-[clamp(22rem,52vh,36rem)]">
+      <div className="pb-10 deck-wide:pb-[clamp(22rem,52vh,36rem)]">
         {cardsLoading && liveCardCount === 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 deck-wide:grid-cols-4 xl:grid-cols-6 gap-4">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="aspect-[5/7] rounded-xl border border-border/30 bg-card/30 flex items-center justify-center">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/30" />

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Armata, Audiowide } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -24,6 +24,13 @@ export const metadata: Metadata = {
   description: "AI-powered deck brewing for Magic: The Gathering",
 };
 
+/** Device-width viewport; `viewportFit: cover` enables `env(safe-area-inset-*)` (see globals.css). Do not set `maximumScale` here — preserve pinch-zoom accessibility. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -41,7 +48,7 @@ export default function RootLayout({
         </TopNavDeckGuestProvider>
         <Toaster theme="dark" />
         <SpeedInsights />
-        <footer className="mt-auto border-t border-border py-4 px-6">
+        <footer className="mt-auto border-t border-border pt-4 px-6 pb-page-with-safe">
           <nav className="flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
             <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
             <a href="/terms" className="hover:text-foreground transition-colors">Terms of Service</a>

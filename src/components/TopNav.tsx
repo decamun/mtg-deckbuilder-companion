@@ -136,7 +136,7 @@ export function TopNav() {
     <header className="sticky top-0 z-50 shrink-0 border-b border-border bg-background/80 backdrop-blur-xl">
       <div
         className={cn(
-          "container mx-auto flex items-center gap-2 px-4 transition-[height,min-height] duration-200 ease-out sm:gap-6",
+          "container mx-auto flex items-center gap-2 px-4 pt-safe transition-[height,min-height] duration-200 ease-out sm:gap-6",
           navBarCompact ? "h-7 min-h-7" : "h-14 min-h-14",
         )}
       >
