@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 import { ToolChip } from "./ToolChip"
 import { ReasoningPane } from "./ReasoningPane"
 import { ModelPicker } from "./ModelPicker"
@@ -150,10 +151,25 @@ export function DeckAgentSidebar({
   const [limits, setLimits] = useState<LimitsResponse | null>(null)
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [subscribeOpen, setSubscribeOpen] = useState(false)
+  const [mdUp, setMdUp] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches
+  )
 
   useLayoutEffect(() => {
-    onRailInsetChange?.(open ? width : 40)
-  }, [open, width, onRailInsetChange])
+    const mq = window.matchMedia("(min-width: 768px)")
+    const sync = () => setMdUp(mq.matches)
+    sync()
+    mq.addEventListener("change", sync)
+    return () => mq.removeEventListener("change", sync)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!open) {
+      onRailInsetChange?.(40)
+      return
+    }
+    onRailInsetChange?.(mdUp ? width : 0)
+  }, [open, width, mdUp, onRailInsetChange])
   const [savingNotify, setSavingNotify] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const isResizing = useRef(false)
@@ -346,11 +362,32 @@ export function DeckAgentSidebar({
   const reasoningAvailable = modelDesc.reasoning
   const proSubscribed = Boolean(limits?.idlebrewProSubscribed)
 
+  const panelWidthPx =
+    mdUp ? width : typeof window !== "undefined" ? Math.min(width, window.innerWidth) : width
+
   return (
-    <aside
-      className="relative flex shrink-0 flex-col border-l border-border bg-card/95 shadow-xl"
-      style={{ width }}
-    >
+    <>
+      {/*
+        Below `md`, the open assistant is a fixed overlay so the decklist column keeps full width; the
+        dock inset is cleared while open (issue #226).
+      */}
+      {open && !mdUp && (
+        <button
+          type="button"
+          className="fixed top-below-nav right-0 bottom-0 left-0 z-[45] bg-black/40"
+          aria-label="Dismiss deck assistant"
+          onClick={onClose}
+        />
+      )}
+      <aside
+        className={cn(
+          "flex flex-col border-l border-border bg-card/95 shadow-xl",
+          mdUp
+            ? "relative z-10 h-full min-h-0 shrink-0"
+            : "fixed top-below-nav right-0 bottom-0 z-[46] max-w-[100vw] pb-safe",
+        )}
+        style={{ width: panelWidthPx }}
+      >
       {/* Drag handle — desktop only */}
       <div
         className="absolute left-0 top-0 bottom-0 z-10 w-1 hidden md:block cursor-col-resize hover:bg-primary/40 active:bg-primary/60 transition-colors"
@@ -540,6 +577,7 @@ export function DeckAgentSidebar({
         </DialogContent>
       </Dialog>
     </aside>
+    </>
   )
 }
 
