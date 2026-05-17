@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import type { DeckCard } from "@/lib/types"
 import type { ScryfallCard } from "@/lib/scryfall"
@@ -54,59 +54,77 @@ export function rulesHoverPayloadToFields(hover: DeckRulesHoverPayload): CardRul
   }
 }
 
-const ORACLE_PREVIEW_SCROLL_STEP_MS = 3000
+/** Matches {@link rulesTextForDisplay} joiner between MDFC / multi-face oracle sections. */
+const ORACLE_FACE_SECTION_SEPARATOR = "\n\n—\n\n"
 
-function OracleTextHoverPreview({ text }: { text: string }) {
+function splitCardTitleForHover(name: string): { first: string; second: string | null } {
+  const sep = " // "
+  const i = name.indexOf(sep)
+  if (i === -1) return { first: name, second: null }
+  return {
+    first: name.slice(0, i),
+    second: name.slice(i + sep.length),
+  }
+}
+
+function splitOracleIntoFaceSections(oracle: string): string[] {
+  if (!oracle.includes(ORACLE_FACE_SECTION_SEPARATOR)) return [oracle]
+  return oracle.split(ORACLE_FACE_SECTION_SEPARATOR).filter((s) => s.length > 0)
+}
+
+type OracleTitleFocus = "first" | "second"
+
+function OracleTextScrollPreview({
+  text,
+  titleFocus,
+}: {
+  text: string
+  titleFocus: OracleTitleFocus
+}) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const secondSectionRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
+  const sections = useMemo(() => splitOracleIntoFaceSections(text), [text])
 
-    el.scrollTop = 0
+  useLayoutEffect(() => {
+    const root = scrollRef.current
+    if (!root) return
 
-    let cancelled = false
-    let timeoutId: number | null = null
-
-    const clearScheduled = () => {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId)
-        timeoutId = null
-      }
+    const maxScroll = Math.max(0, root.scrollHeight - root.clientHeight)
+    if (maxScroll === 0) {
+      root.scrollTop = 0
+      return
     }
 
-    const scheduleScroll = (scrollDown: boolean) => {
-      clearScheduled()
-      timeoutId = window.setTimeout(() => {
-        timeoutId = null
-        if (cancelled) return
-        const node = scrollRef.current
-        if (!node) return
-        if (node.scrollHeight <= node.clientHeight) return
-
-        if (scrollDown) {
-          node.scrollTo({ top: node.scrollHeight - node.clientHeight, behavior: "smooth" })
-        } else {
-          node.scrollTo({ top: 0, behavior: "smooth" })
-        }
-        scheduleScroll(!scrollDown)
-      }, ORACLE_PREVIEW_SCROLL_STEP_MS)
+    if (titleFocus === "first") {
+      root.scrollTo({ top: 0, behavior: "smooth" })
+      return
     }
 
-    scheduleScroll(true)
-
-    return () => {
-      cancelled = true
-      clearScheduled()
-    }
-  }, [text])
+    const anchor = secondSectionRef.current
+    const top = anchor ? Math.min(anchor.offsetTop, maxScroll) : Math.min(Math.floor(maxScroll / 2), maxScroll)
+    root.scrollTo({ top, behavior: "smooth" })
+  }, [text, titleFocus])
 
   return (
     <div
       ref={scrollRef}
-      className="text-[13px] leading-relaxed text-foreground max-h-[10lh] overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
+      className="relative text-[13px] leading-relaxed text-foreground max-h-[10lh] overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
     >
-      <ManaText text={text} className="whitespace-pre-wrap" />
+      <ManaText text={sections[0] ?? ""} className="block whitespace-pre-wrap" />
+      {sections.length >= 2 ? (
+        <>
+          <div aria-hidden className="my-1 select-none text-center text-xs text-muted-foreground">
+            —
+          </div>
+          <div ref={secondSectionRef}>
+            <ManaText
+              text={sections.slice(1).join(ORACLE_FACE_SECTION_SEPARATOR)}
+              className="block whitespace-pre-wrap"
+            />
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }
@@ -128,6 +146,75 @@ export function rulesHoverPayloadToArtImageUrl(hover: DeckRulesHoverPayload): st
   )
 }
 
+const titleNameHoverClass =
+  "cursor-default rounded-sm decoration-dotted underline-offset-2 hover:underline"
+
+function DeckWorkspaceCardRulesPreviewFilled({
+  fields,
+  className,
+}: {
+  fields: CardRulesPreviewFields
+  className?: string
+}) {
+  const [titleOracleFocus, setTitleOracleFocus] = useState<OracleTitleFocus>("first")
+
+  const { first: titleFirst, second: titleSecond } = useMemo(
+    () => splitCardTitleForHover(fields.name),
+    [fields.name],
+  )
+
+  const resetOracleFocusToFirst = () => setTitleOracleFocus("first")
+
+  return (
+    <div className={cn("flex min-h-0 flex-col gap-2 text-sm", className)}>
+      <div className="flex w-full min-w-0 shrink-0 items-baseline justify-between gap-x-2 gap-y-0.5 border-b border-border pb-1.5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="inline-flex min-w-0 flex-wrap items-baseline gap-x-0 text-base font-semibold text-foreground">
+            <span
+              className={titleNameHoverClass}
+              onMouseEnter={() => setTitleOracleFocus("first")}
+            >
+              <ManaText text={titleFirst} />
+            </span>
+            {titleSecond !== null ? (
+              <>
+                <span className="select-none px-0.5" onMouseEnter={() => setTitleOracleFocus("first")}>
+                  {" // "}
+                </span>
+                <span
+                  className={titleNameHoverClass}
+                  onMouseEnter={() => setTitleOracleFocus("second")}
+                >
+                  <ManaText text={titleSecond} />
+                </span>
+              </>
+            ) : null}
+          </span>
+          {fields.type_line ? (
+            <span onMouseEnter={resetOracleFocusToFirst}>
+              <ManaText text={fields.type_line} className="text-xs text-muted-foreground" />
+            </span>
+          ) : null}
+        </div>
+        {fields.mana_cost ? (
+          <span onMouseEnter={resetOracleFocusToFirst}>
+            <ManaText text={fields.mana_cost} className="shrink-0 text-sm text-muted-foreground" />
+          </span>
+        ) : null}
+      </div>
+      <div className="min-h-0 shrink-0 text-foreground" onMouseEnter={resetOracleFocusToFirst}>
+        {fields.oracle_text?.trim() ? (
+          <OracleTextScrollPreview text={fields.oracle_text} titleFocus={titleOracleFocus} />
+        ) : (
+          <span className="text-[13px] leading-relaxed text-muted-foreground">
+            No oracle text on file for this card.
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function DeckWorkspaceCardRulesPreview({
   fields,
   className,
@@ -146,27 +233,10 @@ export function DeckWorkspaceCardRulesPreview({
   }
 
   return (
-    <div className={cn("flex min-h-0 flex-col gap-2 text-sm", className)}>
-      <div className="flex w-full min-w-0 shrink-0 items-baseline justify-between gap-x-2 gap-y-0.5 border-b border-border pb-1.5">
-        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <ManaText text={fields.name} className="text-base font-semibold text-foreground" />
-          {fields.type_line ? (
-            <ManaText text={fields.type_line} className="text-xs text-muted-foreground" />
-          ) : null}
-        </div>
-        {fields.mana_cost ? (
-          <ManaText text={fields.mana_cost} className="shrink-0 text-sm text-muted-foreground" />
-        ) : null}
-      </div>
-      <div className="min-h-0 shrink-0 text-foreground">
-        {fields.oracle_text?.trim() ? (
-          <OracleTextHoverPreview text={fields.oracle_text} />
-        ) : (
-          <span className="text-[13px] leading-relaxed text-muted-foreground">
-            No oracle text on file for this card.
-          </span>
-        )}
-      </div>
-    </div>
+    <DeckWorkspaceCardRulesPreviewFilled
+      key={`${fields.name}\0${fields.oracle_text ?? ""}`}
+      fields={fields}
+      className={className}
+    />
   )
 }
