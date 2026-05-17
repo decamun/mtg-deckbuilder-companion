@@ -1212,8 +1212,9 @@ export default function DeckWorkspaceClient({
         {tab === "decklist" && (
           <>
             <div className="relative z-20 overflow-visible">
-              <div className="flex flex-col gap-4 min-[1180px]:flex-row min-[1180px]:items-start min-[1180px]:justify-between min-[1180px]:gap-6 min-[1180px]:-mb-12 min-[1180px]:pb-3">
-                <div className="min-w-0 min-[1180px]:flex-1">
+              {/* `-mb-12` overlaps the decklist; `pointer-events-none` avoids the flex shell stealing clicks below the short toolbar. */}
+              <div className="pointer-events-none flex flex-col gap-4 min-[1180px]:flex-row min-[1180px]:items-start min-[1180px]:justify-between min-[1180px]:gap-6 min-[1180px]:-mb-12 min-[1180px]:pb-3">
+                <div className="pointer-events-auto min-w-0 min-[1180px]:flex-1">
                   <DeckWorkspaceDecklistToolbar
                     cardSize={cardSize}
                     grouping={grouping}
